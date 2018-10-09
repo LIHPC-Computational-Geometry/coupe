@@ -1,0 +1,17 @@
+[package]
+name = "coupe"
+version = "0.1.0"
+authors = [
+    "Armand Touminet <armand.touminet@protonmail.com>", 
+    "Cédric Chevalier", 
+    "Sébastien Morais"
+]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = """
+Coupe is a mesh partitioning library. It implements composable
+geometric and topologic algorithms.  
+"""
+keywords = ["mesh", "partitioning"]
+
+[dependencies]
