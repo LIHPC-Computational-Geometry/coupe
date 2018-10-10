@@ -3,6 +3,9 @@ use itertools::{self, Itertools};
 use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 
+use nalgebra::linalg::SymmetricEigen;
+use nalgebra::{Matrix2, Vector2};
+
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
 /// ## Inputs
@@ -79,7 +82,6 @@ fn axis_sort(
 
 fn half_weight_pos(sorted_weights: &[f64]) -> usize {
     let mut half_weight = sorted_weights.iter().sum::<f64>() / 2.;
-
     let mut pos = 0;
     for w in sorted_weights {
         if half_weight > 0. {
@@ -111,4 +113,28 @@ where
         zipped.clone().map(|(_, b, _)| b),
         zipped.map(|(_, _, c)| c),
     )
+}
+
+pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> {
+    let total_weight = weights.iter().sum::<f64>();
+    let centroid = weights
+        .iter()
+        .zip(coordinates.iter().map(|p| Vector2::new(p.x(), p.y())))
+        .fold(Vector2::new(0., 0.), |acc, (w, p)| acc + p.map(|e| e * w))
+        / total_weight;
+
+    weights
+        .iter()
+        .zip(coordinates.iter().map(|p| Vector2::new(p.x(), p.y())))
+        .fold(Matrix2::zeros(), |acc, (w, p)| {
+            acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
+        })
+}
+
+pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
+    // by construction the inertia matrix is symmetric
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
 }
