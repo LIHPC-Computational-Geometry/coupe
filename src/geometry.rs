@@ -1,5 +1,6 @@
 //! A few useful geometric types
 
 use geo;
+use nalgebra;
 
-pub type Point2D = geo::Point<f64>;
+pub type Point2D = nalgebra::Vector2<f64>;

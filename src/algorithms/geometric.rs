@@ -70,9 +70,9 @@ fn axis_sort(
     let sorted =
         itertools::multizip((ids, weights, coordinates)).sorted_by(|(_, _, p1), (_, _, p2)| {
             if x_axis {
-                p1.x().partial_cmp(&p2.x()).unwrap_or(Ordering::Equal)
+                p1.x.partial_cmp(&p2.x).unwrap_or(Ordering::Equal)
             } else {
-                p1.y().partial_cmp(&p2.y()).unwrap_or(Ordering::Equal)
+                p1.y.partial_cmp(&p2.y).unwrap_or(Ordering::Equal)
             }
         });
 
@@ -119,13 +119,13 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
     let total_weight = weights.iter().sum::<f64>();
     let centroid = weights
         .iter()
-        .zip(coordinates.iter().map(|p| Vector2::new(p.x(), p.y())))
+        .zip(coordinates)
         .fold(Vector2::new(0., 0.), |acc, (w, p)| acc + p.map(|e| e * w))
         / total_weight;
 
     weights
         .iter()
-        .zip(coordinates.iter().map(|p| Vector2::new(p.x(), p.y())))
+        .zip(coordinates)
         .fold(Matrix2::zeros(), |acc, (w, p)| {
             acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
         })
@@ -135,6 +135,28 @@ pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
     // by construction the inertia matrix is symmetric
     SymmetricEigen::new(mat)
         .eigenvectors
-        .column(0)
+        .column(0) // TODO: pick the eigenvector matching the smallest eigenvalue
         .clone_owned()
+}
+
+fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
+    let rot_matrix = Matrix2::new(angle.cos(), angle.sin(), -angle.sin(), angle.cos());
+    coordinates.into_iter().map(|c| rot_matrix * c).collect()
+}
+
+pub fn rib(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    coordinates: Vec<Point2D>,
+    n_iter: usize,
+) -> Vec<(usize, ProcessUniqueId)> {
+    let j = inertia_matrix(&weights, &coordinates);
+    let inertia = intertia_vector(j);
+    let x_unit_vector = Vector2::new(1., 0.);
+    let angle = inertia.dot(&x_unit_vector).acos();
+    let sign = if x_unit_vector.y > 0. { 1. } else { -1. };
+
+    let coordinates = rotate(coordinates, sign * angle);
+
+    rcb(ids, weights, coordinates, n_iter)
 }
