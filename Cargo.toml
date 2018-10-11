@@ -21,4 +21,5 @@ nalgebra = "0.16.4"
 snowflake = "1.2"
 
 [dev-dependencies]
+gnuplot = "0.0.26"
 rand = "0.5.5"
