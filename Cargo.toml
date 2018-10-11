@@ -15,3 +15,11 @@ geometric and topologic algorithms.
 keywords = ["mesh", "partitioning"]
 
 [dependencies]
+itertools = "0.7.8"
+nalgebra = "0.16.4"
+snowflake = "1.2"
+
+[dev-dependencies]
+approx = "0.3.0"
+gnuplot = "0.0.26"
+rand = "0.5.5"
