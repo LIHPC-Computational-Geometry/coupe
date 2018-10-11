@@ -1,4 +1,6 @@
-extern crate geo;
+#[cfg(test)]
+#[macro_use]
+extern crate approx;
 extern crate itertools;
 extern crate nalgebra;
 extern crate snowflake;

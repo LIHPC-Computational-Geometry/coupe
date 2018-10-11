@@ -172,10 +172,10 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
 pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
     // by construction the inertia matrix is symmetric
     let sym = SymmetricEigen::new(mat);
-    if sym.eigenvalues[0] < sym.eigenvalues[1] {
+    if sym.eigenvalues[0] <= sym.eigenvalues[1] {
         sym.eigenvectors.column(0).clone_owned()
     } else {
-        sym.eigenvectors.column(1).clone_owned()
+        sym.eigenvectors.column(0).clone_owned()
     }
 }
 
@@ -222,15 +222,89 @@ pub fn rib(
     // mapped to be parallel to the x axis.
 
     // such a rotation is given by the following angle
-    // |alpha| = arccos(dot(inertia, x_axis) / (norm(inertia) * norm(x_axis)))
+    // alpha = arccos(dot(inertia, x_axis) / (norm(inertia) * norm(x_axis)))
     // In our case, both the inertia and x_axis vector are unit vector.
-    // The sign of the rotation also has to be determined
     let x_unit_vector = Vector2::new(1., 0.);
     let angle = inertia.dot(&x_unit_vector).acos();
-    let sign = if x_unit_vector.y > 0. { 1. } else { -1. };
 
-    let coordinates = rotate(coordinates, sign * angle);
+    let coordinates = rotate(coordinates, angle);
 
     // When the rotation is done, we just apply RCB
     rcb(ids, weights, coordinates, n_iter)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::Vector3;
+
+    fn gen_point_sample() -> Vec<Point2D> {
+        vec![
+            Point2D::new(4., 6.),
+            Point2D::new(9., 5.),
+            Point2D::new(-1.2, 7.),
+            Point2D::new(0., 0.),
+            Point2D::new(3., 9.),
+            Point2D::new(-4., 3.),
+            Point2D::new(1., 2.),
+        ]
+    }
+
+    #[test]
+    fn test_axis_sort_x() {
+        let ids: Vec<usize> = (0..7).collect();
+        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
+        let points = gen_point_sample();
+
+        let (ids, _, _) = axis_sort(ids, weights, points, true);
+
+        assert_eq!(ids, vec![5, 2, 3, 6, 4, 0, 1]);
+    }
+
+    #[test]
+    fn test_axis_sort_y() {
+        let ids: Vec<usize> = (0..7).collect();
+        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
+        let points = gen_point_sample();
+
+        let (ids, _, _) = axis_sort(ids, weights, points, false);
+
+        assert_eq!(ids, vec![3, 6, 5, 1, 0, 2, 4]);
+    }
+
+    #[test]
+    fn test_inertia_matrix() {
+        let points = vec![
+            Point2D::new(3., 0.),
+            Point2D::new(0., 3.),
+            Point2D::new(6., -3.),
+        ];
+
+        let weights = vec![1.; 3];
+
+        let mat = inertia_matrix(&weights, &points);
+        let expected = Matrix2::new(18., -18., -18., 18.);
+
+        assert_ulps_eq!(mat, expected);
+    }
+
+    #[test]
+    fn test_inertia_vector() {
+        let points = vec![
+            Point2D::new(3., 0.),
+            Point2D::new(0., 3.),
+            Point2D::new(6., -3.),
+        ];
+
+        let weights = vec![1.; 3];
+
+        let mat = inertia_matrix(&weights, &points);
+        let vec = intertia_vector(mat);
+        let vec = Vector3::new(vec.x, vec.y, 0.);
+        let expected = Vector3::<f64>::new(1., -1., 0.);
+
+        eprintln!("{}", vec);
+
+        assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
+    }
 }
