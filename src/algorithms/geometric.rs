@@ -1,10 +1,9 @@
-use geometry::Point2D;
+use geometry::*;
 use itertools::{self, Itertools};
 use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 
-use nalgebra::linalg::SymmetricEigen;
-use nalgebra::{Matrix2, Vector2};
+use nalgebra::Vector2;
 
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
@@ -139,55 +138,6 @@ where
     )
 }
 
-// Computes the inertia matrix of a
-// collection of weighted points.
-pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> {
-    // We compute the centroid of the collection
-    // of points which is required to construct
-    // the inertia matrix.
-    // centroid = (1 / sum(weights)) \sum_i weight_i * point_i
-    let total_weight = weights.iter().sum::<f64>();
-    let centroid = weights
-        .iter()
-        .zip(coordinates)
-        .fold(Vector2::new(0., 0.), |acc, (w, p)| acc + p.map(|e| e * w))
-        / total_weight;
-
-    // The inertia matrix is a 2x2 matrix (or a dxd matrix in dimension d)
-    // it is defined as follows:
-    // J = \sum_i (1/weight_i)*(point_i - centroid) * transpose(point_i - centroid)
-    // It is by construction a symmetric matrix
-    weights
-        .iter()
-        .zip(coordinates)
-        .fold(Matrix2::zeros(), |acc, (w, p)| {
-            acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
-        })
-}
-
-// Computes an inertia vector of
-// an inertia matrix. Is is defined to be
-// an eigenvector of the smallest of the
-// matrix eigenvalues
-pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
-    // by construction the inertia matrix is symmetric
-    let sym = SymmetricEigen::new(mat);
-    if sym.eigenvalues[0] <= sym.eigenvalues[1] {
-        sym.eigenvectors.column(0).clone_owned()
-    } else {
-        sym.eigenvectors.column(0).clone_owned()
-    }
-}
-
-// Rotates each point of an angle (in radians) counter clockwise
-fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
-    // A rotation of angle theta is defined in 2D by a 2x2 matrix
-    // |  cos(theta) sin(theta) |
-    // | -sin(theta) cos(theta) |
-    let rot_matrix = Matrix2::new(angle.cos(), angle.sin(), -angle.sin(), angle.cos());
-    coordinates.into_iter().map(|c| rot_matrix * c).collect()
-}
-
 /// # Recursive Inertia Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
 /// ## Inputs
@@ -236,7 +186,6 @@ pub fn rib(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra::Vector3;
 
     fn gen_point_sample() -> Vec<Point2D> {
         vec![
@@ -270,41 +219,5 @@ mod tests {
         let (ids, _, _) = axis_sort(ids, weights, points, false);
 
         assert_eq!(ids, vec![3, 6, 5, 1, 0, 2, 4]);
-    }
-
-    #[test]
-    fn test_inertia_matrix() {
-        let points = vec![
-            Point2D::new(3., 0.),
-            Point2D::new(0., 3.),
-            Point2D::new(6., -3.),
-        ];
-
-        let weights = vec![1.; 3];
-
-        let mat = inertia_matrix(&weights, &points);
-        let expected = Matrix2::new(18., -18., -18., 18.);
-
-        assert_ulps_eq!(mat, expected);
-    }
-
-    #[test]
-    fn test_inertia_vector() {
-        let points = vec![
-            Point2D::new(3., 0.),
-            Point2D::new(0., 3.),
-            Point2D::new(6., -3.),
-        ];
-
-        let weights = vec![1.; 3];
-
-        let mat = inertia_matrix(&weights, &points);
-        let vec = intertia_vector(mat);
-        let vec = Vector3::new(vec.x, vec.y, 0.);
-        let expected = Vector3::<f64>::new(1., -1., 0.);
-
-        eprintln!("{}", vec);
-
-        assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
     }
 }
