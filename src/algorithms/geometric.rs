@@ -22,7 +22,7 @@ pub fn rcb(
     weights: Vec<f64>,
     coordinates: Vec<Point2D>,
     n_iter: usize,
-) -> Vec<(usize, ProcessUniqueId)> {
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
     rcb_impl(ids, weights, coordinates, n_iter, true)
 }
 
@@ -32,13 +32,17 @@ fn rcb_impl(
     coordinates: Vec<Point2D>,
     n_iter: usize,
     x_axis: bool, // set if bissection is performed w.r.t. x or y axis
-) -> Vec<(usize, ProcessUniqueId)> {
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
     if n_iter == 0 {
         // No iteration left. The current
         // ids become a part of the final partition.
         // Generate a partition id and return.
         let part_id = ProcessUniqueId::new();
-        ids.into_iter().map(|id| (id, part_id)).collect()
+        (
+            ids.into_iter().map(|id| (id, part_id)).collect(),
+            weights,
+            coordinates,
+        )
     } else {
         // We split the objects in two parts of equal weights
         // The split is perfomed alongside the x or y axis,
@@ -71,7 +75,23 @@ fn rcb_impl(
 
         // We stick the partitions back together
         // to return a single collection of objects
-        left_partition.into_iter().chain(right_partition).collect()
+        (
+            left_partition
+                .0
+                .into_iter()
+                .chain(right_partition.0)
+                .collect(),
+            left_partition
+                .1
+                .into_iter()
+                .chain(right_partition.1)
+                .collect(),
+            left_partition
+                .2
+                .into_iter()
+                .chain(right_partition.2)
+                .collect(),
+        )
     }
 }
 
@@ -161,7 +181,7 @@ pub fn rib(
     weights: Vec<f64>,
     coordinates: Vec<Point2D>,
     n_iter: usize,
-) -> Vec<(usize, ProcessUniqueId)> {
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
     // Compute the inertia vector of the set of points
     let j = inertia_matrix(&weights, &coordinates);
     let inertia = intertia_vector(j);

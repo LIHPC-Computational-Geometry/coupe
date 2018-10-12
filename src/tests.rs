@@ -17,7 +17,8 @@ fn test_rcb_basic() {
         Point2D::new(1.3, -2.),
     ];
 
-    let partition = algorithms::geometric::rcb(ids, weights, coordinates, 2)
+    let (partition, _, _) = algorithms::geometric::rcb(ids, weights, coordinates, 2);
+    let partition = partition
         .into_iter()
         .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
