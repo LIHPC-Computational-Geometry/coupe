@@ -1,6 +1,26 @@
 image: "rust:latest"
 
+cache:
+    key: "$CI_JOB_NAME"
+    untracked: true
+    paths:
+    - $HOME/.cargo/
+    - target/
+
 test:cargo:
   script:
   - rustc --version && cargo --version
   - cargo test --all --verbose
+
+variables:
+  RUST_BACKTRACE: "1"
+
+lint:rustfmt:
+  image: "guangie88/rustfmt-clippy"
+  script:
+    - cargo fmt -- --write-mode=diff
+
+lint:clippy:
+  image: "guangie88/rustfmt-clippy"
+  script:
+    - cargo clippy -- -D warnings
