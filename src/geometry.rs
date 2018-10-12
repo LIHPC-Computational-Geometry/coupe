@@ -144,12 +144,10 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
 // matrix eigenvalues
 pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
     // by construction the inertia matrix is symmetric
-    let sym = SymmetricEigen::new(mat);
-    if sym.eigenvalues[0] <= sym.eigenvalues[1] {
-        sym.eigenvectors.column(0).clone_owned()
-    } else {
-        sym.eigenvectors.column(0).clone_owned()
-    }
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
 }
 
 // Rotates each point of an angle (in radians) counter clockwise
