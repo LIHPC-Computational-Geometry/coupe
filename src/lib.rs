@@ -6,6 +6,7 @@ extern crate nalgebra;
 extern crate snowflake;
 
 pub mod algorithms;
+pub mod analysis;
 pub mod geometry;
 
 #[cfg(test)]
