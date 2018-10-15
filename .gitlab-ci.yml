@@ -1,4 +1,7 @@
 image: "rust:latest"
+before_script:
+  - rustup component add rustfmt-preview
+  - rustup component add clippy-preview
 
 cache:
   key: "$CI_JOB_NAME"
@@ -16,12 +19,10 @@ variables:
   RUST_BACKTRACE: "1"
 
 lint:rustfmt:
-  image: "guangie88/rustfmt-clippy"
   script:
-    - cargo fmt -- --check
+    - cargo fmt --all -- --check
 
 lint:clippy:
-  image: "guangie88/rustfmt-clippy"
   allow_failure: true
   script:
-    - cargo clippy -- -D warnings
+    - cargo clippy --all-targets --all-features -- -D warnings
