@@ -1,5 +1,6 @@
 use geometry::*;
-use itertools::{self, Itertools};
+use rayon;
+use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 
@@ -39,7 +40,7 @@ fn rcb_impl(
         // Generate a partition id and return.
         let part_id = ProcessUniqueId::new();
         (
-            ids.into_iter().map(|id| (id, part_id)).collect(),
+            ids.into_par_iter().map(|id| (id, part_id)).collect(),
             weights,
             coordinates,
         )
@@ -63,32 +64,35 @@ fn rcb_impl(
         // the algorithm on the two generated parts.
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
-        let left_partition = rcb_impl(
-            left_ids,
-            left_weights,
-            left_coordinates,
-            n_iter - 1,
-            !x_axis,
+        let (left_partition, right_partition) = rayon::join(
+            || {
+                rcb_impl(
+                    left_ids,
+                    left_weights,
+                    left_coordinates,
+                    n_iter - 1,
+                    !x_axis,
+                )
+            },
+            || rcb_impl(ids, weights, coordinates, n_iter - 1, !x_axis),
         );
-
-        let right_partition = rcb_impl(ids, weights, coordinates, n_iter - 1, !x_axis);
 
         // We stick the partitions back together
         // to return a single collection of objects
         (
             left_partition
                 .0
-                .into_iter()
+                .into_par_iter()
                 .chain(right_partition.0)
                 .collect(),
             left_partition
                 .1
-                .into_iter()
+                .into_par_iter()
                 .chain(right_partition.1)
                 .collect(),
             left_partition
                 .2
-                .into_iter()
+                .into_par_iter()
                 .chain(right_partition.2)
                 .collect(),
         )
@@ -103,12 +107,15 @@ fn axis_sort(
     coordinates: Vec<Point2D>,
     x_axis: bool,
 ) -> (Vec<usize>, Vec<f64>, Vec<Point2D>) {
-    // We use multizip here
-    // to sort the three collections
-    // at once with a single critertion
-    // on the coordinates
-    let sorted =
-        itertools::multizip((ids, weights, coordinates)).sorted_by(|(_, _, p1), (_, _, p2)| {
+    let mut zipped = ids
+        .into_par_iter()
+        .zip(weights)
+        .zip(coordinates)
+        .collect::<Vec<_>>();
+
+    zipped
+        .as_mut_slice()
+        .par_sort_unstable_by(|(_, p1), (_, p2)| {
             if x_axis {
                 p1.x.partial_cmp(&p2.x).unwrap_or(Ordering::Equal)
             } else {
@@ -116,15 +123,16 @@ fn axis_sort(
             }
         });
 
-    let (ids, weights, coordinates) = unzip(sorted.into_iter());
-    (ids.collect(), weights.collect(), coordinates.collect())
+    let (still_zipped, coordinates): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
+    let (ids, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
+    (ids, weights, coordinates)
 }
 
 // Computes a slice index which splits
 // the slice in two parts of equal weights
 // i.e. sorted_weights[..idx].sum() == sorted_weights[idx..].sum
 fn half_weight_pos(sorted_weights: &[f64]) -> usize {
-    let mut half_weight = sorted_weights.iter().sum::<f64>() / 2.;
+    let mut half_weight = sorted_weights.par_iter().sum::<f64>() / 2.;
     let mut pos = 0;
     for w in sorted_weights {
         if half_weight > 0. {
@@ -136,26 +144,6 @@ fn half_weight_pos(sorted_weights: &[f64]) -> usize {
     }
 
     pos
-}
-
-// quick and dirty equivalent of std::iter::unzip for itertools::multizip
-fn unzip<A, B, C>(
-    zipped: impl Iterator<Item = (A, B, C)> + Clone,
-) -> (
-    impl Iterator<Item = A>,
-    impl Iterator<Item = B>,
-    impl Iterator<Item = C>,
-)
-where
-    A: Clone,
-    B: Clone,
-    C: Clone,
-{
-    (
-        zipped.clone().map(|(a, _, _)| a.clone()),
-        zipped.clone().map(|(_, b, _)| b),
-        zipped.map(|(_, _, c)| c),
-    )
 }
 
 /// # Recursive Inertia Bisection algorithm
