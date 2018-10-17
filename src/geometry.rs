@@ -60,6 +60,21 @@ impl Aabb2D {
             ratio
         }
     }
+
+    /// Computes the distance between a point and the current Aabb.
+    pub fn distance_to_point(&self, point: &Point2D) -> f64 {
+        let clamped_x = match point.x {
+            x if x > self.p_max.x => self.p_max.x,
+            x if x < self.p_min.x => self.p_min.x,
+            x => x,
+        };
+        let clamped_y = match point.y {
+            y if y > self.p_max.y => self.p_max.y,
+            y if y < self.p_min.y => self.p_min.y,
+            y => y,
+        };
+        Vector2::new(clamped_x - point.x, clamped_y - point.y).norm()
+    }
 }
 
 /// A 2D Minimal bounding rectangle.
@@ -110,6 +125,12 @@ impl Mbr2D {
     /// If `width` or `height` is equal to `0` then `ratio = 0`.
     pub fn aspect_ratio(&self) -> f64 {
         self.aabb.aspect_ratio()
+    }
+
+    /// Computes the distance between a point and the current mbr.
+    pub fn distance_to_point(&self, point: &Point2D) -> f64 {
+        self.aabb
+            .distance_to_point(&rotate(vec![*point], self.rotation)[0])
     }
 }
 
@@ -251,5 +272,32 @@ mod tests {
         eprintln!("{}", vec);
 
         assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
+    }
+
+    #[test]
+    fn test_mbr_distance_to_point() {
+        let points = vec![
+            Point2D::new(0., 1.),
+            Point2D::new(1., 0.),
+            Point2D::new(5., 6.),
+            Point2D::new(6., 5.),
+        ];
+
+        let mbr = Mbr2D::from_points(points.iter());
+
+        let test_points = vec![
+            Point2D::new(2., 2.),
+            Point2D::new(0., 0.),
+            Point2D::new(5., 7.),
+        ];
+
+        let distances: Vec<_> = test_points
+            .iter()
+            .map(|p| mbr.distance_to_point(p))
+            .collect();
+
+        relative_eq!(distances[0], 0.);
+        relative_eq!(distances[1], 2_f64.sqrt() / 2.);
+        relative_eq!(distances[2], 1.);
     }
 }
