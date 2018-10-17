@@ -17,6 +17,7 @@ keywords = ["mesh", "partitioning"]
 [dependencies]
 itertools = "0.7.8"
 nalgebra = "0.16.4"
+rayon = "1.0.2"
 snowflake = "1.2"
 
 [dev-dependencies]

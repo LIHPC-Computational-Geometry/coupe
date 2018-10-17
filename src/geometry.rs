@@ -2,6 +2,7 @@
 
 use itertools::Itertools;
 use nalgebra::{Matrix2, SymmetricEigen, Vector2, Vector3};
+use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
 pub type Point3D = Vector3<f64>;
@@ -119,11 +120,14 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
     // of points which is required to construct
     // the inertia matrix.
     // centroid = (1 / sum(weights)) \sum_i weight_i * point_i
-    let total_weight = weights.iter().sum::<f64>();
+    let total_weight = weights.par_iter().sum::<f64>();
     let centroid = weights
-        .iter()
+        .par_iter()
         .zip(coordinates)
-        .fold(Vector2::new(0., 0.), |acc, (w, p)| acc + p.map(|e| e * w))
+        .fold(
+            || Vector2::new(0., 0.),
+            |acc, (w, p)| acc + p.map(|e| e * w),
+        ).sum::<Vector2<_>>()
         / total_weight;
 
     // The inertia matrix is a 2x2 matrix (or a dxd matrix in dimension d)
@@ -131,11 +135,11 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
     // J = \sum_i (1/weight_i)*(point_i - centroid) * transpose(point_i - centroid)
     // It is by construction a symmetric matrix
     weights
-        .iter()
+        .par_iter()
         .zip(coordinates)
-        .fold(Matrix2::zeros(), |acc, (w, p)| {
+        .fold(Matrix2::zeros, |acc, (w, p)| {
             acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
-        })
+        }).sum()
 }
 
 // Computes an inertia vector of
@@ -156,7 +160,10 @@ pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
     // |  cos(theta) sin(theta) |
     // | -sin(theta) cos(theta) |
     let rot_matrix = Matrix2::new(angle.cos(), angle.sin(), -angle.sin(), angle.cos());
-    coordinates.into_iter().map(|c| rot_matrix * c).collect()
+    coordinates
+        .into_par_iter()
+        .map(|c| rot_matrix * c)
+        .collect()
 }
 
 #[cfg(test)]
