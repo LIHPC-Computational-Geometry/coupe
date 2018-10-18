@@ -3,8 +3,11 @@
 extern crate approx;
 #[macro_use]
 extern crate itertools;
+#[macro_use]
+extern crate lazy_static;
 extern crate nalgebra;
 extern crate rayon;
+
 extern crate snowflake;
 
 pub mod algorithms;
