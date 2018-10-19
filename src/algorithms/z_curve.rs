@@ -12,7 +12,7 @@
 //!   - `BottomLeft => 0b00`
 //!   - `BottomRight => 0b01`
 //!   - `TopLeft => 0b10`
-//!   - `TopRight => 0b11`  
+//!   - `TopRight => 0b11`
 //!
 //! Finally, the points are reordered according to the order of their hash.
 
