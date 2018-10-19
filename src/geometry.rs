@@ -41,6 +41,25 @@ impl Aabb2D {
         Self::new(Point2D::new(x_min, y_min), Point2D::new(x_max, y_max))
     }
 
+    /// Constructs a new Aabb that is a sub-Aabb of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_aabb(&self, quadrant: Quadrant) -> Self {
+        use self::Quadrant::*;
+        let center = self.center();
+        match quadrant {
+            BottomLeft => Aabb2D::new(self.p_min, center),
+            BottomRight => Aabb2D::new(
+                Point2D::new(center.x, self.p_min.y),
+                Point2D::new(self.p_max.x, center.y),
+            ),
+            TopLeft => Aabb2D::new(
+                Point2D::new(self.p_min.x, center.y),
+                Point2D::new(center.x, self.p_max.y),
+            ),
+            TopRight => Aabb2D::new(center, self.p_max),
+        }
+    }
+
     /// Computes the aspect ratio of the Aabb.
     ///
     /// It is defined as follows:
@@ -85,10 +104,11 @@ impl Aabb2D {
 
     /// Returns wheter or not the specified point is contained in the Aabb
     pub fn contains(&self, point: &Point2D) -> bool {
-        point.x < self.p_max.x
-            && point.x > self.p_min.x
-            && point.y < self.p_max.y
-            && point.y > self.p_min.y
+        let eps = 10. * ::std::f64::EPSILON;
+        point.x < self.p_max.x + eps
+            && point.x > self.p_min.x - eps
+            && point.y < self.p_max.y + eps
+            && point.y > self.p_min.y - eps
     }
 
     /// Returns the quadrant of the Aabb in which the specified point is.
@@ -112,7 +132,7 @@ impl Aabb2D {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Quadrant {
     BottomLeft,
     BottomRight,
@@ -160,6 +180,15 @@ impl Mbr2D {
         }
     }
 
+    /// Constructs a new Mbr that is a sub-Mbr of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_mbr(&self, quadrant: Quadrant) -> Self {
+        Self {
+            aabb: self.aabb.sub_aabb(quadrant),
+            rotation: self.rotation,
+        }
+    }
+
     /// Computes the aspect ratio of the Mbr.
     ///
     /// It is defined as follows:
@@ -191,6 +220,12 @@ impl Mbr2D {
     /// Returns `None` if the specified point is not contained in the Aabb.
     pub fn quadrant(&self, point: &Point2D) -> Option<Quadrant> {
         self.aabb.quadrant(&rotate(vec![*point], self.rotation)[0])
+    }
+
+    /// Returns the rotated min and max points of the Aabb.
+    pub fn minmax(&self) -> (Point2D, Point2D) {
+        let minmax = rotate(vec![self.aabb.p_min, self.aabb.p_max], -self.rotation);
+        (minmax[0], minmax[1])
     }
 }
 
@@ -390,6 +425,11 @@ mod tests {
         assert!(!mbr.contains(&Point2D::new(0., 0.)));
         assert!(mbr.contains(&mbr.center()));
         assert!(mbr.contains(&Point2D::new(5., 4.)));
+
+        let (min, max) = mbr.minmax();
+
+        assert!(mbr.contains(&min));
+        assert!(mbr.contains(&max));
     }
 
     #[test]
