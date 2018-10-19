@@ -56,14 +56,14 @@ pub fn balanced_k_means(
     let ubs: Vec<_> = points.iter().map(|_| 1.).collect();
 
     balanced_k_means_iter(
-        centers,
-        center_ids,
         points,
         weights,
-        influences,
+        centers,
+        &center_ids,
         assignments,
-        ubs,
+        influences,
         lbs,
+        ubs,
         epsilon,
         MAX_ITER,
         delta_threshold,
@@ -71,35 +71,34 @@ pub fn balanced_k_means(
 }
 
 fn balanced_k_means_iter(
-    centers: Vec<Point2D>,
-    center_ids: Vec<ClusterId>,
     points: Vec<Point2D>,
     weights: Vec<f64>,
-    influences: Vec<f64>,
+    centers: Vec<Point2D>,
+    center_ids: &[ClusterId],
     assignments: Vec<ClusterId>,
-    ubs: Vec<f64>,
+    influences: Vec<f64>,
     lbs: Vec<f64>,
+    ubs: Vec<f64>,
     epsilon: f64,
     current_iter: usize,
     delta_threshold: f64,
 ) -> Vec<(Point2D, ClusterId)> {
-    // FIX: remove the clones
     let (assignments, influences, mut ubs, mut lbs) = assign_and_balance(
-        centers.clone(),
-        &center_ids,
-        points.clone(),
-        &weights,
-        influences,
         assignments,
-        ubs,
+        influences,
         lbs,
-        0.3,
+        ubs,
+        &centers,
+        &center_ids,
+        &points,
+        &weights,
+        epsilon,
         MAX_ITER,
     );
 
     let new_centers: Vec<_> = assignments
         .iter()
-        .zip(centers.iter().cloned())
+        .zip(points.iter().cloned())
         .into_group_map()
         .into_iter()
         .map(|(_, points)| geometry::center(&points))
@@ -121,14 +120,14 @@ fn balanced_k_means_iter(
     } else {
         relax_bounds(&mut lbs, &mut ubs, &distances_moved, &influences);
         balanced_k_means_iter(
-            new_centers,
-            center_ids,
             points,
             weights,
-            influences,
+            new_centers,
+            center_ids,
             assignments,
-            ubs,
+            influences,
             lbs,
+            ubs,
             epsilon,
             current_iter - 1,
             delta_threshold,
@@ -137,14 +136,14 @@ fn balanced_k_means_iter(
 }
 
 fn assign_and_balance(
-    centers: Vec<Point2D>,
-    center_ids: &[ClusterId],
-    mut local_points: Vec<Point2D>,
-    weights: &[f64],
-    mut influences: Vec<f64>,
     mut assignments: Vec<ClusterId>,
-    mut ubs: Vec<f64>,
+    mut influences: Vec<f64>,
     mut lbs: Vec<f64>,
+    mut ubs: Vec<f64>,
+    centers: &[Point2D],
+    center_ids: &[ClusterId],
+    points: &[Point2D],
+    weights: &[f64],
     epsilon: f64,
     max_iter: usize,
 ) -> (
@@ -153,7 +152,7 @@ fn assign_and_balance(
     Vec<f64>,       // ubs
     Vec<f64>,       // lbs
 ) {
-    let mbr = Mbr2D::from_points(local_points.iter());
+    let mbr = Mbr2D::from_points(points.iter());
     let distances_to_mbr = centers
         .iter()
         .zip(influences.iter())
@@ -170,8 +169,8 @@ fn assign_and_balance(
     let target_weight = weights.iter().sum::<f64>() / weights.iter().count() as f64;
 
     for _ in 0..max_iter {
-        local_points
-            .iter_mut()
+        points
+            .iter()
             .zip(assignments.iter_mut())
             .zip(lbs.iter_mut())
             .zip(ubs.iter_mut())
@@ -231,7 +230,7 @@ fn assign_and_balance(
         let new_centers: Vec<_> = assignments
             .iter()
             .cloned()
-            .zip(local_points.iter().cloned())
+            .zip(points.iter().cloned())
             .into_group_map()
             .into_iter()
             .map(|(id, points)| (id, geometry::center(&points)))
