@@ -17,6 +17,115 @@ type ClusterId = ProcessUniqueId;
 
 const MAX_ITER: usize = 100;
 
+pub fn simplified_k_means(
+    points: Vec<Point2D>,
+    num_partitions: usize,
+    imbalance_tol: f64,
+    mut n_iter: isize,
+) -> Vec<(Point2D, ProcessUniqueId)> {
+    let weights: Vec<_> = points.iter().map(|_| 1.).collect();
+    let qt = z_curve::ZCurveQuadtree::from_points(points);
+    let points = qt.reorder();
+
+    let points_per_center = points.len() / num_partitions;
+
+    let mut centers: Vec<_> = points
+        .iter()
+        .cloned()
+        .skip(points_per_center / 2)
+        .step_by(points_per_center)
+        .collect();
+
+    let center_ids: Vec<_> = centers.iter().map(|_| ClusterId::new()).collect();
+
+    let mut influences = centers.iter().map(|_| 1.).collect::<Vec<_>>();
+
+    let mut assignments: Vec<_> = center_ids
+        .iter()
+        .cloned()
+        .flat_map(|id| ::std::iter::repeat(id).take(points_per_center))
+        .take(points.len())
+        .collect();
+
+    let mut imbalance = ::std::f64::MAX;
+
+    let target_weight = points.len() as f64 / num_partitions as f64;
+
+    while imbalance > imbalance_tol && n_iter > 0 {
+        n_iter -= 1;
+
+        // find new assignments
+        for ((point, _weight), mut assignment) in points
+            .iter()
+            .zip(weights.iter())
+            .zip(assignments.iter_mut())
+        {
+            // find closest center
+            let mut distances = ::std::iter::repeat(*point)
+                .zip(centers.iter())
+                .zip(center_ids.iter())
+                .zip(influences.iter())
+                .map(|(((p, center), id), influence)| (*id, (p - center).norm() * influence))
+                .collect::<Vec<_>>();
+
+            distances
+                .as_mut_slice()
+                .sort_unstable_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
+
+            // update assignment with closest center found
+            *assignment = distances.into_iter().next().unwrap().0;
+        }
+
+        // update centers position from new assignments
+        for (mut center, id) in centers.iter_mut().zip(center_ids.iter()) {
+            let new_center = geometry::center(
+                &points
+                    .iter()
+                    .zip(assignments.iter())
+                    .filter(|(_, point_id)| *id == **point_id)
+                    .map(|(p, _)| *p)
+                    .collect::<Vec<_>>(),
+            );
+
+            *center = new_center;
+        }
+
+        // compute cluster weights
+        let cluster_weights = center_ids
+            .iter()
+            .map(|id| {
+                assignments
+                    .iter()
+                    .filter(|point_id| *id == **point_id)
+                    .count()
+            }).collect::<Vec<_>>();
+
+        // update influence
+        for (cluster_weight, mut influence) in cluster_weights.iter().zip(influences.iter_mut()) {
+            let ratio = target_weight / *cluster_weight as f64;
+
+            let new_influence = *influence / ratio.sqrt();
+            let max_diff = 0.05 * *influence;
+            if (*influence - new_influence).abs() < max_diff {
+                *influence = new_influence;
+            } else if new_influence > *influence {
+                *influence += max_diff;
+            } else {
+                *influence -= max_diff;
+            }
+        }
+
+        // update imbalance
+        let weights_vec = cluster_weights
+            .iter()
+            .map(|w| *w as f64)
+            .collect::<Vec<_>>();
+        imbalance = self::imbalance(&weights_vec);
+    }
+
+    points.into_iter().zip(assignments).collect()
+}
+
 pub fn balanced_k_means(
     points: Vec<Point2D>,
     num_partitions: usize,
