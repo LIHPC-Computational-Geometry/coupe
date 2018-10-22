@@ -14,14 +14,6 @@ use super::z_curve;
 /// to enforce that it represents temporary ids
 /// for the k-means algorithm and not a partition id
 type ClusterId = ProcessUniqueId;
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// struct ClusterId(ProcessUniqueId);
-
-// impl ClusterId {
-//     pub fn new() -> Self {
-//         ClusterId(ProcessUniqueId::new())
-//     }
-// }
 
 const MAX_ITER: usize = 100;
 
@@ -41,7 +33,12 @@ pub fn balanced_k_means(
     let points_per_center = points.len() / num_partitions;
 
     // select num_partitions initial centers from the ordered points
-    let centers: Vec<_> = points.iter().cloned().step_by(points_per_center).collect();
+    let centers: Vec<_> = points
+        .iter()
+        .cloned()
+        .skip(points_per_center / 2)
+        .step_by(points_per_center)
+        .collect();
 
     let center_ids: Vec<_> = centers.iter().map(|_| ClusterId::new()).collect();
     let assignments: Vec<_> = center_ids
@@ -217,12 +214,10 @@ fn assign_and_balance(
                 let new_influence = *influence / ratio.sqrt();
                 if (*influence - new_influence).abs() < max_diff {
                     *influence = new_influence;
+                } else if new_influence > *influence {
+                    *influence += max_diff;
                 } else {
-                    if new_influence > *influence {
-                        *influence += max_diff;
-                    } else {
-                        *influence -= max_diff;
-                    }
+                    *influence -= max_diff;
                 }
             });
 
@@ -291,41 +286,28 @@ fn best_values(
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
 ) {
-    use itertools::FoldWhile::{Continue, Done};
+    let mut best_value = ::std::f64::MAX;
+    let mut snd_best_value = ::std::f64::MAX;
+    let mut assignment = None;
 
-    let (lb, ub, a) = centers
+    for (((center, id), distance_to_mbr), influence) in centers
         .iter()
         .zip(center_ids)
         .zip(distances_to_mbr)
         .zip(influences)
-        // compute for each cluster, the effective distance
-        // between the current point and the cluster, defined by
-        // effective_distance = distance(cluster, point) / influence(cluster)
-        .map(|(((center, id), distance_to_mbr), influence)| {
-            (
-                (center, id),
-                distance_to_mbr,
-                (center - point).norm() / influence,
-            )
-        })
-        // lookup through every cluster to find new best bounds for the current point
-        // and keep track of a new assignment that is better than the current one
-        .fold_while(
-            // lower and upper bounds are initially None to
-            // represent that they are uninitialized
-            (None, None, None),
-            |(lb, ub, a), ((_center, id), distance_to_mbr, effective_distance)| match (lb, ub) {
-                (Some(lb), _) if *distance_to_mbr > lb => Done((Some(lb), ub, a)),
-                (Some(lb), ub) if effective_distance < lb => {
-                    Continue((Some(effective_distance), ub, a))
-                }
-                (None, ub) => Continue((ub, Some(effective_distance), Some(*id))),
-                (_, Some(ub)) if effective_distance < ub => {
-                    Continue((Some(ub), Some(effective_distance), Some(*id)))
-                }
-                _ => Continue((lb, ub, a)),
-            },
-        ).into_inner();
+    {
+        if *distance_to_mbr > snd_best_value {
+            break;
+        }
+        let effective_distance = (center - point).norm() / influence;
+        if effective_distance < best_value {
+            assignment = Some(*id);
+            snd_best_value = best_value;
+            best_value = effective_distance;
+        } else if effective_distance < snd_best_value {
+            snd_best_value = effective_distance;
+        }
+    }
 
-    (lb.unwrap(), ub.unwrap(), a)
+    (snd_best_value, best_value, assignment)
 }
