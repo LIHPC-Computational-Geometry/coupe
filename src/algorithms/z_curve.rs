@@ -113,11 +113,11 @@ impl ZCurveQuadtree {
                     .map(|(_, point)| **point)
                     .collect::<Vec<_>>(),
                 mbr,
-            ).compute_hashes_impl(current_hash << 2 + 0b01)
+            ).compute_hashes_impl(current_hash << (2 + 0b01))
         } else {
             bottom_rights
                 .iter()
-                .map(|(_, point)| (**point, current_hash << 2 + 0b01))
+                .map(|(_, point)| (**point, current_hash << (2 + 0b01)))
                 .collect()
         };
 
@@ -129,11 +129,11 @@ impl ZCurveQuadtree {
                     .map(|(_, point)| **point)
                     .collect::<Vec<_>>(),
                 mbr,
-            ).compute_hashes_impl(current_hash << 2 + 0b10)
+            ).compute_hashes_impl(current_hash << (2 + 0b10))
         } else {
             top_lefts
                 .iter()
-                .map(|(_, point)| (**point, current_hash << 2 + 0b10))
+                .map(|(_, point)| (**point, current_hash << (2 + 0b10)))
                 .collect()
         };
 
@@ -145,11 +145,11 @@ impl ZCurveQuadtree {
                     .map(|(_, point)| **point)
                     .collect::<Vec<_>>(),
                 mbr,
-            ).compute_hashes_impl(current_hash << 2 + 0b11)
+            ).compute_hashes_impl(current_hash << (2 + 0b11))
         } else {
             top_rights
                 .iter()
-                .map(|(_, point)| (**point, current_hash << 2 + 0b11))
+                .map(|(_, point)| (**point, current_hash << (2 + 0b11)))
                 .collect()
         };
 
