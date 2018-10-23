@@ -289,12 +289,6 @@ pub fn center(points: &[Point2D]) -> Point2D {
     }) / points.len() as f64
 }
 
-pub fn center(points: &[Point2D]) -> Point2D {
-    points.iter().fold(Point2D::new(0., 0.), |acc, val| {
-        Point2D::new(acc.x + val.x, acc.y + val.y)
-    }) / points.len() as f64
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
