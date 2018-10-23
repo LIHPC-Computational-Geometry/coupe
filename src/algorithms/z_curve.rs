@@ -17,6 +17,8 @@
 //! Finally, the points are reordered according to the order of their hash.
 
 use geometry::{Mbr2D, Point2D, Quadrant};
+use rayon;
+use rayon::prelude::*;
 
 /// A quadtree construct to help with computing spatial hashes. It is a rectangle that can be recursively split
 /// to yield sub quadtrees. Here, the ZCurveQuadtree is defined as a bounding box of a set of points.
@@ -44,11 +46,14 @@ impl ZCurveQuadtree {
 
         with_hashes
             .as_mut_slice()
-            .sort_unstable_by_key(|(_, _, hash)| *hash);
+            .par_sort_unstable_by_key(|(_, _, hash)| *hash);
 
-        let (still_zipped, _): (Vec<_>, Vec<_>) =
-            with_hashes.into_iter().map(|(p, w, h)| ((p, w), h)).unzip();
-        let (points, weights): (Vec<_>, Vec<_>) = still_zipped.into_iter().unzip();
+        let (still_zipped, _): (Vec<_>, Vec<_>) = with_hashes
+            .into_par_iter()
+            .map(|(p, w, h)| ((p, w), h))
+            .unzip();
+
+        let (points, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
         (points, weights)
     }
 
@@ -78,19 +83,19 @@ impl ZCurveQuadtree {
 
         // Filter points based on which quadrant they are in
         let bottom_lefts = points_map
-            .iter()
+            .par_iter()
             .filter(|(q, _, _)| *q == BottomLeft)
             .collect::<Vec<_>>();
         let bottom_rights = points_map
-            .iter()
+            .par_iter()
             .filter(|(q, _, _)| *q == BottomRight)
             .collect::<Vec<_>>();
         let top_lefts = points_map
-            .iter()
+            .par_iter()
             .filter(|(q, _, _)| *q == TopLeft)
             .collect::<Vec<_>>();
         let top_rights = points_map
-            .iter()
+            .par_iter()
             .filter(|(q, _, _)| *q == TopRight)
             .collect::<Vec<_>>();
 
@@ -99,89 +104,99 @@ impl ZCurveQuadtree {
         //   - The quadrant is empty. Nothing is done.
         //   - The quadrant contains at least to points. The current hash is updated, the quadrant is split again
         //     and the algorithm is called on each new quadrant.
-        let bottom_lefts = if bottom_lefts.len() > 1 {
-            let mbr = self.mbr.sub_mbr(BottomLeft);
-            Self::with_mbr(
-                bottom_lefts
-                    .iter()
-                    .map(|(_, point, _)| **point)
-                    .collect::<Vec<_>>(),
-                bottom_lefts
-                    .iter()
-                    .map(|(_, _, weight)| *weight)
-                    .collect::<Vec<_>>(),
-                mbr,
-            ).compute_hashes_impl(current_hash << 2)
-        } else {
-            bottom_lefts
-                .iter()
-                .map(|(_, point, weight)| (**point, *weight, current_hash << 2))
-                .collect()
-        };
+        let (bottom_lefts, bottom_rights) = rayon::join(
+            || {
+                if bottom_lefts.len() > 1 {
+                    let mbr = self.mbr.sub_mbr(BottomLeft);
+                    Self::with_mbr(
+                        bottom_lefts
+                            .iter()
+                            .map(|(_, point, _)| **point)
+                            .collect::<Vec<_>>(),
+                        bottom_lefts
+                            .iter()
+                            .map(|(_, _, weight)| *weight)
+                            .collect::<Vec<_>>(),
+                        mbr,
+                    ).compute_hashes_impl(current_hash << 2)
+                } else {
+                    bottom_lefts
+                        .iter()
+                        .map(|(_, point, weight)| (**point, *weight, current_hash << 2))
+                        .collect()
+                }
+            },
+            || {
+                if bottom_rights.len() > 1 {
+                    let mbr = self.mbr.sub_mbr(BottomRight);
+                    Self::with_mbr(
+                        bottom_rights
+                            .iter()
+                            .map(|(_, point, _)| **point)
+                            .collect::<Vec<_>>(),
+                        bottom_rights
+                            .iter()
+                            .map(|(_, _, weight)| *weight)
+                            .collect::<Vec<_>>(),
+                        mbr,
+                    ).compute_hashes_impl(current_hash << (2 + 0b01))
+                } else {
+                    bottom_rights
+                        .iter()
+                        .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b01)))
+                        .collect()
+                }
+            },
+        );
 
-        let bottom_rights = if bottom_rights.len() > 1 {
-            let mbr = self.mbr.sub_mbr(BottomRight);
-            Self::with_mbr(
-                bottom_rights
-                    .iter()
-                    .map(|(_, point, _)| **point)
-                    .collect::<Vec<_>>(),
-                bottom_rights
-                    .iter()
-                    .map(|(_, _, weight)| *weight)
-                    .collect::<Vec<_>>(),
-                mbr,
-            ).compute_hashes_impl(current_hash << (2 + 0b01))
-        } else {
-            bottom_rights
-                .iter()
-                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b01)))
-                .collect()
-        };
-
-        let top_lefts = if top_lefts.len() > 1 {
-            let mbr = self.mbr.sub_mbr(TopLeft);
-            Self::with_mbr(
-                top_lefts
-                    .iter()
-                    .map(|(_, point, _)| **point)
-                    .collect::<Vec<_>>(),
-                top_lefts
-                    .iter()
-                    .map(|(_, _, weight)| *weight)
-                    .collect::<Vec<_>>(),
-                mbr,
-            ).compute_hashes_impl(current_hash << (2 + 0b10))
-        } else {
-            top_lefts
-                .iter()
-                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b10)))
-                .collect()
-        };
-
-        let top_rights = if top_rights.len() > 1 {
-            let mbr = self.mbr.sub_mbr(TopRight);
-            Self::with_mbr(
-                top_rights
-                    .iter()
-                    .map(|(_, point, _)| **point)
-                    .collect::<Vec<_>>(),
-                top_rights
-                    .iter()
-                    .map(|(_, _, weight)| *weight)
-                    .collect::<Vec<_>>(),
-                mbr,
-            ).compute_hashes_impl(current_hash << (2 + 0b11))
-        } else {
-            top_rights
-                .iter()
-                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b11)))
-                .collect()
-        };
+        let (top_lefts, top_rights) = rayon::join(
+            || {
+                if top_lefts.len() > 1 {
+                    let mbr = self.mbr.sub_mbr(TopLeft);
+                    Self::with_mbr(
+                        top_lefts
+                            .iter()
+                            .map(|(_, point, _)| **point)
+                            .collect::<Vec<_>>(),
+                        top_lefts
+                            .iter()
+                            .map(|(_, _, weight)| *weight)
+                            .collect::<Vec<_>>(),
+                        mbr,
+                    ).compute_hashes_impl(current_hash << 2)
+                } else {
+                    top_lefts
+                        .iter()
+                        .map(|(_, point, weight)| (**point, *weight, current_hash << 2))
+                        .collect()
+                }
+            },
+            || {
+                if top_rights.len() > 1 {
+                    let mbr = self.mbr.sub_mbr(TopRight);
+                    Self::with_mbr(
+                        top_rights
+                            .iter()
+                            .map(|(_, point, _)| **point)
+                            .collect::<Vec<_>>(),
+                        top_rights
+                            .iter()
+                            .map(|(_, _, weight)| *weight)
+                            .collect::<Vec<_>>(),
+                        mbr,
+                    ).compute_hashes_impl(current_hash << (2 + 0b01))
+                } else {
+                    top_rights
+                        .iter()
+                        .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b01)))
+                        .collect()
+                }
+            },
+        );
 
         // Stick back all the points together
         bottom_lefts
-            .into_iter()
+            .into_par_iter()
             .chain(bottom_rights)
             .chain(top_lefts)
             .chain(top_rights)
