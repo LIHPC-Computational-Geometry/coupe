@@ -25,37 +25,46 @@ use geometry::{Mbr2D, Point2D, Quadrant};
 pub struct ZCurveQuadtree {
     mbr: Mbr2D,
     points: Vec<Point2D>,
+    weights: Vec<f64>,
 }
 
 impl ZCurveQuadtree {
     /// Constructs a new `ZCurveQuadtree` from a set of points.
-    pub fn from_points(points: Vec<Point2D>) -> Self {
+    pub fn new(points: Vec<Point2D>, weights: Vec<f64>) -> Self {
         Self {
             mbr: Mbr2D::from_points(points.iter()),
             points,
+            weights,
         }
     }
 
     /// Compute Z hashes of the points contained in the quadtree and reorders them.
-    pub fn reorder(self) -> Vec<Point2D> {
+    pub fn reorder(self) -> (Vec<Point2D>, Vec<f64>) {
         let mut with_hashes = self.compute_hashes();
+
         with_hashes
             .as_mut_slice()
-            .sort_unstable_by_key(|(_, hash)| *hash);
+            .sort_unstable_by_key(|(_, _, hash)| *hash);
 
-        let (points, _): (Vec<_>, Vec<_>) = with_hashes.into_iter().unzip();
-        points
+        let (still_zipped, _): (Vec<_>, Vec<_>) =
+            with_hashes.into_iter().map(|(p, w, h)| ((p, w), h)).unzip();
+        let (points, weights): (Vec<_>, Vec<_>) = still_zipped.into_iter().unzip();
+        (points, weights)
     }
 
-    fn from_points_with_mbr(points: Vec<Point2D>, mbr: Mbr2D) -> Self {
-        Self { mbr, points }
+    fn with_mbr(points: Vec<Point2D>, weights: Vec<f64>, mbr: Mbr2D) -> Self {
+        Self {
+            mbr,
+            points,
+            weights,
+        }
     }
 
-    fn compute_hashes(&self) -> Vec<(Point2D, u32)> {
+    fn compute_hashes(&self) -> Vec<(Point2D, f64, u32)> {
         self.compute_hashes_impl(0)
     }
 
-    fn compute_hashes_impl(&self, current_hash: u32) -> Vec<(Point2D, u32)> {
+    fn compute_hashes_impl(&self, current_hash: u32) -> Vec<(Point2D, f64, u32)> {
         use self::Quadrant::*;
 
         // Construct a mapping from each quadrant of the current mbr
@@ -63,25 +72,26 @@ impl ZCurveQuadtree {
         let points_map = self
             .points
             .iter()
-            .map(|point| (self.mbr.quadrant(point).unwrap(), point))
+            .zip(self.weights.iter())
+            .map(|(point, weight)| (self.mbr.quadrant(point).unwrap(), point, *weight))
             .collect::<Vec<_>>();
 
         // Filter points based on which quadrant they are in
         let bottom_lefts = points_map
             .iter()
-            .filter(|(q, _)| *q == BottomLeft)
+            .filter(|(q, _, _)| *q == BottomLeft)
             .collect::<Vec<_>>();
         let bottom_rights = points_map
             .iter()
-            .filter(|(q, _)| *q == BottomRight)
+            .filter(|(q, _, _)| *q == BottomRight)
             .collect::<Vec<_>>();
         let top_lefts = points_map
             .iter()
-            .filter(|(q, _)| *q == TopLeft)
+            .filter(|(q, _, _)| *q == TopLeft)
             .collect::<Vec<_>>();
         let top_rights = points_map
             .iter()
-            .filter(|(q, _)| *q == TopRight)
+            .filter(|(q, _, _)| *q == TopRight)
             .collect::<Vec<_>>();
 
         // In each quadrant, three cases are possible:
@@ -91,65 +101,81 @@ impl ZCurveQuadtree {
         //     and the algorithm is called on each new quadrant.
         let bottom_lefts = if bottom_lefts.len() > 1 {
             let mbr = self.mbr.sub_mbr(BottomLeft);
-            Self::from_points_with_mbr(
+            Self::with_mbr(
                 bottom_lefts
                     .iter()
-                    .map(|(_, point)| **point)
+                    .map(|(_, point, _)| **point)
+                    .collect::<Vec<_>>(),
+                bottom_lefts
+                    .iter()
+                    .map(|(_, _, weight)| *weight)
                     .collect::<Vec<_>>(),
                 mbr,
             ).compute_hashes_impl(current_hash << 2)
         } else {
             bottom_lefts
                 .iter()
-                .map(|(_, point)| (**point, current_hash << 2))
+                .map(|(_, point, weight)| (**point, *weight, current_hash << 2))
                 .collect()
         };
 
         let bottom_rights = if bottom_rights.len() > 1 {
             let mbr = self.mbr.sub_mbr(BottomRight);
-            Self::from_points_with_mbr(
+            Self::with_mbr(
                 bottom_rights
                     .iter()
-                    .map(|(_, point)| **point)
+                    .map(|(_, point, _)| **point)
+                    .collect::<Vec<_>>(),
+                bottom_rights
+                    .iter()
+                    .map(|(_, _, weight)| *weight)
                     .collect::<Vec<_>>(),
                 mbr,
             ).compute_hashes_impl(current_hash << (2 + 0b01))
         } else {
             bottom_rights
                 .iter()
-                .map(|(_, point)| (**point, current_hash << (2 + 0b01)))
+                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b01)))
                 .collect()
         };
 
         let top_lefts = if top_lefts.len() > 1 {
             let mbr = self.mbr.sub_mbr(TopLeft);
-            Self::from_points_with_mbr(
+            Self::with_mbr(
                 top_lefts
                     .iter()
-                    .map(|(_, point)| **point)
+                    .map(|(_, point, _)| **point)
+                    .collect::<Vec<_>>(),
+                top_lefts
+                    .iter()
+                    .map(|(_, _, weight)| *weight)
                     .collect::<Vec<_>>(),
                 mbr,
             ).compute_hashes_impl(current_hash << (2 + 0b10))
         } else {
             top_lefts
                 .iter()
-                .map(|(_, point)| (**point, current_hash << (2 + 0b10)))
+                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b10)))
                 .collect()
         };
 
         let top_rights = if top_rights.len() > 1 {
             let mbr = self.mbr.sub_mbr(TopRight);
-            Self::from_points_with_mbr(
+            Self::with_mbr(
                 top_rights
                     .iter()
-                    .map(|(_, point)| **point)
+                    .map(|(_, point, _)| **point)
+                    .collect::<Vec<_>>(),
+                top_rights
+                    .iter()
+                    .map(|(_, _, weight)| *weight)
                     .collect::<Vec<_>>(),
                 mbr,
             ).compute_hashes_impl(current_hash << (2 + 0b11))
         } else {
             top_rights
                 .iter()
-                .map(|(_, point)| (**point, current_hash << (2 + 0b11)))
+                .map(|(_, point, weight)| (**point, *weight, current_hash << (2 + 0b11)))
                 .collect()
         };
 
@@ -179,8 +205,10 @@ mod tests {
             Point2D::new(4., 2.),
         ];
 
-        let qt = ZCurveQuadtree::from_points(points);
-        let reordered = qt.reorder();
+        let weights = points.iter().map(|_| 1.).collect();
+
+        let qt = ZCurveQuadtree::new(points, weights);
+        let (reordered, _weights) = qt.reorder();
 
         assert_ulps_eq!(reordered[0], Point2D::new(0., 0.));
         assert_ulps_eq!(reordered[1], Point2D::new(4., 2.));

@@ -19,13 +19,13 @@ const MAX_ITER: usize = 100;
 
 pub fn simplified_k_means(
     points: Vec<Point2D>,
+    weights: Vec<f64>,
     num_partitions: usize,
     imbalance_tol: f64,
     mut n_iter: isize,
-) -> Vec<(Point2D, ProcessUniqueId)> {
-    let weights: Vec<_> = points.iter().map(|_| 1.).collect();
-    let qt = z_curve::ZCurveQuadtree::from_points(points);
-    let points = qt.reorder();
+) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
+    let qt = z_curve::ZCurveQuadtree::new(points, weights);
+    let (points, weights) = qt.reorder();
 
     let points_per_center = points.len() / num_partitions;
 
@@ -49,17 +49,13 @@ pub fn simplified_k_means(
 
     let mut imbalance = ::std::f64::MAX;
 
-    let target_weight = points.len() as f64 / num_partitions as f64;
+    let target_weight = weights.iter().sum::<f64>() / num_partitions as f64;
 
     while imbalance > imbalance_tol && n_iter > 0 {
         n_iter -= 1;
 
         // find new assignments
-        for ((point, _weight), mut assignment) in points
-            .iter()
-            .zip(weights.iter())
-            .zip(assignments.iter_mut())
-        {
+        for (point, mut assignment) in points.iter().zip(assignments.iter_mut()) {
             // find closest center
             let mut distances = ::std::iter::repeat(*point)
                 .zip(centers.iter())
@@ -96,8 +92,9 @@ pub fn simplified_k_means(
             .map(|id| {
                 assignments
                     .iter()
-                    .filter(|point_id| *id == **point_id)
-                    .count()
+                    .zip(weights.iter())
+                    .filter(|(point_id, _)| *id == **point_id)
+                    .fold(0., |acc, (_, weight)| acc + weight)
             }).collect::<Vec<_>>();
 
         // update influence
@@ -116,17 +113,13 @@ pub fn simplified_k_means(
         }
 
         // update imbalance
-        let weights_vec = cluster_weights
-            .iter()
-            .map(|w| *w as f64)
-            .collect::<Vec<_>>();
-        imbalance = self::imbalance(&weights_vec);
+        imbalance = self::imbalance(&cluster_weights);
     }
 
-    points.into_iter().zip(assignments).collect()
+    (points.into_iter().zip(assignments).collect(), weights)
 }
 
-pub fn balanced_k_means(
+fn balanced_k_means(
     points: Vec<Point2D>,
     num_partitions: usize,
     epsilon: f64,
@@ -136,8 +129,8 @@ pub fn balanced_k_means(
     let weights: Vec<_> = points.iter().map(|_| 1.).collect();
 
     // sort points with Z-curve
-    let qt = z_curve::ZCurveQuadtree::from_points(points);
-    let points = qt.reorder();
+    let qt = z_curve::ZCurveQuadtree::new(points, weights);
+    let (points, weights) = qt.reorder();
 
     let points_per_center = points.len() / num_partitions;
 
