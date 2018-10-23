@@ -101,7 +101,7 @@ fn rcb_impl(
 
 // sort input vectors w.r.t. coordinates
 // i.e. by increasing x or increasing y
-fn axis_sort(
+pub fn axis_sort(
     ids: Vec<usize>,
     weights: Vec<f64>,
     coordinates: Vec<Point2D>,
