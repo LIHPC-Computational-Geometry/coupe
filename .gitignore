@@ -1,5 +1,6 @@
 # rust
 /target
+/examples/target
 **/*.rs.bk
 Cargo.lock
 
