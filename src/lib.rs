@@ -2,7 +2,6 @@
 #[macro_use]
 extern crate approx;
 extern crate itertools;
-extern crate lazy_static;
 extern crate nalgebra;
 extern crate rayon;
 

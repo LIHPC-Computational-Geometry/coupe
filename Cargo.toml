@@ -17,7 +17,6 @@ autobenches = false
 
 [dependencies]
 itertools = "0.7.8"
-lazy_static = "1.1.0"
 nalgebra = "0.16.4"
 rayon = "1.0.2"
 snowflake = "1.2"
