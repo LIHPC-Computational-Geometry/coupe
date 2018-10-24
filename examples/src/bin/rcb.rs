@@ -7,7 +7,6 @@ extern crate rand;
 
 use clap::App;
 use itertools::Itertools;
-use rand::Rng;
 
 use coupe::algorithms::geometric::rcb;
 use coupe::geometry::Point2D;
@@ -48,5 +47,7 @@ fn main() {
         .zip(sorted_part_ids.iter().map(|(_, pid)| *pid))
         .collect::<Vec<_>>();
 
-    examples::plot_partition(points);
+    if !matches.is_present("quiet") {
+        examples::plot_partition(points)
+    }
 }

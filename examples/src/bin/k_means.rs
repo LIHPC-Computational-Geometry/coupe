@@ -45,5 +45,7 @@ fn main() {
     let (partition, _weights) =
         simplified_k_means(points, weights, n_partitions, imbalance_tol, n_max_iter);
 
-    examples::plot_partition(partition);
+    if !matches.is_present("quiet") {
+        examples::plot_partition(partition)
+    }
 }

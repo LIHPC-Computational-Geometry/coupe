@@ -2,6 +2,13 @@
 
 This is the main repository for coupe, a mesh partitioning library.
 
+## Running examples
+Several examples are located in the `examples` subcrate.
+```shell
+cargo run -p examples --bin <EXAMPLE_NAME> -- <EXAMPLE_ARGS>
+```
+
+
 ## License
 
 Licensed under either of

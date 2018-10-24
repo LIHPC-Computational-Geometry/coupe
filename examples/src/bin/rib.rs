@@ -7,7 +7,6 @@ extern crate rand;
 
 use clap::App;
 use itertools::Itertools;
-use rand::Rng;
 
 use coupe::algorithms::geometric::rib;
 use coupe::geometry::Point2D;
@@ -31,8 +30,6 @@ fn main() {
     let ids: Vec<usize> = (0..n_points).collect();
     let weights = vec![1.; n_points];
 
-    let mut rng = rand::thread_rng();
-
     let points = examples::generator::cicrcle_uniform(n_points, Point2D::new(0., 0.), 1.)
         .into_iter()
         .map(|p| p * p.y)
@@ -50,5 +47,7 @@ fn main() {
         .zip(sorted_part_ids.iter().map(|(_, pid)| *pid))
         .collect::<Vec<_>>();
 
-    examples::plot_partition(points);
+    if !matches.is_present("quiet") {
+        examples::plot_partition(points)
+    }
 }

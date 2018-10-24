@@ -11,3 +11,7 @@ args:
     takes_value: true
     default_value: "5000"
     help: Sets the number of points randomly generated
+ - quiet:
+    long: quiet
+    short: q
+    help: Disables the GUI output
