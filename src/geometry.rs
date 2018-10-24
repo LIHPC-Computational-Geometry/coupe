@@ -42,6 +42,25 @@ impl Aabb2D {
         Self::new(Point2D::new(x_min, y_min), Point2D::new(x_max, y_max))
     }
 
+    /// Constructs a new Aabb that is a sub-Aabb of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_aabb(&self, quadrant: Quadrant) -> Self {
+        use self::Quadrant::*;
+        let center = self.center();
+        match quadrant {
+            BottomLeft => Aabb2D::new(self.p_min, center),
+            BottomRight => Aabb2D::new(
+                Point2D::new(center.x, self.p_min.y),
+                Point2D::new(self.p_max.x, center.y),
+            ),
+            TopLeft => Aabb2D::new(
+                Point2D::new(self.p_min.x, center.y),
+                Point2D::new(center.x, self.p_max.y),
+            ),
+            TopRight => Aabb2D::new(center, self.p_max),
+        }
+    }
+
     /// Computes the aspect ratio of the Aabb.
     ///
     /// It is defined as follows:
@@ -60,6 +79,66 @@ impl Aabb2D {
             ratio
         }
     }
+
+    /// Computes the distance between a point and the current Aabb.
+    pub fn distance_to_point(&self, point: &Point2D) -> f64 {
+        let clamped_x = match point.x {
+            x if x > self.p_max.x => self.p_max.x,
+            x if x < self.p_min.x => self.p_min.x,
+            x => x,
+        };
+        let clamped_y = match point.y {
+            y if y > self.p_max.y => self.p_max.y,
+            y if y < self.p_min.y => self.p_min.y,
+            y => y,
+        };
+        Vector2::new(clamped_x - point.x, clamped_y - point.y).norm()
+    }
+
+    /// Computes the center of the Aabb
+    pub fn center(&self) -> Point2D {
+        Point2D::new(
+            0.5 * (self.p_min.x + self.p_max.x),
+            0.5 * (self.p_min.y + self.p_max.y),
+        )
+    }
+
+    /// Returns wheter or not the specified point is contained in the Aabb
+    pub fn contains(&self, point: &Point2D) -> bool {
+        let eps = 10. * ::std::f64::EPSILON;
+        point.x < self.p_max.x + eps
+            && point.x > self.p_min.x - eps
+            && point.y < self.p_max.y + eps
+            && point.y > self.p_min.y - eps
+    }
+
+    /// Returns the quadrant of the Aabb in which the specified point is.
+    /// Returns `None` if the specified point is not contained in the Aabb
+    pub fn quadrant(&self, point: &Point2D) -> Option<Quadrant> {
+        use self::Quadrant::*;
+        if !self.contains(point) {
+            return None;
+        }
+
+        let center = self.center();
+
+        match (point.x, point.y) {
+            (x, y) if x < center.x && y < center.y => Some(BottomLeft),
+            (x, y) if x > center.x && y < center.y => Some(BottomRight),
+            (x, y) if x < center.x && y > center.y => Some(TopLeft),
+            (x, y) if x > center.x && y > center.y => Some(TopRight),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Quadrant {
+    BottomLeft,
+    BottomRight,
+    TopLeft,
+    TopRight,
 }
 
 /// A 2D Minimal bounding rectangle.
@@ -102,6 +181,15 @@ impl Mbr2D {
         }
     }
 
+    /// Constructs a new Mbr that is a sub-Mbr of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_mbr(&self, quadrant: Quadrant) -> Self {
+        Self {
+            aabb: self.aabb.sub_aabb(quadrant),
+            rotation: self.rotation,
+        }
+    }
+
     /// Computes the aspect ratio of the Mbr.
     ///
     /// It is defined as follows:
@@ -110,6 +198,35 @@ impl Mbr2D {
     /// If `width` or `height` is equal to `0` then `ratio = 0`.
     pub fn aspect_ratio(&self) -> f64 {
         self.aabb.aspect_ratio()
+    }
+
+    /// Computes the distance between a point and the current mbr.
+    pub fn distance_to_point(&self, point: &Point2D) -> f64 {
+        self.aabb
+            .distance_to_point(&rotate(vec![*point], self.rotation)[0])
+    }
+
+    /// Computes the center of the Mbr
+    pub fn center(&self) -> Point2D {
+        rotate(vec![self.aabb.center()], -self.rotation)[0]
+    }
+
+    /// Returns wheter or not the specified point is contained in the Mbr
+    pub fn contains(&self, point: &Point2D) -> bool {
+        self.aabb.contains(&rotate(vec![*point], self.rotation)[0])
+    }
+
+    /// Returns the quadrant of the Aabb in which the specified point is.
+    /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
+    /// Returns `None` if the specified point is not contained in the Aabb.
+    pub fn quadrant(&self, point: &Point2D) -> Option<Quadrant> {
+        self.aabb.quadrant(&rotate(vec![*point], self.rotation)[0])
+    }
+
+    /// Returns the rotated min and max points of the Aabb.
+    pub fn minmax(&self) -> (Point2D, Point2D) {
+        let minmax = rotate(vec![self.aabb.p_min, self.aabb.p_max], -self.rotation);
+        (minmax[0], minmax[1])
     }
 }
 
@@ -164,6 +281,12 @@ pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
         .into_par_iter()
         .map(|c| rot_matrix * c)
         .collect()
+}
+
+pub fn center(points: &[Point2D]) -> Point2D {
+    points.iter().fold(Point2D::new(0., 0.), |acc, val| {
+        Point2D::new(acc.x + val.x, acc.y + val.y)
+    }) / points.len() as f64
 }
 
 #[cfg(test)]
@@ -251,5 +374,93 @@ mod tests {
         eprintln!("{}", vec);
 
         assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
+    }
+
+    #[test]
+    fn test_mbr_distance_to_point() {
+        let points = vec![
+            Point2D::new(0., 1.),
+            Point2D::new(1., 0.),
+            Point2D::new(5., 6.),
+            Point2D::new(6., 5.),
+        ];
+
+        let mbr = Mbr2D::from_points(points.iter());
+
+        let test_points = vec![
+            Point2D::new(2., 2.),
+            Point2D::new(0., 0.),
+            Point2D::new(5., 7.),
+        ];
+
+        let distances: Vec<_> = test_points
+            .iter()
+            .map(|p| mbr.distance_to_point(p))
+            .collect();
+
+        relative_eq!(distances[0], 0.);
+        relative_eq!(distances[1], 2_f64.sqrt() / 2.);
+        relative_eq!(distances[2], 1.);
+    }
+
+    #[test]
+    fn test_mbr_center() {
+        let points = vec![
+            Point2D::new(0., 1.),
+            Point2D::new(1., 0.),
+            Point2D::new(5., 6.),
+            Point2D::new(6., 5.),
+        ];
+
+        let mbr = Mbr2D::from_points(points.iter());
+
+        let center = mbr.center();
+        assert_ulps_eq!(center, Point2D::new(3., 3.))
+    }
+
+    #[test]
+    fn test_mbr_contains() {
+        let points = vec![
+            Point2D::new(0., 1.),
+            Point2D::new(1., 0.),
+            Point2D::new(5., 6.),
+            Point2D::new(6., 5.),
+        ];
+
+        let mbr = Mbr2D::from_points(points.iter());
+
+        assert!(!mbr.contains(&Point2D::new(0., 0.)));
+        assert!(mbr.contains(&mbr.center()));
+        assert!(mbr.contains(&Point2D::new(5., 4.)));
+
+        let (min, max) = mbr.minmax();
+
+        assert!(mbr.contains(&min));
+        assert!(mbr.contains(&max));
+    }
+
+    #[test]
+    fn test_mbr_quadrant() {
+        use super::Quadrant::*;
+        let points = vec![
+            Point2D::new(0., 1.),
+            Point2D::new(1., 0.),
+            Point2D::new(5., 6.),
+            Point2D::new(6., 5.),
+        ];
+
+        let mbr = Mbr2D::from_points(points.iter());
+
+        let none = mbr.quadrant(&Point2D::new(0., 0.));
+        let q1 = mbr.quadrant(&Point2D::new(1.2, 1.2));
+        let q2 = mbr.quadrant(&Point2D::new(5.8, 4.9));
+        let q3 = mbr.quadrant(&Point2D::new(0.2, 1.1));
+        let q4 = mbr.quadrant(&Point2D::new(5.1, 5.8));
+
+        assert_eq!(none, None);
+        assert_eq!(q1, Some(BottomLeft));
+        assert_eq!(q2, Some(BottomRight));
+        assert_eq!(q3, Some(TopLeft));
+        assert_eq!(q4, Some(TopRight));
     }
 }
