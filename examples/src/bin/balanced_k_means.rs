@@ -48,7 +48,7 @@ fn main() {
         .parse()
         .expect("wrong value for delta_max");
 
-    let errode = matches.is_present("errode");
+    let erode = matches.is_present("erode");
 
     let points = examples::generator::rectangle_uniform(n_points, Point2D::new(0., 0.), 4., 2.);
 
@@ -60,7 +60,7 @@ fn main() {
         max_iter: n_max_iter,
         max_balance_iter: n_max_balance_iter,
         delta_threshold: delta_max,
-        errode: errode,
+        erode: erode,
         ..Default::default()
     };
 

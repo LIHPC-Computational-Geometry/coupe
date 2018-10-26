@@ -31,9 +31,9 @@ args:
     takes_value: true
     default_value: "0.01"
     help: Sets the distance threshold for the cluster movements under which the algorithm stops 
- - errode:
-    long: errode
-    help: Enables cluster influence errosion
+ - erode:
+    long: erode
+    help: Enables cluster influence erosion
  - quiet:
     long: quiet
     short: q

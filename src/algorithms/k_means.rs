@@ -19,6 +19,12 @@ use itertools::Itertools;
 /// for the k-means algorithm and not a partition id
 type ClusterId = ProcessUniqueId;
 
+/// A simplified implementation of the algorithm described in the paper
+/// by Moritz von Looz et al. that follows the same idea but without the small
+/// optimizations that would improve the efficiency of the algorithm. In particular,
+/// this version shows some noticeable oscillations when imposing a restrictive balance constraint.
+/// It also skips the bounding boxes optimization which would slightly reduce the complexity of the
+/// algorithm.
 pub fn simplified_k_means(
     points: Vec<Point2D>,
     weights: Vec<f64>,
@@ -146,6 +152,17 @@ fn imbalance(weights: &[f64]) -> f64 {
     }
 }
 
+/// Settings to tune the balanced k-means algorithm
+///
+/// ## Attributes
+///   - `num_partitions`: the exact number of partitions the algorithm is guarenteed to yield.
+///   - `imbalance_tol`: the relative imbalance tolerance of the generated partitions, in `%` of the target weight of each partition.
+///   - `delta_threshold`: the distance threshold for the cluster movements under which the algorithm stops.
+///   - `max_iter`: the maximum number of times each cluster will move before stopping the algorithm
+///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
+///      influence can grow between each cluster movement.
+///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
+///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
 pub struct BalancedKmeansSettings {
     pub num_partitions: usize,
@@ -153,7 +170,7 @@ pub struct BalancedKmeansSettings {
     pub delta_threshold: f64,
     pub max_iter: usize,
     pub max_balance_iter: usize,
-    pub errode: bool,
+    pub erode: bool,
     pub mbr_early_break: bool,
 }
 
@@ -164,9 +181,9 @@ impl Default for BalancedKmeansSettings {
             imbalance_tol: 5.,
             delta_threshold: 0.01,
             max_iter: 50,
-            max_balance_iter: 1,
-            errode: false,
-            mbr_early_break: false,
+            max_balance_iter: 1, // for now, `max_balance_iter > 1` yields poor convergence time
+            erode: false,        // for now, `erode` yields` enabled yields wrong results
+            mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
 }
@@ -184,27 +201,42 @@ pub fn balanced_k_means(
     let qt = z_curve::ZCurveQuadtree::new(points, weights);
     let (points, weights) = qt.reorder();
 
+    // Compute how many points will be initially assigned to each cluster
     let points_per_center = points.len() / settings.num_partitions;
 
     // select num_partitions initial centers from the ordered points
     let centers: Vec<_> = points
         .iter()
         .cloned()
+        // for each partition yielded by the Z-curve reordering
+        // we select the median point to be the initial cluster center
+        // because it is in most cases in the middle of the partition
         .skip(points_per_center / 2)
         .step_by(points_per_center)
         .collect();
 
+    // generate unique ids for each initial partition that will live throughout
+    // the algorithm (no new id is generated afterwards)
     let center_ids: Vec<_> = centers.iter().map(|_| ClusterId::new()).collect();
+
+    // generate initial assignments, i.e.
+    // map [id0, id1, ..., idn]
+    //    to [[id0, ..., id0], ..., [idn, ..., idn]]
+    //         partition_1             partition_n
     let assignments: Vec<_> = center_ids
         .iter()
         .cloned()
-        .flat_map(|id| ::std::iter::repeat(id).take(points_per_center))
+        .flat_map(|id| std::iter::repeat(id).take(points_per_center))
         .take(points.len())
         .collect();
 
+    // Generate initial influences (to 1)
     let influences: Vec<_> = centers.iter().map(|_| 1.).collect();
+
+    // Generate initial lower and upper bounds. These two variables represent bounds on
+    // the effective distance between an point and the cluster it is assigned to.
     let lbs: Vec<_> = points.iter().map(|_| 0.).collect();
-    let ubs: Vec<_> = points.iter().map(|_| ::std::f64::MAX).collect();
+    let ubs: Vec<_> = points.iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
         points,
@@ -220,6 +252,11 @@ pub fn balanced_k_means(
     )
 }
 
+// This is the main loop of the algorithm. It handles:
+//  - calling the load balance routine
+//  - moving each cluster after load balance
+//  - checking delta threshold
+//  - relaxing lower and upper bounds
 fn balanced_k_means_iter(
     points: Vec<Point2D>,
     weights: Vec<f64>,
@@ -244,8 +281,12 @@ fn balanced_k_means_iter(
         settings,
     );
 
+    // Compute new centers from the load balance routine assignments output
     let new_centers = center_ids
         .iter()
+        // map each center id to the new center point
+        // we cannot just compute the centers fron the assignments
+        // because the new centers have to be in the same order as the old ones
         .map(|center_id| {
             let points = assignments
                 .iter()
@@ -257,6 +298,7 @@ fn balanced_k_means_iter(
             geometry::center(&points)
         }).collect::<Vec<_>>();
 
+    // Compute the distances moved by each center from their previous location
     let distances_moved: Vec<_> = centers
         .into_iter()
         .zip(new_centers.clone())
@@ -268,6 +310,8 @@ fn balanced_k_means_iter(
         .max_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(Ordering::Equal))
         .unwrap();
 
+    // if delta_max is below a given threshold, it means that the clusters no longer move a lot at each iteration
+    // and the algorithm has become somewhat stable.
     if *delta_max < settings.delta_threshold || current_iter == 0 {
         points.into_iter().zip(assignments).collect()
     } else {
@@ -287,6 +331,12 @@ fn balanced_k_means_iter(
     }
 }
 
+// This is the main load balance routine. It handles:
+//   - reordering the clusters according to their distance to a bounding box of all the points
+//   - assigning each point to the closest cluster according to the effective distance
+//   - checking partitions imbalance
+//   - increasing of diminishing clusters influence based on their imbalance
+//   - relaxing upper and lower bounds
 fn assign_and_balance(
     mut assignments: Vec<ClusterId>,
     mut influences: Vec<f64>,
@@ -303,6 +353,8 @@ fn assign_and_balance(
     Vec<f64>,       // ubs
     Vec<f64>,       // lbs
 ) {
+    // compute the distances from each cluster center to the minimal
+    // bounding rectangle of the set of points
     let mbr = Mbr2D::from_points(points.iter());
     let distances_to_mbr = centers
         .iter()
@@ -320,9 +372,12 @@ fn assign_and_balance(
 
     let (centers, center_ids): (Vec<_>, Vec<_>) = zipped.into_iter().unzip();
 
+    // Compute the weight that each cluster should be after the end of the algorithm
     let target_weight = weights.iter().sum::<f64>() / (centers.len() as f64);
 
-    for _ in 0..1 {
+    for _ in 0..settings.max_balance_iter {
+        // Compute new assignments point to cluster assignments
+        // based on the current clusters and influences state
         points
             .iter()
             .zip(assignments.iter_mut())
@@ -360,6 +415,7 @@ fn assign_and_balance(
                     .sum::<f64>()
             }).collect::<Vec<_>>();
 
+        // return if maximum imbalance is small enough
         if imbalance(&new_weights) < settings.imbalance_tol {
             return (assignments, influences, lbs, ubs);
         }
@@ -373,6 +429,8 @@ fn assign_and_balance(
             .zip(new_weights)
             .for_each(|(influence, weight)| {
                 let ratio = target_weight / weight;
+                // We limit the influence variation to 5% each time
+                // to preven the algorithm from becoming unstable
                 let max_diff = 0.05 * *influence;
                 let new_influence = *influence / ratio.sqrt();
                 if (*influence - new_influence).abs() < max_diff {
@@ -384,7 +442,7 @@ fn assign_and_balance(
                 }
             });
 
-        // Compute new centers
+        // Compute new centers from new assigments
         let new_centers = center_ids
             .iter()
             .map(|center_id| {
@@ -406,7 +464,7 @@ fn assign_and_balance(
 
         relax_bounds(&mut lbs, &mut ubs, &distances_to_old_centers, &influences);
 
-        if settings.errode {
+        if settings.erode {
             let average_diameters = assignments
                 .iter()
                 .zip(points.iter().cloned())
@@ -432,6 +490,9 @@ fn assign_and_balance(
 
 // relax lower and upper bounds according to influence
 // modification.
+//
+// new_lb(p) = lb(p) + max_{c'} delta(c') / influence(c')
+// new_ub(p) = ub(p) - delta(c) / influence(c)
 fn relax_bounds(lbs: &mut [f64], ubs: &mut [f64], distances_moved: &[f64], influences: &[f64]) {
     let max_distance_influence_ratio = distances_moved
         .iter()
@@ -466,8 +527,8 @@ fn best_values(
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
 ) {
-    let mut best_value = ::std::f64::MAX;
-    let mut snd_best_value = ::std::f64::MAX;
+    let mut best_value = std::f64::MAX;
+    let mut snd_best_value = std::f64::MAX;
     let mut assignment = None;
 
     for (((center, id), distance_to_mbr), influence) in centers
@@ -493,10 +554,13 @@ fn best_values(
     (snd_best_value, best_value, assignment)
 }
 
+// erosion(c) = 2 / (1 + exp(min(-delta(c)/beta(C), 0))) - 1
+// where beta(C) is the average cluster diameter
 fn erosion(distance_moved: f64, average_cluster_diameter: f64) -> f64 {
     2. / (1. + (-distance_moved / average_cluster_diameter).min(0.).exp()) - 1.
 }
 
+// computes the maximum distance between two points in the array
 fn max_distance(points: &[Point2D]) -> f64 {
     iproduct!(points, points)
         .map(|(p1, p2)| (p1 - p2).norm())
