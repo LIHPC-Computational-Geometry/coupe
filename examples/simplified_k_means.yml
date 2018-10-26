@@ -1,0 +1,27 @@
+name: "simplified_k_means"
+about: "An example using the k-means algorithm"
+args:
+ - n_partitions:
+    long: n_partitions
+    takes_value: true
+    default_value: "7"
+    help: Sets the number of wanted partitions
+ - n_points:
+    long: n_points
+    takes_value: true
+    default_value: "500"
+    help: Sets the number of points randomly generated
+ - n_max_iter:
+    long: n_max_iter
+    takes_value: true
+    default_value: "1000"
+    help: Sets the maximum number of iterations of the algorithm
+ - imbalance_tol:
+    long: imbalance_tol
+    takes_value: true
+    required: true
+    help: Sets the acceptable weight imbalance between the partitions
+ - quiet:
+    long: quiet
+    short: q
+    help: Disables the GUI output

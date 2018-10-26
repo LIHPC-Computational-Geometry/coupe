@@ -1,4 +1,4 @@
-name: "k_means"
+name: "belanced_k_means"
 about: "An example using the k-means algorithm"
 args:
  - n_partitions:
@@ -16,11 +16,24 @@ args:
     takes_value: true
     default_value: "1000"
     help: Sets the maximum number of iterations of the algorithm
+ - n_max_balance_iter:
+    long: n_max_balance_iter
+    takes_value: true
+    default_value: "1"
+    help: Sets the maximum number of iterations of the load balancing loop
  - imbalance_tol:
     long: imbalance_tol
     takes_value: true
     required: true
     help: Sets the acceptable weight imbalance between the partitions
+ - delta_max:
+    long: delta_max
+    takes_value: true
+    default_value: "0.01"
+    help: Sets the distance threshold for the cluster movements under which the algorithm stops 
+ - errode:
+    long: errode
+    help: Enables cluster influence errosion
  - quiet:
     long: quiet
     short: q
