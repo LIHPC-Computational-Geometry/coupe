@@ -272,6 +272,39 @@ pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
         .clone_owned()
 }
 
+pub fn inertia_matrix_nd(weights: &[f64], points: &[Point]) -> DMatrix<f64> {
+    let dim = points[0].len();
+    let total_weight = weights.par_iter().sum::<f64>();
+
+    // TODO: refactor this ugly fold -> reduce into a single reduce
+    let centroid: Point = weights
+        .par_iter()
+        .zip(points)
+        .fold(
+            || Point::from_row_slice(dim, &vec![0.; dim]),
+            |acc, (w, p)| acc + p.map(|e| e * w),
+        ).reduce(|| Point::from_row_slice(dim, &vec![0.; dim]), |a, b| a + b)
+        / total_weight;
+
+    let ret: DMatrix<f64> = weights
+        .par_iter()
+        .zip(points)
+        .fold(
+            || DMatrix::zeros(dim, dim),
+            |acc, (w, p)| acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w),
+        ).reduce(|| DMatrix::zeros(dim, dim), |a, b| a + b);
+
+    ret
+}
+
+pub fn intertia_vector_nd(mat: DMatrix<f64>) -> DVector<f64> {
+    // by construction the inertia matrix is symmetric
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
+}
+
 // Rotates each point of an angle (in radians) counter clockwise
 pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
     // A rotation of angle theta is defined in 2D by a 2x2 matrix

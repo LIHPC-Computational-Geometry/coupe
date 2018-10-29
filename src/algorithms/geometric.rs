@@ -298,6 +298,24 @@ pub fn rib(
     rcb(ids, weights, coordinates, n_iter)
 }
 
+pub fn rib_nd(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    points: Vec<Point>,
+    n_iter: usize,
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+    let j = inertia_matrix_nd(&weights, &points);
+    let inertia = intertia_vector_nd(j);
+
+    let base_shift = householder_reflection(&inertia);
+    let points = points
+        .into_par_iter()
+        .map(|p| &base_shift * p)
+        .collect::<Vec<_>>();
+
+    rcb_nd(ids, weights, points, n_iter)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
