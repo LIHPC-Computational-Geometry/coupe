@@ -128,13 +128,16 @@ pub fn axis_sort(
     (ids, weights, coordinates)
 }
 
-pub fn hyperplane_sort(
+/// Sort `ids`, `weights`, `points` simultaneously
+/// by increasing x' where x' is the first coordinate
+/// of an orthonormal basis (direction, e2, ..., ek) of R^k
+pub fn axis_sort_nd(
     ids: Vec<usize>,
     weights: Vec<f64>,
     points: Vec<Point>,
-    normal: &DVector<f64>,
+    direction: &DVector<f64>,
 ) -> (Vec<usize>, Vec<f64>, Vec<Point>) {
-    let base_shift = householder_reflection(&normal);
+    let base_shift = householder_reflection(&direction);
     let new_points = points.iter().map(|p| &base_shift * p).collect::<Vec<_>>();
 
     let mut zipped = ids
@@ -158,6 +161,18 @@ pub fn hyperplane_sort(
     (ids, weights, points)
 }
 
+/// # N-Dimensional Recursive Coordinate Bisection algorithm
+/// Partitions a mesh based on the nodes coordinates and coresponding weights.
+/// ## Inputs
+/// - `ids`: global identifiers of the objects to partition
+/// - `weights`: weights corsponding to a cost relative to the objects
+/// - `coordinates`: the ND coordinates of the objects to partition
+///
+/// ## Output
+/// A Vec of couples `(usize, ProcessUniqueId)`
+///
+/// the first component of each couple is the id of an object and
+/// the second component is the id of the partition to which that object was assigned
 pub fn rcb_nd(
     ids: Vec<usize>,
     weights: Vec<f64>,
@@ -185,7 +200,7 @@ fn rcb_nd_recurse(
         )
     } else {
         let normal = canonical_vector(dim, current_coord as usize);
-        let (mut ids, mut weights, mut points) = hyperplane_sort(ids, weights, points, &normal);
+        let (mut ids, mut weights, mut points) = axis_sort_nd(ids, weights, points, &normal);
         let split_pos = half_weight_pos(&weights);
 
         let left_ids = ids.drain(0..split_pos).collect();
@@ -364,7 +379,7 @@ mod tests {
             Point::from_row_slice(3, &[-2., -2., 2.]),
         ];
 
-        let (ids, _, _points) = hyperplane_sort(
+        let (ids, _, _points) = axis_sort_nd(
             ids,
             weights,
             points,
