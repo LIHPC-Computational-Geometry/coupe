@@ -491,8 +491,8 @@ fn assign_and_balance(
 // relax lower and upper bounds according to influence
 // modification.
 //
-// new_lb(p) = lb(p) + max_{c'} delta(c') / influence(c')
-// new_ub(p) = ub(p) - delta(c) / influence(c)
+// new_lb(p) = lb(p) - max_{c'} delta(c') / influence(c')
+// new_ub(p) = ub(p) + delta(c) / influence(c)
 fn relax_bounds(lbs: &mut [f64], ubs: &mut [f64], distances_moved: &[f64], influences: &[f64]) {
     let max_distance_influence_ratio = distances_moved
         .iter()
@@ -505,11 +505,11 @@ fn relax_bounds(lbs: &mut [f64], ubs: &mut [f64], distances_moved: &[f64], influ
         .zip(distances_moved)
         .zip(influences.iter())
         .for_each(|((ub, distance), influence)| {
-            *ub -= distance * influence;
+            *ub += distance * influence;
         });
 
     lbs.iter_mut().for_each(|lb| {
-        *lb += max_distance_influence_ratio;
+        *lb -= max_distance_influence_ratio;
     });
 }
 
