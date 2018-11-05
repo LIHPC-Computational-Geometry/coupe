@@ -239,17 +239,38 @@ pub fn balanced_k_means(
     let ubs: Vec<_> = points.iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
-        points,
-        weights,
-        centers,
-        &center_ids,
-        assignments,
-        influences,
-        lbs,
-        ubs,
+        Inputs { points, weights },
+        Clusters {
+            centers,
+            center_ids: &center_ids,
+        },
+        AlgorithmState {
+            assignments,
+            influences,
+            lbs,
+            ubs,
+        },
         &settings,
         settings.max_iter,
     )
+}
+
+struct Inputs {
+    points: Vec<Point2D>,
+    weights: Vec<f64>,
+}
+
+#[derive(Clone, Copy)]
+struct Clusters<T, U> {
+    centers: T,
+    center_ids: U,
+}
+
+struct AlgorithmState {
+    assignments: Vec<ClusterId>,
+    influences: Vec<f64>,
+    lbs: Vec<f64>,
+    ubs: Vec<f64>,
 }
 
 // This is the main loop of the algorithm. It handles:
@@ -258,24 +279,35 @@ pub fn balanced_k_means(
 //  - checking delta threshold
 //  - relaxing lower and upper bounds
 fn balanced_k_means_iter(
-    points: Vec<Point2D>,
-    weights: Vec<f64>,
-    centers: Vec<Point2D>,
-    center_ids: &[ClusterId],
-    assignments: Vec<ClusterId>,
-    influences: Vec<f64>,
-    lbs: Vec<f64>,
-    ubs: Vec<f64>,
+    inputs: Inputs,
+    clusters: Clusters<Vec<Point2D>, &[ClusterId]>,
+    state: AlgorithmState,
     settings: &BalancedKmeansSettings,
     current_iter: usize,
 ) -> Vec<(Point2D, ClusterId)> {
-    let (assignments, influences, mut ubs, mut lbs) = assign_and_balance(
+    let Inputs { points, weights } = inputs;
+    let Clusters {
+        centers,
+        center_ids,
+    } = clusters;
+    let AlgorithmState {
         assignments,
         influences,
         lbs,
         ubs,
-        &centers,
-        &center_ids,
+    } = state;
+
+    let (assignments, influences, mut ubs, mut lbs) = assign_and_balance(
+        AlgorithmState {
+            assignments,
+            influences,
+            lbs,
+            ubs,
+        },
+        Clusters {
+            centers: &centers,
+            center_ids: &center_ids,
+        },
         &points,
         &weights,
         settings,
@@ -317,14 +349,17 @@ fn balanced_k_means_iter(
     } else {
         relax_bounds(&mut lbs, &mut ubs, &distances_moved, &influences);
         balanced_k_means_iter(
-            points,
-            weights,
-            new_centers,
-            center_ids,
-            assignments,
-            influences,
-            lbs,
-            ubs,
+            Inputs { points, weights },
+            Clusters {
+                centers: new_centers,
+                center_ids,
+            },
+            AlgorithmState {
+                assignments,
+                influences,
+                lbs,
+                ubs,
+            },
             settings,
             current_iter - 1,
         )
@@ -338,12 +373,8 @@ fn balanced_k_means_iter(
 //   - increasing of diminishing clusters influence based on their imbalance
 //   - relaxing upper and lower bounds
 fn assign_and_balance(
-    mut assignments: Vec<ClusterId>,
-    mut influences: Vec<f64>,
-    mut lbs: Vec<f64>,
-    mut ubs: Vec<f64>,
-    centers: &[Point2D],
-    center_ids: &[ClusterId],
+    state: AlgorithmState,
+    clusters: Clusters<&[Point2D], &[ClusterId]>,
     points: &[Point2D],
     weights: &[f64],
     settings: &BalancedKmeansSettings,
@@ -353,6 +384,16 @@ fn assign_and_balance(
     Vec<f64>,       // ubs
     Vec<f64>,       // lbs
 ) {
+    let AlgorithmState {
+        mut assignments,
+        mut influences,
+        mut lbs,
+        mut ubs,
+    } = state;
+    let Clusters {
+        centers,
+        center_ids,
+    } = clusters;
     // compute the distances from each cluster center to the minimal
     // bounding rectangle of the set of points
     let mbr = Mbr2D::from_points(points.iter());
