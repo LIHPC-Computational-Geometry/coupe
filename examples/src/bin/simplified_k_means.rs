@@ -8,7 +8,7 @@ use coupe::algorithms::k_means::simplified_k_means;
 use coupe::geometry::Point2D;
 
 fn main() {
-    let yaml = load_yaml!("../../k_means.yml");
+    let yaml = load_yaml!("../../simplified_k_means.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
     let n_max_iter: isize = matches

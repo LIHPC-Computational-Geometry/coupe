@@ -83,17 +83,33 @@ impl Aabb2D {
 
     /// Computes the distance between a point and the current Aabb.
     pub fn distance_to_point(&self, point: &Point2D) -> f64 {
-        let clamped_x = match point.x {
-            x if x > self.p_max.x => self.p_max.x,
-            x if x < self.p_min.x => self.p_min.x,
-            x => x,
-        };
-        let clamped_y = match point.y {
-            y if y > self.p_max.y => self.p_max.y,
-            y if y < self.p_min.y => self.p_min.y,
-            y => y,
-        };
-        Vector2::new(clamped_x - point.x, clamped_y - point.y).norm()
+        if !self.contains(point) {
+            let clamped_x = match point.x {
+                x if x > self.p_max.x => self.p_max.x,
+                x if x < self.p_min.x => self.p_min.x,
+                x => x,
+            };
+            let clamped_y = match point.y {
+                y if y > self.p_max.y => self.p_max.y,
+                y if y < self.p_min.y => self.p_min.y,
+                y => y,
+            };
+            Vector2::new(clamped_x - point.x, clamped_y - point.y).norm()
+        } else {
+            let center = self.center();
+            let x_dist = if point.x > center.x {
+                (self.p_max.x - point.x).abs()
+            } else {
+                (self.p_min.x - point.x).abs()
+            };
+            let y_dist = if point.y > center.y {
+                (self.p_max.y - point.y).abs()
+            } else {
+                (self.p_min.y - point.y).abs()
+            };
+
+            x_dist.max(y_dist)
+        }
     }
 
     /// Computes the center of the Aabb
@@ -453,7 +469,7 @@ mod tests {
             .map(|p| mbr.distance_to_point(p))
             .collect();
 
-        relative_eq!(distances[0], 0.);
+        relative_eq!(distances[0], 0.5);
         relative_eq!(distances[1], 2_f64.sqrt() / 2.);
         relative_eq!(distances[2], 1.);
     }

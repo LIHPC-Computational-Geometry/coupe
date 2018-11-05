@@ -1,4 +1,4 @@
-name: "k_means"
+name: "simplified_k_means"
 about: "An example using the k-means algorithm"
 args:
  - n_partitions:
