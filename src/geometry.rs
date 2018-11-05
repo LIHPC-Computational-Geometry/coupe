@@ -1,11 +1,12 @@
 //! A few useful geometric types
 
 use itertools::Itertools;
-use nalgebra::{Matrix2, SymmetricEigen, Vector2, Vector3};
+use nalgebra::{DMatrix, DVector, Matrix2, SymmetricEigen, Vector2, Vector3};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
 pub type Point3D = Vector3<f64>;
+pub type Point = DVector<f64>;
 
 /// An Axis Aligned Bounding Box
 #[derive(Debug, Clone, Copy)]
@@ -271,6 +272,39 @@ pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
         .clone_owned()
 }
 
+pub fn inertia_matrix_nd(weights: &[f64], points: &[Point]) -> DMatrix<f64> {
+    let dim = points[0].len();
+    let total_weight = weights.par_iter().sum::<f64>();
+
+    // TODO: refactor this ugly fold -> reduce into a single reduce
+    let centroid: Point = weights
+        .par_iter()
+        .zip(points)
+        .fold(
+            || Point::from_row_slice(dim, &vec![0.; dim]),
+            |acc, (w, p)| acc + p.map(|e| e * w),
+        ).reduce(|| Point::from_row_slice(dim, &vec![0.; dim]), |a, b| a + b)
+        / total_weight;
+
+    let ret: DMatrix<f64> = weights
+        .par_iter()
+        .zip(points)
+        .fold(
+            || DMatrix::zeros(dim, dim),
+            |acc, (w, p)| acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w),
+        ).reduce(|| DMatrix::zeros(dim, dim), |a, b| a + b);
+
+    ret
+}
+
+pub fn intertia_vector_nd(mat: DMatrix<f64>) -> DVector<f64> {
+    // by construction the inertia matrix is symmetric
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
+}
+
 // Rotates each point of an angle (in radians) counter clockwise
 pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
     // A rotation of angle theta is defined in 2D by a 2x2 matrix
@@ -287,6 +321,27 @@ pub fn center(points: &[Point2D]) -> Point2D {
     points.iter().fold(Point2D::new(0., 0.), |acc, val| {
         Point2D::new(acc.x + val.x, acc.y + val.y)
     }) / points.len() as f64
+}
+
+// The Householder reflexion algorithm.
+// From a given vector v of dimension N, the algorithm will yield a square matrix Q of size N such that:
+//  - The first colunm of Q is parallel to v.
+//  - The columns of Q are an orthonormal basis of R^N.
+// Complexity: O(N^2)
+// Based from: https://math.stackexchange.com/questions/710103/algorithm-to-find-an-orthogonal-basis-orthogonal-to-a-given-vector
+pub fn householder_reflection(element: &DVector<f64>) -> DMatrix<f64> {
+    let dim = element.len();
+    let e0 = canonical_vector(dim, 0);
+    let sign = if element[0] > 0. { -1. } else { 1. };
+    let w = element + sign * e0 * element.norm();
+    let id = DMatrix::<f64>::identity(dim, dim);
+    id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
+}
+
+pub(crate) fn canonical_vector(dim: usize, nth: usize) -> DVector<f64> {
+    let mut ret = DVector::<f64>::from_element(dim, 0.);
+    ret[nth] = 1.0;
+    ret
 }
 
 #[cfg(test)]
@@ -462,5 +517,30 @@ mod tests {
         assert_eq!(q2, Some(BottomRight));
         assert_eq!(q3, Some(TopLeft));
         assert_eq!(q4, Some(TopRight));
+    }
+
+    #[test]
+    fn test_householder_reflexion() {
+        let el = DVector::<f64>::new_random(11);
+        let mat = householder_reflection(&el);
+
+        // check that columns are of norm 1
+        for col in 0..10 {
+            assert_ulps_eq!(mat.column(col).norm(), 1.);
+        }
+
+        // check that columns are orthogonal
+        for col1 in 0..10 {
+            for col2 in 0..10 {
+                if col1 != col2 {
+                    relative_eq!(mat.column(col1).dot(&mat.column(col2)), 0.);
+                }
+            }
+        }
+
+        // check that first column is parallel to el
+        let unit_el = &el / el.norm();
+        let fst_col = mat.column(0).clone_owned();
+        relative_eq!(&unit_el * unit_el.dot(&fst_col), fst_col);
     }
 }

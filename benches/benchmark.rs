@@ -7,9 +7,9 @@ extern crate rayon;
 
 mod generator;
 
-use coupe::algorithms::geometric::{axis_sort, rcb};
+use coupe::algorithms::geometric::{axis_sort, rcb, rcb_nd};
 use coupe::algorithms::k_means::simplified_k_means;
-use coupe::geometry::Point2D;
+use coupe::geometry::{Point, Point2D};
 use criterion::{Benchmark, Criterion, Throughput};
 use rayon::prelude::*;
 
@@ -137,6 +137,31 @@ fn bench_rcb_random(c: &mut Criterion) {
     );
 }
 
+fn bench_rcb_nd_2d_random(c: &mut Criterion) {
+    c.bench(
+        "rcb_nd_2d_random",
+        Benchmark::new("rcb_2d_nd_random", move |b| {
+            let sample_points = generator::uniform_rectangle(
+                Point2D::new(0., 0.),
+                Point2D::new(30., 10.),
+                SAMPLE_SIZE,
+            ).into_iter()
+            .map(|p| Point::from_row_slice(2, &[p.x, p.y]))
+            .collect::<Vec<_>>();
+            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
+            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
+            b.iter(|| {
+                rcb_nd(
+                    ids.clone(),
+                    weights.clone(),
+                    sample_points.clone(),
+                    NUM_ITER,
+                )
+            })
+        }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+    );
+}
+
 fn bench_simplified_k_means(c: &mut Criterion) {
     c.bench(
         "simplified_k_means",
@@ -170,6 +195,7 @@ criterion_group!(
     bench_raw_pdqsort_sorted,
     bench_parallel_raw_pdqsort_sorted,
     bench_rcb_random,
+    bench_rcb_nd_2d_random,
     bench_simplified_k_means
 );
 criterion_main!(benches);

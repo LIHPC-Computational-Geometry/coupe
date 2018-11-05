@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 
-use nalgebra::Vector2;
+use nalgebra::{DVector, Vector2};
 
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
@@ -128,6 +128,128 @@ pub fn axis_sort(
     (ids, weights, coordinates)
 }
 
+/// Sort `ids`, `weights`, `points` simultaneously
+/// by increasing x' where x' is the first coordinate
+/// of an orthonormal basis (direction, e2, ..., ek) of R^k
+pub fn axis_sort_nd(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    points: Vec<Point>,
+    direction: &DVector<f64>,
+) -> (Vec<usize>, Vec<f64>, Vec<Point>) {
+    let base_shift = householder_reflection(&direction);
+    let new_points = points.iter().map(|p| &base_shift * p).collect::<Vec<_>>();
+
+    let mut zipped = ids
+        .into_par_iter()
+        .zip(weights)
+        .zip(points)
+        .enumerate()
+        .collect::<Vec<_>>();
+
+    zipped
+        .as_mut_slice()
+        .par_sort_unstable_by(|(i, _), (j, _)| {
+            new_points[*i][0]
+                .partial_cmp(&new_points[*j][0])
+                .unwrap_or(Ordering::Equal)
+        });
+
+    let (_is, still_zipped): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
+    let (still_zipped, points): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
+    let (ids, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
+    (ids, weights, points)
+}
+
+/// # N-Dimensional Recursive Coordinate Bisection algorithm
+/// Partitions a mesh based on the nodes coordinates and coresponding weights.
+/// ## Inputs
+/// - `ids`: global identifiers of the objects to partition
+/// - `weights`: weights corsponding to a cost relative to the objects
+/// - `coordinates`: the ND coordinates of the objects to partition
+///
+/// ## Output
+/// A Vec of couples `(usize, ProcessUniqueId)`
+///
+/// the first component of each couple is the id of an object and
+/// the second component is the id of the partition to which that object was assigned
+pub fn rcb_nd(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    points: Vec<Point>,
+    n_iter: usize,
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+    let dim = points[0].len();
+    rcb_nd_recurse(ids, weights, points, n_iter, dim, 0)
+}
+
+fn rcb_nd_recurse(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    points: Vec<Point>,
+    n_iter: usize,
+    dim: usize,
+    current_coord: u32,
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+    if n_iter == 0 {
+        let part_id = ProcessUniqueId::new();
+        (
+            ids.into_par_iter().map(|id| (id, part_id)).collect(),
+            weights,
+            points,
+        )
+    } else {
+        let normal = canonical_vector(dim, current_coord as usize);
+        let (mut ids, mut weights, mut points) = axis_sort_nd(ids, weights, points, &normal);
+        let split_pos = half_weight_pos(&weights);
+
+        let left_ids = ids.drain(0..split_pos).collect();
+        let left_weights = weights.drain(0..split_pos).collect();
+        let left_points = points.drain(0..split_pos).collect();
+
+        let (left_partition, right_partition) = rayon::join(
+            || {
+                rcb_nd_recurse(
+                    left_ids,
+                    left_weights,
+                    left_points,
+                    n_iter - 1,
+                    dim,
+                    (current_coord + 1) % dim as u32,
+                )
+            },
+            || {
+                rcb_nd_recurse(
+                    ids,
+                    weights,
+                    points,
+                    n_iter - 1,
+                    dim,
+                    (current_coord + 1) % dim as u32,
+                )
+            },
+        );
+
+        (
+            left_partition
+                .0
+                .into_par_iter()
+                .chain(right_partition.0)
+                .collect(),
+            left_partition
+                .1
+                .into_par_iter()
+                .chain(right_partition.1)
+                .collect(),
+            left_partition
+                .2
+                .into_par_iter()
+                .chain(right_partition.2)
+                .collect(),
+        )
+    }
+}
+
 // Computes a slice index which splits
 // the slice in two parts of equal weights
 // i.e. sorted_weights[..idx].sum() == sorted_weights[idx..].sum
@@ -191,6 +313,24 @@ pub fn rib(
     rcb(ids, weights, coordinates, n_iter)
 }
 
+pub fn rib_nd(
+    ids: Vec<usize>,
+    weights: Vec<f64>,
+    points: Vec<Point>,
+    n_iter: usize,
+) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+    let j = inertia_matrix_nd(&weights, &points);
+    let inertia = intertia_vector_nd(j);
+
+    let base_shift = householder_reflection(&inertia);
+    let points = points
+        .into_par_iter()
+        .map(|p| &base_shift * p)
+        .collect::<Vec<_>>();
+
+    rcb_nd(ids, weights, points, n_iter)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +367,25 @@ mod tests {
         let (ids, _, _) = axis_sort(ids, weights, points, false);
 
         assert_eq!(ids, vec![3, 6, 5, 1, 0, 2, 4]);
+    }
+
+    #[test]
+    fn test_hyperplane_sort() {
+        let ids: Vec<usize> = (0..3).collect();
+        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
+        let points = vec![
+            Point::from_row_slice(3, &[0., 0., 0.]),
+            Point::from_row_slice(3, &[-1., -1., 1.]),
+            Point::from_row_slice(3, &[-2., -2., 2.]),
+        ];
+
+        let (ids, _, _points) = axis_sort_nd(
+            ids,
+            weights,
+            points,
+            &Point::from_row_slice(3, &[1., 1., -1.]),
+        );
+
+        assert_eq!(ids, vec![2, 1, 0]);
     }
 }
