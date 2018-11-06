@@ -7,12 +7,31 @@ authors = [
     "Sébastien Morais"
 ]
 publish = false
+autobins = false
+
+[[bin]]
+name = "balanced_k_means"
+
+[[bin]]
+name = "rcb"
+
+[[bin]]
+name = "rib"
+
+[[bin]]
+name = "simplified_k_means"
+
+[[bin]]
+name = "xyz_mesh"
 
 [dependencies]
-coupe = { path = "../" }
+coupe = { version = "0.1.0", path = "../" }
 clap = { version = "2.32.0", features = ["yaml"]}
+failure = "0.1.3"
 gnuplot = "0.0.26"
 itertools = "0.7.8"
+rayon = "1.0.3"
 rand = "0.5.5"
 snowflake = "1.2"
 
+mesh_io = { path = "../../mesh_io" }
