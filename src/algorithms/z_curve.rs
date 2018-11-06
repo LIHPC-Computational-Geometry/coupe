@@ -66,10 +66,10 @@ impl ZCurveQuadtree {
     }
 
     fn compute_hashes(&self) -> Vec<(Point2D, f64, u32)> {
-        self.compute_hashes_impl(0)
+        self.compute_hashes_recurse(0)
     }
 
-    fn compute_hashes_impl(&self, current_hash: u32) -> Vec<(Point2D, f64, u32)> {
+    fn compute_hashes_recurse(&self, current_hash: u32) -> Vec<(Point2D, f64, u32)> {
         use self::Quadrant::*;
 
         // Construct a mapping from each quadrant of the current mbr
@@ -118,7 +118,7 @@ impl ZCurveQuadtree {
                             .map(|(_, _, weight)| *weight)
                             .collect::<Vec<_>>(),
                         mbr,
-                    ).compute_hashes_impl(current_hash << 2)
+                    ).compute_hashes_recurse(current_hash << 2)
                 } else {
                     bottom_lefts
                         .iter()
@@ -139,7 +139,7 @@ impl ZCurveQuadtree {
                             .map(|(_, _, weight)| *weight)
                             .collect::<Vec<_>>(),
                         mbr,
-                    ).compute_hashes_impl(current_hash << (2 + 0b01))
+                    ).compute_hashes_recurse(current_hash << (2 + 0b01))
                 } else {
                     bottom_rights
                         .iter()
@@ -163,7 +163,7 @@ impl ZCurveQuadtree {
                             .map(|(_, _, weight)| *weight)
                             .collect::<Vec<_>>(),
                         mbr,
-                    ).compute_hashes_impl(current_hash << 2)
+                    ).compute_hashes_recurse(current_hash << 2)
                 } else {
                     top_lefts
                         .iter()
@@ -184,7 +184,7 @@ impl ZCurveQuadtree {
                             .map(|(_, _, weight)| *weight)
                             .collect::<Vec<_>>(),
                         mbr,
-                    ).compute_hashes_impl(current_hash << (2 + 0b01))
+                    ).compute_hashes_recurse(current_hash << (2 + 0b01))
                 } else {
                     top_rights
                         .iter()

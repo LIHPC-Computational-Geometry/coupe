@@ -1,18 +1,18 @@
 name: "simplified_k_means"
 about: "An example using the k-means algorithm"
 args:
- - n_partitions:
-    long: n_partitions
+ - num_partitions:
+    long: num_partitions
     takes_value: true
     default_value: "7"
     help: Sets the number of wanted partitions
- - n_points:
-    long: n_points
+ - num_points:
+    long: num_points
     takes_value: true
     default_value: "500"
     help: Sets the number of points randomly generated
- - n_max_iter:
-    long: n_max_iter
+ - max_iter:
+    long: max_iter
     takes_value: true
     default_value: "1000"
     help: Sets the maximum number of iterations of the algorithm
