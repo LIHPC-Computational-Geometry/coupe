@@ -1,8 +1,8 @@
-extern crate coupe;
-#[macro_use]
 extern crate clap;
+extern crate coupe;
 extern crate examples;
 
+use clap::load_yaml;
 use clap::App;
 use coupe::algorithms::k_means::simplified_k_means;
 use coupe::geometry::Point2D;
@@ -11,23 +11,23 @@ fn main() {
     let yaml = load_yaml!("../../simplified_k_means.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let n_max_iter: isize = matches
-        .value_of("n_max_iter")
+    let max_iter: isize = matches
+        .value_of("max_iter")
         .unwrap_or_default()
         .parse()
-        .expect("wrong value for n_max_iter");
+        .expect("wrong value for max_iter");
 
-    let n_points: usize = matches
-        .value_of("n_points")
+    let num_points: usize = matches
+        .value_of("num_points")
         .unwrap_or_default()
         .parse()
-        .expect("Wrong value for n_points");
+        .expect("Wrong value for num_points");
 
-    let n_partitions: usize = matches
-        .value_of("n_partitions")
+    let num_partitions: usize = matches
+        .value_of("num_partitions")
         .unwrap_or_default()
         .parse()
-        .expect("Wrong value for n_partitions");
+        .expect("Wrong value for num_partitions");
 
     let imbalance_tol: f64 = matches
         .value_of("imbalance_tol")
@@ -35,7 +35,7 @@ fn main() {
         .parse()
         .expect("Wrong value for imbalance_tol");
 
-    let points = examples::generator::cicrcle_uniform(n_points, Point2D::new(0., 0.), 1.)
+    let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
         .into_iter()
         .map(|p| p * p.y)
         .collect::<Vec<_>>();
@@ -43,7 +43,7 @@ fn main() {
     let weights: Vec<f64> = points.iter().map(|_| 1.).collect();
 
     let (partition, _weights) =
-        simplified_k_means(points, weights, n_partitions, imbalance_tol, n_max_iter);
+        simplified_k_means(points, weights, num_partitions, imbalance_tol, max_iter);
 
     if !matches.is_present("quiet") {
         examples::plot_partition(partition)

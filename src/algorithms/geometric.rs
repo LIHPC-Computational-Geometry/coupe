@@ -24,10 +24,10 @@ pub fn rcb(
     coordinates: Vec<Point2D>,
     n_iter: usize,
 ) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
-    rcb_impl(ids, weights, coordinates, n_iter, true)
+    rcb_recurse(ids, weights, coordinates, n_iter, true)
 }
 
-fn rcb_impl(
+fn rcb_recurse(
     ids: Vec<usize>,
     weights: Vec<f64>,
     coordinates: Vec<Point2D>,
@@ -66,7 +66,7 @@ fn rcb_impl(
         // be orthogonal to the current one
         let (left_partition, right_partition) = rayon::join(
             || {
-                rcb_impl(
+                rcb_recurse(
                     left_ids,
                     left_weights,
                     left_coordinates,
@@ -74,7 +74,7 @@ fn rcb_impl(
                     !x_axis,
                 )
             },
-            || rcb_impl(ids, weights, coordinates, n_iter - 1, !x_axis),
+            || rcb_recurse(ids, weights, coordinates, n_iter - 1, !x_axis),
         );
 
         // We stick the partitions back together

@@ -1,9 +1,9 @@
-extern crate coupe;
-#[macro_use]
 extern crate clap;
+extern crate coupe;
 extern crate examples;
 extern crate itertools;
 
+use clap::load_yaml;
 use clap::App;
 use coupe::algorithms::k_means::{balanced_k_means, BalancedKmeansSettings};
 use coupe::geometry::Point2D;
@@ -12,29 +12,29 @@ fn main() {
     let yaml = load_yaml!("../../balanced_k_means.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let n_max_iter: usize = matches
-        .value_of("n_max_iter")
+    let max_iter: usize = matches
+        .value_of("max_iter")
         .unwrap_or_default()
         .parse()
-        .expect("wrong value for n_max_iter");
+        .expect("wrong value for max_iter");
 
-    let n_max_balance_iter: usize = matches
-        .value_of("n_max_balance_iter")
+    let max_balance_iter: usize = matches
+        .value_of("max_balance_iter")
         .unwrap_or_default()
         .parse()
-        .expect("wrong value for n_max_balance_iter");
+        .expect("wrong value for max_balance_iter");
 
-    let n_points: usize = matches
-        .value_of("n_points")
+    let num_points: usize = matches
+        .value_of("num_points")
         .unwrap_or_default()
         .parse()
-        .expect("Wrong value for n_points");
+        .expect("Wrong value for num_points");
 
-    let n_partitions: usize = matches
-        .value_of("n_partitions")
+    let num_partitions: usize = matches
+        .value_of("num_partitions")
         .unwrap_or_default()
         .parse()
-        .expect("Wrong value for n_partitions");
+        .expect("Wrong value for num_partitions");
 
     let imbalance_tol: f64 = matches
         .value_of("imbalance_tol")
@@ -50,15 +50,15 @@ fn main() {
 
     let erode = matches.is_present("erode");
 
-    let points = examples::generator::rectangle_uniform(n_points, Point2D::new(0., 0.), 4., 2.);
+    let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
     let _weights: Vec<f64> = points.iter().map(|_| 1.).collect();
 
     let settings = BalancedKmeansSettings {
-        num_partitions: n_partitions,
+        num_partitions,
         imbalance_tol: imbalance_tol,
-        max_iter: n_max_iter,
-        max_balance_iter: n_max_balance_iter,
+        max_iter,
+        max_balance_iter,
         delta_threshold: delta_max,
         erode: erode,
         ..Default::default()

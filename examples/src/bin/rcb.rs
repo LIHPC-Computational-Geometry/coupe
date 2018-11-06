@@ -1,10 +1,10 @@
-extern crate coupe;
-#[macro_use]
 extern crate clap;
+extern crate coupe;
 extern crate examples;
 extern crate itertools;
 extern crate rand;
 
+use clap::load_yaml;
 use clap::App;
 use itertools::Itertools;
 
@@ -15,27 +15,27 @@ fn main() {
     let yaml = load_yaml!("../../rcb.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let n_iter: usize = matches
-        .value_of("n_iter")
+    let num_iter: usize = matches
+        .value_of("num_iter")
         .unwrap_or_default()
         .parse()
-        .expect("wrong value for n_iter");
+        .expect("wrong value for num_iter");
 
-    let n_points: usize = matches
-        .value_of("n_points")
+    let num_points: usize = matches
+        .value_of("num_points")
         .unwrap_or_default()
         .parse()
-        .expect("Wrong value for n_points");
+        .expect("Wrong value for num_points");
 
-    let ids: Vec<usize> = (0..n_points).collect();
-    let weights = vec![1.; n_points];
+    let ids: Vec<usize> = (0..num_points).collect();
+    let weights = vec![1.; num_points];
 
-    let points = examples::generator::cicrcle_uniform(n_points, Point2D::new(0., 0.), 1.)
+    let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
         .into_iter()
         .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let (partition, _weights, _points) = rcb(ids, weights, points.clone(), n_iter);
+    let (partition, _weights, _points) = rcb(ids, weights, points.clone(), num_iter);
 
     // sort ids
     let sorted_part_ids = partition
