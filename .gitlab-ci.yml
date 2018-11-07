@@ -2,6 +2,7 @@ image: "rust:latest"
 before_script:
   - rustup component add rustfmt-preview
   - rustup component add clippy-preview
+  - git clone https://gitlab+deploy-token-25722:waC2D_ARz8xhb4FcGER2@gitlab.com/coupe/mesh_io.git
 
 cache:
   key: "$CI_JOB_NAME"
