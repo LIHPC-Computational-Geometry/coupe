@@ -8,6 +8,7 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 
+use super::hilbert_curve;
 use super::z_curve;
 
 use geometry::Mbr2D;
@@ -31,9 +32,15 @@ pub fn simplified_k_means(
     num_partitions: usize,
     imbalance_tol: f64,
     mut n_iter: isize,
+    hilbert: bool,
 ) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
-    let qt = z_curve::ZCurveQuadtree::new(points, weights);
-    let (points, weights) = qt.reorder();
+    let (points, weights) = if hilbert {
+        let order = ((points.len() as f64).log2() + 10.) as usize;
+        hilbert_curve::hilbert_curve_reorder(points, weights, order)
+    } else {
+        let qt = z_curve::ZCurveQuadtree::new(points, weights);
+        qt.reorder()
+    };
 
     let points_per_center = points.len() / num_partitions;
 
@@ -162,6 +169,7 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
 ///      influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
+///   - `hilbert`: sets wheter or not an Hilbert curve is used to create the initial partition. If false, a Z curve is used instead.
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
 pub struct BalancedKmeansSettings {
@@ -171,6 +179,7 @@ pub struct BalancedKmeansSettings {
     pub max_iter: usize,
     pub max_balance_iter: usize,
     pub erode: bool,
+    pub hilbert: bool,
     pub mbr_early_break: bool,
 }
 
@@ -183,6 +192,7 @@ impl Default for BalancedKmeansSettings {
             max_iter: 50,
             max_balance_iter: 1, // for now, `max_balance_iter > 1` yields poor convergence time
             erode: false,        // for now, `erode` yields` enabled yields wrong results
+            hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
@@ -197,9 +207,14 @@ pub fn balanced_k_means(
     // custom weights are not yet supported
     let weights: Vec<_> = points.iter().map(|_| 1.).collect();
 
-    // sort points with Z-curve
-    let qt = z_curve::ZCurveQuadtree::new(points, weights);
-    let (points, weights) = qt.reorder();
+    // sort points with space filling curve
+    let (points, weights) = if settings.hilbert {
+        let order = ((points.len() as f64).log2() + 10.) as usize;
+        hilbert_curve::hilbert_curve_reorder(points, weights, order)
+    } else {
+        let qt = z_curve::ZCurveQuadtree::new(points, weights);
+        qt.reorder()
+    };
 
     // Compute how many points will be initially assigned to each cluster
     let points_per_center = points.len() / settings.num_partitions;

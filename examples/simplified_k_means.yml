@@ -21,6 +21,9 @@ args:
     takes_value: true
     required: true
     help: Sets the acceptable weight imbalance between the partitions
+ - hilbert:
+    long: hilbert
+    help: Use an Hilbert curve to create the initial partition.
  - quiet:
     long: quiet
     short: q

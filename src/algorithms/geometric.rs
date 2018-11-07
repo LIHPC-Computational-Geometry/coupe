@@ -307,7 +307,7 @@ pub fn rib(
     let x_unit_vector = Vector2::new(1., 0.);
     let angle = inertia.dot(&x_unit_vector).acos();
 
-    let coordinates = rotate(coordinates, angle);
+    let coordinates = rotate_vec(coordinates, angle);
 
     // When the rotation is done, we just apply RCB
     rcb(ids, weights, coordinates, n_iter)

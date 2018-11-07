@@ -140,6 +140,7 @@ fn simplified_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         num_partitions,
         imbalance_tol,
         max_iter,
+        true,
     );
     println!("info: left simplified_k_means algorithm");
 
@@ -188,6 +189,7 @@ fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .expect("wrong value for delta_max");
 
     let erode = matches.is_present("erode");
+    let hilbert = matches.is_present("hilbert");
 
     let settings = BalancedKmeansSettings {
         num_partitions,
@@ -196,6 +198,7 @@ fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         max_balance_iter,
         delta_threshold: delta_max,
         erode: erode,
+        hilbert: hilbert,
         ..Default::default()
     };
 

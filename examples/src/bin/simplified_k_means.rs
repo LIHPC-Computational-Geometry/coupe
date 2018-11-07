@@ -35,15 +35,25 @@ fn main() {
         .parse()
         .expect("Wrong value for imbalance_tol");
 
+    let hilbert: bool = matches.is_present("hilbert");
+
     let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
         .into_iter()
-        .map(|p| p * p.y)
+        // .map(|p| p * p.y)
         .collect::<Vec<_>>();
+
+    // let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 8., 4.);
 
     let weights: Vec<f64> = points.iter().map(|_| 1.).collect();
 
-    let (partition, _weights) =
-        simplified_k_means(points, weights, num_partitions, imbalance_tol, max_iter);
+    let (partition, _weights) = simplified_k_means(
+        points,
+        weights,
+        num_partitions,
+        imbalance_tol,
+        max_iter,
+        hilbert,
+    );
 
     if !matches.is_present("quiet") {
         examples::plot_partition(partition)

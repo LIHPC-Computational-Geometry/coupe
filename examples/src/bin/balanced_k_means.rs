@@ -49,6 +49,7 @@ fn main() {
         .expect("wrong value for delta_max");
 
     let erode = matches.is_present("erode");
+    let hilbert = matches.is_present("hilbert");
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
@@ -61,6 +62,7 @@ fn main() {
         max_balance_iter,
         delta_threshold: delta_max,
         erode: erode,
+        hilbert: hilbert,
         ..Default::default()
     };
 

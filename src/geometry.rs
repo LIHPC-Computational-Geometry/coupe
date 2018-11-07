@@ -20,6 +20,14 @@ impl Aabb2D {
         Self { p_min, p_max }
     }
 
+    pub fn p_min(&self) -> Point2D {
+        self.p_min
+    }
+
+    pub fn p_max(&self) -> Point2D {
+        self.p_max
+    }
+
     /// Constructs a new `Aabb2D` from an iterator of `Point2D`.
     ///
     /// The resulting `Aabb` is the smallest Aabb that contains every points of the iterator.
@@ -174,6 +182,14 @@ impl Mbr2D {
         Self { aabb, rotation }
     }
 
+    pub fn rotation(&self) -> f64 {
+        self.rotation
+    }
+
+    pub fn aabb(&self) -> &Aabb2D {
+        &self.aabb
+    }
+
     /// Constructs a new `Aabb2D` from an iterator of `Point2D`.
     ///
     /// The resulting `Aabb` is the smallest Aabb that contains every points of the iterator.
@@ -192,7 +208,7 @@ impl Mbr2D {
 
         Self {
             aabb: Aabb2D::from_points(
-                rotate(points.map(|v| *v).clone().collect::<Vec<Point2D>>(), angle).iter(),
+                rotate_vec(points.map(|v| *v).clone().collect::<Vec<Point2D>>(), angle).iter(),
             ),
             rotation: angle,
         }
@@ -220,29 +236,31 @@ impl Mbr2D {
     /// Computes the distance between a point and the current mbr.
     pub fn distance_to_point(&self, point: &Point2D) -> f64 {
         self.aabb
-            .distance_to_point(&rotate(vec![*point], self.rotation)[0])
+            .distance_to_point(&rotate_vec(vec![*point], self.rotation)[0])
     }
 
     /// Computes the center of the Mbr
     pub fn center(&self) -> Point2D {
-        rotate(vec![self.aabb.center()], -self.rotation)[0]
+        rotate_vec(vec![self.aabb.center()], -self.rotation)[0]
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
     pub fn contains(&self, point: &Point2D) -> bool {
-        self.aabb.contains(&rotate(vec![*point], self.rotation)[0])
+        self.aabb
+            .contains(&rotate_vec(vec![*point], self.rotation)[0])
     }
 
     /// Returns the quadrant of the Aabb in which the specified point is.
     /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
     /// Returns `None` if the specified point is not contained in the Aabb.
     pub fn quadrant(&self, point: &Point2D) -> Option<Quadrant> {
-        self.aabb.quadrant(&rotate(vec![*point], self.rotation)[0])
+        self.aabb
+            .quadrant(&rotate_vec(vec![*point], self.rotation)[0])
     }
 
     /// Returns the rotated min and max points of the Aabb.
     pub fn minmax(&self) -> (Point2D, Point2D) {
-        let minmax = rotate(vec![self.aabb.p_min, self.aabb.p_max], -self.rotation);
+        let minmax = rotate_vec(vec![self.aabb.p_min, self.aabb.p_max], -self.rotation);
         (minmax[0], minmax[1])
     }
 }
@@ -322,7 +340,7 @@ pub fn intertia_vector_nd(mat: DMatrix<f64>) -> DVector<f64> {
 }
 
 // Rotates each point of an angle (in radians) counter clockwise
-pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
+pub(crate) fn rotate_vec(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
     // A rotation of angle theta is defined in 2D by a 2x2 matrix
     // |  cos(theta) sin(theta) |
     // | -sin(theta) cos(theta) |
@@ -331,6 +349,14 @@ pub(crate) fn rotate(coordinates: Vec<Point2D>, angle: f64) -> Vec<Point2D> {
         .into_par_iter()
         .map(|c| rot_matrix * c)
         .collect()
+}
+
+pub(crate) fn rotation(angle: f64) -> impl Fn((f64, f64)) -> (f64, f64) {
+    let rot_matrix = Matrix2::new(angle.cos(), angle.sin(), -angle.sin(), angle.cos());
+    move |(x, y)| {
+        let ret = rot_matrix * Point2D::new(x, y);
+        (ret.x, ret.y)
+    }
 }
 
 pub fn center(points: &[Point2D]) -> Point2D {
