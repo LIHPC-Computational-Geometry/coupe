@@ -13,6 +13,10 @@
 use geometry::{self, Mbr2D, Point2D};
 use rayon::prelude::*;
 
+/// Reorder a set of points and weights following the hilbert curve technique.
+/// First, the minimal bounding rectangle of the set of points is computed and local
+/// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
+/// Then the hilbert curve is computed from those local coordinates.
 pub fn hilbert_curve_reorder(
     mut points: Vec<Point2D>,
     mut weights: Vec<f64>,
@@ -38,7 +42,7 @@ pub fn hilbert_curve_reorder(
     (points, weights)
 }
 
-fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> i64 {
+fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
     let mbr = Mbr2D::from_points(points.iter());
     let rotation = mbr.rotation();
     let aabb = mbr.aabb();
@@ -53,23 +57,23 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64
 
     move |p| {
         let (x, y) = rotate(p);
-        encode(x_mapping(x) as i64, y_mapping(y) as i64, order)
+        encode(x_mapping(x) as u32, y_mapping(y) as u32, order)
     }
 }
 
-fn encode(x: i64, y: i64, order: usize) -> i64 {
+fn encode(x: u32, y: u32, order: usize) -> u32 {
     assert!(
-        0 <= x && x < 2i64.pow(order as u32), 
+        x < 2u32.pow(order as u32),
         format!(
-            "Cannot encode the point {:?} on an hilbert curve of order {} because x < 0 or x >= 2^order.",
-            (x, y), 
+            "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
+            (x, y),
             order
         )
     );
     assert!(
-        0 <= y && y < 2i64.pow(order as u32), 
+        y < 2u32.pow(order as u32),
         format!(
-            "Cannot encode the point {:?} on an hilbert curve of order {} because y < 0 or y >= 2^order.",
+            "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
             (x, y),
             order
         )
@@ -94,9 +98,9 @@ fn encode(x: i64, y: i64, order: usize) -> i64 {
     interleave_bits(h_odd, h_even)
 }
 
-fn interleave_bits(odd: i64, even: i64) -> i64 {
+fn interleave_bits(odd: u32, even: u32) -> u32 {
     let mut val = 0;
-    let mut max: i32 = odd.max(even) as i32;
+    let mut max = odd.max(even);
     let mut n = 0;
     while max > 0 {
         n += 1;
