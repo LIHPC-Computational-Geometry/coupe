@@ -205,7 +205,7 @@ pub fn balanced_k_means(
     let settings = settings.into().unwrap_or_default();
 
     // custom weights are not yet supported
-    let weights: Vec<_> = points.iter().map(|_| 1.).collect();
+    let weights: Vec<_> = points.par_iter().map(|_| 1.).collect();
 
     // sort points with space filling curve
     let (points, weights) = if settings.hilbert {
@@ -228,30 +228,36 @@ pub fn balanced_k_means(
         // because it is in most cases in the middle of the partition
         .skip(points_per_center / 2)
         .step_by(points_per_center)
+        .par_bridge()
         .collect();
 
     // generate unique ids for each initial partition that will live throughout
     // the algorithm (no new id is generated afterwards)
-    let center_ids: Vec<_> = centers.iter().map(|_| ClusterId::new()).collect();
+    let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
 
     // generate initial assignments, i.e.
     // map [id0, id1, ..., idn]
     //    to [[id0, ..., id0], ..., [idn, ..., idn]]
     //         partition_1             partition_n
-    let assignments: Vec<_> = center_ids
-        .iter()
-        .cloned()
-        .flat_map(|id| std::iter::repeat(id).take(points_per_center))
-        .take(points.len())
-        .collect();
+    let remainder = points.len() % settings.num_partitions;
+    let assignments: Vec<_> = rayon::iter::repeat(center_ids[0])
+        .take(remainder)
+        .chain(
+            center_ids
+                .par_iter()
+                .cloned()
+                .flat_map(|id| rayon::iter::repeat(id).take(points_per_center)),
+        ).collect();
+
+    debug_assert_eq!(assignments.len(), points.len());
 
     // Generate initial influences (to 1)
-    let influences: Vec<_> = centers.iter().map(|_| 1.).collect();
+    let influences: Vec<_> = centers.par_iter().map(|_| 1.).collect();
 
     // Generate initial lower and upper bounds. These two variables represent bounds on
     // the effective distance between an point and the cluster it is assigned to.
-    let lbs: Vec<_> = points.iter().map(|_| 0.).collect();
-    let ubs: Vec<_> = points.iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+    let lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
+    let ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
         Inputs { points, weights },
@@ -312,7 +318,7 @@ fn balanced_k_means_iter(
         ubs,
     } = state;
 
-    let (assignments, influences, mut ubs, mut lbs) = assign_and_balance(
+    let (assignments, mut influences, mut ubs, mut lbs) = assign_and_balance(
         AlgorithmState {
             assignments,
             influences,
@@ -330,15 +336,15 @@ fn balanced_k_means_iter(
 
     // Compute new centers from the load balance routine assignments output
     let new_centers = center_ids
-        .iter()
+        .par_iter()
         // map each center id to the new center point
         // we cannot just compute the centers fron the assignments
         // because the new centers have to be in the same order as the old ones
         .map(|center_id| {
             let points = assignments
-                .iter()
+                .par_iter()
                 .cloned()
-                .zip(points.iter().cloned())
+                .zip(points.par_iter().cloned())
                 .filter(|(assignment, _)| *assignment == *center_id)
                 .map(|(_, point)| point)
                 .collect::<Vec<_>>();
@@ -347,20 +353,39 @@ fn balanced_k_means_iter(
 
     // Compute the distances moved by each center from their previous location
     let distances_moved: Vec<_> = centers
-        .into_iter()
+        .par_iter()
         .zip(new_centers.clone())
         .map(|(c1, c2)| (c1 - c2).norm())
         .collect();
 
+    if settings.erode {
+        let average_diameters = assignments
+            .iter()
+            .zip(points.iter().cloned())
+            .into_group_map()
+            .into_iter()
+            .map(|(_assignment, points)| max_distance(&points))
+            .sum::<f64>()
+            / centers.len() as f64;
+
+        // erode influence
+        influences
+            .iter_mut()
+            .zip(distances_moved.iter())
+            .for_each(|(influence, distance)| {
+                *influence = influence.log(10.) * (1. - erosion(*distance, average_diameters)).exp()
+            });
+    }
+
     let delta_max = distances_moved
-        .iter()
+        .par_iter()
         .max_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(Ordering::Equal))
         .unwrap();
 
     // if delta_max is below a given threshold, it means that the clusters no longer move a lot at each iteration
     // and the algorithm has become somewhat stable.
     if *delta_max < settings.delta_threshold || current_iter == 0 {
-        points.into_iter().zip(assignments).collect()
+        points.into_par_iter().zip(assignments).collect()
     } else {
         relax_bounds(&mut lbs, &mut ubs, &distances_moved, &influences);
         balanced_k_means_iter(
@@ -413,32 +438,36 @@ fn assign_and_balance(
     // bounding rectangle of the set of points
     let mbr = Mbr2D::from_points(points.iter());
     let distances_to_mbr = centers
-        .iter()
-        .zip(influences.iter())
+        .par_iter()
+        .zip(influences.par_iter())
         .map(|(center, influence)| mbr.distance_to_point(center) * influence)
         .collect::<Vec<_>>();
 
-    let (zipped, distances_to_mbr): (Vec<_>, Vec<_>) = centers
-        .into_iter()
+    let mut zipped = centers
+        .into_par_iter()
         .zip(center_ids)
         .zip(distances_to_mbr)
-        .sorted_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal))
-        .into_iter()
-        .unzip();
+        .collect::<Vec<_>>();
 
-    let (centers, center_ids): (Vec<_>, Vec<_>) = zipped.into_iter().unzip();
+    zipped
+        .as_mut_slice()
+        .par_sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
+
+    let (zipped, distances_to_mbr): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
+
+    let (centers, center_ids): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
 
     // Compute the weight that each cluster should be after the end of the algorithm
-    let target_weight = weights.iter().sum::<f64>() / (centers.len() as f64);
+    let target_weight = weights.par_iter().sum::<f64>() / (centers.len() as f64);
 
     for _ in 0..settings.max_balance_iter {
         // Compute new assignments point to cluster assignments
         // based on the current clusters and influences state
         points
-            .iter()
-            .zip(assignments.iter_mut())
-            .zip(lbs.iter_mut())
-            .zip(ubs.iter_mut())
+            .par_iter()
+            .zip(assignments.par_iter_mut())
+            .zip(lbs.par_iter_mut())
+            .zip(ubs.par_iter_mut())
             .for_each(|(((p, id), lb), ub)| {
                 if lb < ub {
                     let (new_lb, new_ub, new_assignment) = best_values(
@@ -460,12 +489,12 @@ fn assign_and_balance(
 
         // Compute total weight for each cluster
         let new_weights = center_ids
-            .iter()
+            .par_iter()
             .map(|center_id| {
                 assignments
-                    .iter()
+                    .par_iter()
                     .cloned()
-                    .zip(weights.iter())
+                    .zip(weights.par_iter())
                     .filter(|(assignment, _)| *assignment == *center_id)
                     .map(|(_, weight)| *weight)
                     .sum::<f64>()
@@ -481,7 +510,7 @@ fn assign_and_balance(
         // The influences are then adapted to produce better
         // assignments during next iteration.
         influences
-            .iter_mut()
+            .par_iter_mut()
             .zip(new_weights)
             .for_each(|(influence, weight)| {
                 let ratio = target_weight / weight;
@@ -500,12 +529,12 @@ fn assign_and_balance(
 
         // Compute new centers from new assigments
         let new_centers = center_ids
-            .iter()
+            .par_iter()
             .map(|center_id| {
                 let points = assignments
-                    .iter()
+                    .par_iter()
                     .cloned()
-                    .zip(points.iter().cloned())
+                    .zip(points.par_iter().cloned())
                     .filter(|(assignment, _)| *assignment == *center_id)
                     .map(|(_, point)| point)
                     .collect::<Vec<_>>();
@@ -513,32 +542,12 @@ fn assign_and_balance(
             }).collect::<Vec<_>>();
 
         let distances_to_old_centers: Vec<_> = centers
-            .iter()
-            .zip(new_centers.iter())
+            .par_iter()
+            .zip(new_centers.par_iter())
             .map(|(center, new_center)| (*center - new_center).norm())
             .collect();
 
         relax_bounds(&mut lbs, &mut ubs, &distances_to_old_centers, &influences);
-
-        if settings.erode {
-            let average_diameters = assignments
-                .iter()
-                .zip(points.iter().cloned())
-                .into_group_map()
-                .into_iter()
-                .map(|(_assignment, points)| max_distance(&points))
-                .sum::<f64>()
-                / centers.len() as f64;
-
-            // erode influence
-            influences
-                .iter_mut()
-                .zip(distances_to_old_centers.iter())
-                .for_each(|(influence, distance)| {
-                    *influence =
-                        influence.log(10.) * (1. - erosion(*distance, average_diameters)).exp()
-                });
-        }
     }
 
     (assignments, influences, lbs, ubs)
@@ -551,20 +560,20 @@ fn assign_and_balance(
 // new_ub(p) = ub(p) + delta(c) / influence(c)
 fn relax_bounds(lbs: &mut [f64], ubs: &mut [f64], distances_moved: &[f64], influences: &[f64]) {
     let max_distance_influence_ratio = distances_moved
-        .iter()
-        .zip(influences.iter())
+        .par_iter()
+        .zip(influences.par_iter())
         .map(|(distance, influence)| distance * influence)
         .max_by(|r1, r2| r1.partial_cmp(r2).unwrap_or(Ordering::Equal))
         .unwrap_or(0.);
 
-    ubs.iter_mut()
+    ubs.par_iter_mut()
         .zip(distances_moved)
-        .zip(influences.iter())
+        .zip(influences.par_iter())
         .for_each(|((ub, distance), influence)| {
             *ub += distance * influence;
         });
 
-    lbs.iter_mut().for_each(|lb| {
+    lbs.par_iter_mut().for_each(|lb| {
         *lb -= max_distance_influence_ratio;
     });
 }
