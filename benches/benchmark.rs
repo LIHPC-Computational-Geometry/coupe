@@ -180,6 +180,7 @@ fn bench_simplified_k_means(c: &mut Criterion) {
                     2usize.pow(NUM_ITER as u32),
                     5.,
                     1000,
+                    true,
                 )
             })
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
