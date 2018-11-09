@@ -254,18 +254,43 @@ fn rcb_nd_recurse(
 // the slice in two parts of equal weights
 // i.e. sorted_weights[..idx].sum() == sorted_weights[idx..].sum
 fn half_weight_pos(sorted_weights: &[f64]) -> usize {
-    let mut half_weight = sorted_weights.par_iter().sum::<f64>() / 2.;
-    let mut pos = 0;
-    for w in sorted_weights {
-        if half_weight > 0. {
-            pos += 1;
-        } else {
+    let half_weight = sorted_weights.par_iter().sum::<f64>() / 2.;
+
+    let mut current_weight_idx;
+    let mut current_weight_sum = 0.;
+
+    let mut scan = sorted_weights
+        .par_iter()
+        .enumerate()
+        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
+            if idx < low {
+                (idx, acc + val)
+            } else {
+                (low, acc + val)
+            }
+        }).collect::<Vec<_>>()
+        .into_iter();
+
+    // above this, the code was parallel
+    // what follows is sequential
+
+    loop {
+        let current = scan.next().unwrap();
+        if current_weight_sum + current.1 > half_weight {
+            current_weight_idx = current.0;
             break;
         }
-        half_weight -= w;
+
+        current_weight_sum += current.1;
     }
 
-    pos
+    // seek from current_weight_idx
+    while current_weight_sum < half_weight {
+        current_weight_idx += 1;
+        current_weight_sum += sorted_weights[current_weight_idx];
+    }
+
+    current_weight_idx
 }
 
 /// # Recursive Inertia Bisection algorithm
