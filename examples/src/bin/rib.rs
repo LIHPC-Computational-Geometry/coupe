@@ -26,7 +26,6 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let ids: Vec<usize> = (0..num_points).collect();
     let weights = vec![1.; num_points];
 
     let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
@@ -34,7 +33,7 @@ fn main() {
         .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let partition = rib(&ids, &weights, &points.clone(), num_iter);
+    let partition = rib(&weights, &points.clone(), num_iter);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

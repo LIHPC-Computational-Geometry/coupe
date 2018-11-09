@@ -125,7 +125,7 @@ fn bench_rcb_random(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| rcb(&ids, &weights, &sample_points, NUM_ITER))
+            b.iter(|| rcb(&weights, &sample_points, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }

@@ -3,7 +3,6 @@ use geometry::Point2D;
 
 #[test]
 fn test_rcb_basic() {
-    let ids: Vec<usize> = (0..8).collect();
     let weights = vec![1.; 8];
     let coordinates = vec![
         Point2D::new(-1.3, 6.),
@@ -16,7 +15,7 @@ fn test_rcb_basic() {
         Point2D::new(1.3, -2.),
     ];
 
-    let partition = algorithms::geometric::rcb(&ids, &weights, &coordinates, 2);
+    let partition = algorithms::geometric::rcb(&weights, &coordinates, 2);
 
     assert_eq!(partition[0], partition[6]);
     assert_eq!(partition[1], partition[7]);

@@ -20,20 +20,15 @@ use std::sync::Arc;
 ///
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
-pub fn rcb(
-    ids: &[usize],
-    weights: &[f64],
-    coordinates: &[Point2D],
-    n_iter: usize,
-) -> Vec<ProcessUniqueId> {
-    let mut permutation = (0..ids.len()).into_par_iter().collect::<Vec<_>>();
+pub fn rcb(weights: &[f64], coordinates: &[Point2D], n_iter: usize) -> Vec<ProcessUniqueId> {
+    let len = weights.len();
+    let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
     let mut initial_partition = rayon::iter::repeat(initial_id)
-        .take(ids.len())
+        .take(len)
         .collect::<Vec<_>>();
 
     rcb_recurse(
-        &ids,
         &weights,
         &coordinates,
         &mut permutation,
@@ -45,7 +40,6 @@ pub fn rcb(
 }
 
 fn rcb_recurse(
-    ids: &[usize],
     weights: &[f64],
     points: &[Point2D],
     permutation: &mut [usize],
@@ -96,7 +90,6 @@ fn rcb_recurse(
         rayon::join(
             || {
                 rcb_recurse(
-                    ids,
                     weights,
                     points,
                     left_permu,
@@ -105,17 +98,7 @@ fn rcb_recurse(
                     !x_axis,
                 )
             },
-            || {
-                rcb_recurse(
-                    ids,
-                    weights,
-                    points,
-                    right_permu,
-                    partition,
-                    n_iter - 1,
-                    !x_axis,
-                )
-            },
+            || rcb_recurse(weights, points, right_permu, partition, n_iter - 1, !x_axis),
         );
     }
 }
@@ -381,12 +364,7 @@ fn half_weight_pos(sorted_weights: &[f64]) -> usize {
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib(
-    ids: &[usize],
-    weights: &[f64],
-    coordinates: &[Point2D],
-    n_iter: usize,
-) -> Vec<ProcessUniqueId> {
+pub fn rib(weights: &[f64], coordinates: &[Point2D], n_iter: usize) -> Vec<ProcessUniqueId> {
     // Compute the inertia vector of the set of points
     let j = inertia_matrix(weights, coordinates);
     let inertia = intertia_vector(j);
@@ -405,7 +383,7 @@ pub fn rib(
     let coordinates = rotate_vec(coordinates.to_vec(), angle);
 
     // When the rotation is done, we just apply RCB
-    rcb(ids, weights, &coordinates, n_iter)
+    rcb(weights, &coordinates, n_iter)
 }
 
 pub fn rib_nd(

@@ -47,13 +47,15 @@ fn rcb<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let num_points = points.len();
 
-    let ids: Vec<usize> = (0..num_points).into_par_iter().collect();
-    let weights = ids.par_iter().map(|_| 1.).collect::<Vec<_>>();
+    let weights = (1..num_points)
+        .into_par_iter()
+        .map(|_| 1.)
+        .collect::<Vec<_>>();
 
     let points_clone = points.clone();
     println!("info: entering RCB algorithm");
     let now = std::time::Instant::now();
-    let partition = algorithms::geometric::rcb(&ids, &weights, &points_clone, num_iter);
+    let partition = algorithms::geometric::rcb(&weights, &points_clone, num_iter);
     let end = now.elapsed();
     println!("info: left RCB algorithm. {:?} elapsed.", end);
 
@@ -79,11 +81,13 @@ fn rib<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let num_points = points.len();
 
-    let ids: Vec<usize> = (0..num_points).into_par_iter().collect();
-    let weights = ids.par_iter().map(|_| 1.).collect::<Vec<_>>();
+    let weights = (1..num_points)
+        .into_par_iter()
+        .map(|_| 1.)
+        .collect::<Vec<_>>();
 
     println!("info: entering RIB algorithm");
-    let partition = algorithms::geometric::rib(&ids, &weights, &points.clone(), num_iter);
+    let partition = algorithms::geometric::rib(&weights, &points.clone(), num_iter);
     println!("info: left RIB algorithm");
 
     if !matches.is_present("quiet") {
