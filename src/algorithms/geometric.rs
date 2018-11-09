@@ -19,18 +19,18 @@ use nalgebra::{DVector, Vector2};
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
 pub fn rcb(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    coordinates: Vec<Point2D>,
+    mut ids: Vec<usize>,
+    mut weights: Vec<f64>,
+    mut coordinates: Vec<Point2D>,
     n_iter: usize,
 ) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
-    rcb_recurse(ids, weights, coordinates, n_iter, true)
+    rcb_recurse(&mut ids, &mut weights, &mut coordinates, n_iter, true)
 }
 
 fn rcb_recurse(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    coordinates: Vec<Point2D>,
+    ids: &mut [usize],
+    weights: &mut [f64],
+    points: &mut [Point2D],
     n_iter: usize,
     x_axis: bool, // set if bissection is performed w.r.t. x or y axis
 ) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
@@ -40,9 +40,9 @@ fn rcb_recurse(
         // Generate a partition id and return.
         let part_id = ProcessUniqueId::new();
         (
-            ids.into_par_iter().map(|id| (id, part_id)).collect(),
-            weights,
-            coordinates,
+            ids.par_iter().cloned().map(|id| (id, part_id)).collect(),
+            weights.to_owned(),
+            points.to_owned(),
         )
     } else {
         // We split the objects in two parts of equal weights
@@ -50,14 +50,18 @@ fn rcb_recurse(
         // alternating at each iteration.
 
         // We first need to sort the objects w.r.t. x or y position
-        let (mut ids, mut weights, mut coordinates) = axis_sort(ids, weights, coordinates, x_axis);
+        let (mut ids, mut weights, mut points) = axis_sort(&ids, &weights, &points, x_axis);
 
         // We then seek the split position
         let split_pos = half_weight_pos(weights.as_slice());
 
-        let left_ids = ids.drain(0..split_pos).collect();
-        let left_weights = weights.drain(0..split_pos).collect();
-        let left_coordinates = coordinates.drain(0..split_pos).collect();
+        // let left_ids = ids.drain(0..split_pos).collect();
+        // let left_weights = weights.drain(0..split_pos).collect();
+        // let left_coordinates = coordinates.drain(0..split_pos).collect();
+
+        let (left_ids, right_ids) = ids.split_at_mut(split_pos);
+        let (left_weights, right_weights) = weights.split_at_mut(split_pos);
+        let (left_points, right_points) = points.split_at_mut(split_pos);
 
         // Once the split is performed
         // we recursively iterate by calling
@@ -65,16 +69,8 @@ fn rcb_recurse(
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
         let (left_partition, right_partition) = rayon::join(
-            || {
-                rcb_recurse(
-                    left_ids,
-                    left_weights,
-                    left_coordinates,
-                    n_iter - 1,
-                    !x_axis,
-                )
-            },
-            || rcb_recurse(ids, weights, coordinates, n_iter - 1, !x_axis),
+            || rcb_recurse(left_ids, left_weights, left_points, n_iter - 1, !x_axis),
+            || rcb_recurse(right_ids, right_weights, right_points, n_iter - 1, !x_axis),
         );
 
         // We stick the partitions back together
@@ -102,26 +98,27 @@ fn rcb_recurse(
 // sort input vectors w.r.t. coordinates
 // i.e. by increasing x or increasing y
 pub fn axis_sort(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    coordinates: Vec<Point2D>,
+    ids: &[usize],
+    weights: &[f64],
+    coordinates: &[Point2D],
     x_axis: bool,
 ) -> (Vec<usize>, Vec<f64>, Vec<Point2D>) {
     let mut zipped = ids
-        .into_par_iter()
-        .zip(weights)
-        .zip(coordinates)
+        .par_iter()
+        .cloned()
+        .zip(weights.par_iter().cloned())
+        .zip(coordinates.par_iter().cloned())
         .collect::<Vec<_>>();
 
-    zipped
-        .as_mut_slice()
-        .par_sort_unstable_by(|(_, p1), (_, p2)| {
-            if x_axis {
-                p1.x.partial_cmp(&p2.x).unwrap_or(Ordering::Equal)
-            } else {
-                p1.y.partial_cmp(&p2.y).unwrap_or(Ordering::Equal)
-            }
-        });
+    if x_axis {
+        zipped
+            .as_mut_slice()
+            .par_sort_by(|(_, p1), (_, p2)| p1.x.partial_cmp(&p2.x).unwrap_or(Ordering::Equal));
+    } else {
+        zipped
+            .as_mut_slice()
+            .par_sort_by(|(_, p1), (_, p2)| p1.y.partial_cmp(&p2.y).unwrap_or(Ordering::Equal));
+    }
 
     let (still_zipped, coordinates): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
     let (ids, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
@@ -378,7 +375,7 @@ mod tests {
         let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
         let points = gen_point_sample();
 
-        let (ids, _, _) = axis_sort(ids, weights, points, true);
+        let (ids, _, _) = axis_sort(&ids, &weights, &points, true);
 
         assert_eq!(ids, vec![5, 2, 3, 6, 4, 0, 1]);
     }
@@ -389,7 +386,7 @@ mod tests {
         let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
         let points = gen_point_sample();
 
-        let (ids, _, _) = axis_sort(ids, weights, points, false);
+        let (ids, _, _) = axis_sort(&ids, &weights, &points, false);
 
         assert_eq!(ids, vec![3, 6, 5, 1, 0, 2, 4]);
     }
