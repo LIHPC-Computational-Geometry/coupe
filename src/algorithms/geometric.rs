@@ -1,10 +1,12 @@
 use geometry::*;
+use nalgebra::{DVector, Vector2};
 use rayon;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
-use std::cmp::Ordering;
 
-use nalgebra::{DVector, Vector2};
+use std::cmp::Ordering;
+use std::sync::atomic::{self, AtomicPtr};
+use std::sync::Arc;
 
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
@@ -19,79 +21,103 @@ use nalgebra::{DVector, Vector2};
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
 pub fn rcb(
-    mut ids: Vec<usize>,
-    mut weights: Vec<f64>,
-    mut coordinates: Vec<Point2D>,
+    ids: &[usize],
+    weights: &[f64],
+    coordinates: &[Point2D],
     n_iter: usize,
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
-    rcb_recurse(&mut ids, &mut weights, &mut coordinates, n_iter, true)
+) -> Vec<ProcessUniqueId> {
+    let mut permutation = (0..ids.len()).into_par_iter().collect::<Vec<_>>();
+    let initial_id = ProcessUniqueId::new();
+    let mut initial_partition = rayon::iter::repeat(initial_id)
+        .take(ids.len())
+        .collect::<Vec<_>>();
+
+    rcb_recurse(
+        &ids,
+        &weights,
+        &coordinates,
+        &mut permutation,
+        Arc::new(AtomicPtr::new(initial_partition.as_mut_ptr())),
+        n_iter,
+        true,
+    );
+    initial_partition
 }
 
 fn rcb_recurse(
-    ids: &mut [usize],
-    weights: &mut [f64],
-    points: &mut [Point2D],
+    ids: &[usize],
+    weights: &[f64],
+    points: &[Point2D],
+    permutation: &mut [usize],
+    partition: Arc<AtomicPtr<ProcessUniqueId>>,
     n_iter: usize,
     x_axis: bool, // set if bissection is performed w.r.t. x or y axis
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
+) {
     if n_iter == 0 {
         // No iteration left. The current
         // ids become a part of the final partition.
         // Generate a partition id and return.
         let part_id = ProcessUniqueId::new();
-        (
-            ids.par_iter().cloned().map(|id| (id, part_id)).collect(),
-            weights.to_owned(),
-            points.to_owned(),
-        )
+        permutation.par_iter().for_each(|idx| {
+            let ptr = partition.load(atomic::Ordering::Relaxed);
+            unsafe { std::ptr::write(ptr.offset(*idx as isize), part_id) }
+        });
     } else {
         // We split the objects in two parts of equal weights
         // The split is perfomed alongside the x or y axis,
         // alternating at each iteration.
 
         // We first need to sort the objects w.r.t. x or y position
-        let (mut ids, mut weights, mut points) = axis_sort(&ids, &weights, &points, x_axis);
+        if x_axis {
+            permutation.par_sort_by(|i1, i2| {
+                points[*i1]
+                    .x
+                    .partial_cmp(&points[*i2].x)
+                    .unwrap_or(Ordering::Equal)
+            });
+        } else {
+            permutation.par_sort_by(|i1, i2| {
+                points[*i1]
+                    .y
+                    .partial_cmp(&points[*i2].y)
+                    .unwrap_or(Ordering::Equal)
+            });
+        }
 
         // We then seek the split position
-        let split_pos = half_weight_pos(weights.as_slice());
-
-        // let left_ids = ids.drain(0..split_pos).collect();
-        // let left_weights = weights.drain(0..split_pos).collect();
-        // let left_coordinates = coordinates.drain(0..split_pos).collect();
-
-        let (left_ids, right_ids) = ids.split_at_mut(split_pos);
-        let (left_weights, right_weights) = weights.split_at_mut(split_pos);
-        let (left_points, right_points) = points.split_at_mut(split_pos);
+        let split_pos = half_weight_pos_permu(weights, permutation);
+        let (left_permu, right_permu) = permutation.split_at_mut(split_pos);
 
         // Once the split is performed
         // we recursively iterate by calling
         // the algorithm on the two generated parts.
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
-        let (left_partition, right_partition) = rayon::join(
-            || rcb_recurse(left_ids, left_weights, left_points, n_iter - 1, !x_axis),
-            || rcb_recurse(right_ids, right_weights, right_points, n_iter - 1, !x_axis),
+        let left_partition = partition.clone();
+        rayon::join(
+            || {
+                rcb_recurse(
+                    ids,
+                    weights,
+                    points,
+                    left_permu,
+                    left_partition,
+                    n_iter - 1,
+                    !x_axis,
+                )
+            },
+            || {
+                rcb_recurse(
+                    ids,
+                    weights,
+                    points,
+                    right_permu,
+                    partition,
+                    n_iter - 1,
+                    !x_axis,
+                )
+            },
         );
-
-        // We stick the partitions back together
-        // to return a single collection of objects
-        (
-            left_partition
-                .0
-                .into_par_iter()
-                .chain(right_partition.0)
-                .collect(),
-            left_partition
-                .1
-                .into_par_iter()
-                .chain(right_partition.1)
-                .collect(),
-            left_partition
-                .2
-                .into_par_iter()
-                .chain(right_partition.2)
-                .collect(),
-        )
     }
 }
 
@@ -250,6 +276,46 @@ fn rcb_nd_recurse(
 // Computes a slice index which splits
 // the slice in two parts of equal weights
 // i.e. sorted_weights[..idx].sum() == sorted_weights[idx..].sum
+fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
+    let half_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>() / 2.;
+
+    let mut current_weight_idx;
+    let mut current_weight_sum = 0.;
+
+    let mut scan = permutation
+        .par_iter()
+        .enumerate()
+        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
+            if idx < low {
+                (idx, acc + weights[*val])
+            } else {
+                (low, acc + weights[*val])
+            }
+        }).collect::<Vec<_>>()
+        .into_iter();
+
+    // above this, the code was parallel
+    // what follows is sequential
+
+    loop {
+        let current = scan.next().unwrap();
+        if current_weight_sum + current.1 > half_weight {
+            current_weight_idx = current.0;
+            break;
+        }
+
+        current_weight_sum += current.1;
+    }
+
+    // seek from current_weight_idx
+    while current_weight_sum < half_weight {
+        current_weight_idx += 1;
+        current_weight_sum += weights[permutation[current_weight_idx]];
+    }
+
+    current_weight_idx
+}
+
 fn half_weight_pos(sorted_weights: &[f64]) -> usize {
     let half_weight = sorted_weights.par_iter().sum::<f64>() / 2.;
 
@@ -309,13 +375,13 @@ fn half_weight_pos(sorted_weights: &[f64]) -> usize {
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
 pub fn rib(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    coordinates: Vec<Point2D>,
+    ids: &[usize],
+    weights: &[f64],
+    coordinates: &[Point2D],
     n_iter: usize,
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point2D>) {
+) -> Vec<ProcessUniqueId> {
     // Compute the inertia vector of the set of points
-    let j = inertia_matrix(&weights, &coordinates);
+    let j = inertia_matrix(weights, coordinates);
     let inertia = intertia_vector(j);
 
     // In this implementation, the separator is not actually
@@ -329,10 +395,10 @@ pub fn rib(
     let x_unit_vector = Vector2::new(1., 0.);
     let angle = inertia.dot(&x_unit_vector).acos();
 
-    let coordinates = rotate_vec(coordinates, angle);
+    let coordinates = rotate(coordinates.to_vec(), angle);
 
     // When the rotation is done, we just apply RCB
-    rcb(ids, weights, coordinates, n_iter)
+    rcb(ids, weights, &coordinates, n_iter)
 }
 
 pub fn rib_nd(
