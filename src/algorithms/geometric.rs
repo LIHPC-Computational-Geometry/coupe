@@ -60,7 +60,7 @@ fn rcb_recurse(
         let part_id = ProcessUniqueId::new();
         permutation.par_iter().for_each(|idx| {
             let ptr = partition.load(atomic::Ordering::Relaxed);
-            unsafe { std::ptr::write(ptr.offset(*idx as isize), part_id) }
+            unsafe { std::ptr::write(ptr.add(*idx), part_id) }
         });
     } else {
         // We split the objects in two parts of equal weights

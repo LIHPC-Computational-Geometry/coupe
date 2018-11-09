@@ -1,6 +1,5 @@
 use algorithms;
 use geometry::Point2D;
-use itertools::Itertools;
 
 #[test]
 fn test_rcb_basic() {
@@ -17,27 +16,19 @@ fn test_rcb_basic() {
         Point2D::new(1.3, -2.),
     ];
 
-    let (partition, _, _) = algorithms::geometric::rcb(ids, weights, coordinates, 2);
-    let partition = partition
-        .into_iter()
-        .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
+    let partition = algorithms::geometric::rcb(&ids, &weights, &coordinates, 2);
 
-    assert_eq!(partition[0].1, partition[6].1);
-    assert_eq!(partition[1].1, partition[7].1);
-    assert_eq!(partition[2].1, partition[5].1);
-    assert_eq!(partition[3].1, partition[4].1);
+    assert_eq!(partition[0], partition[6]);
+    assert_eq!(partition[1], partition[7]);
+    assert_eq!(partition[2], partition[5]);
+    assert_eq!(partition[3], partition[4]);
 
-    let (p_id1, p_id2, p_id3, p_id4) = (
-        partition[0].1,
-        partition[1].1,
-        partition[2].1,
-        partition[3].1,
-    );
+    let (p_id1, p_id2, p_id3, p_id4) = (partition[0], partition[1], partition[2], partition[3]);
 
-    let p1 = partition.iter().filter(|(_, p_id)| *p_id == p_id1);
-    let p2 = partition.iter().filter(|(_, p_id)| *p_id == p_id2);
-    let p3 = partition.iter().filter(|(_, p_id)| *p_id == p_id3);
-    let p4 = partition.iter().filter(|(_, p_id)| *p_id == p_id4);
+    let p1 = partition.iter().filter(|p_id| **p_id == p_id1);
+    let p2 = partition.iter().filter(|p_id| **p_id == p_id2);
+    let p3 = partition.iter().filter(|p_id| **p_id == p_id3);
+    let p4 = partition.iter().filter(|p_id| **p_id == p_id4);
 
     assert_eq!(p1.count(), 2);
     assert_eq!(p2.count(), 2);

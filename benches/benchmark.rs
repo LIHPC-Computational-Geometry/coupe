@@ -27,7 +27,7 @@ fn bench_axis_sort_random(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort(ids.clone(), weights.clone(), sample_points.clone(), true))
+            b.iter(|| axis_sort(&ids, &weights, &sample_points, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -109,7 +109,7 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort(ids.clone(), weights.clone(), sample_points.clone(), true))
+            b.iter(|| axis_sort(&ids, &weights, &sample_points, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -125,14 +125,7 @@ fn bench_rcb_random(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| {
-                rcb(
-                    ids.clone(),
-                    weights.clone(),
-                    sample_points.clone(),
-                    NUM_ITER,
-                )
-            })
+            b.iter(|| rcb(&ids, &weights, &sample_points, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }

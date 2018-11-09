@@ -32,22 +32,24 @@ fn main() {
 
     let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
         .into_iter()
-        .map(|p| p * p.y)
+        // .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let (partition, _weights, _points) = rcb(ids, weights, points.clone(), num_iter);
+    let partition = rcb(&ids, &weights, &points.clone(), num_iter);
 
     // sort ids
-    let sorted_part_ids = partition
-        .iter()
-        .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
+    // let sorted_part_ids = partition
+    //     .iter()
+    //     .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
-    let points = points
-        .into_iter()
-        .zip(sorted_part_ids.iter().map(|(_, pid)| *pid))
-        .collect::<Vec<_>>();
+    // let points = points
+    //     .into_iter()
+    //     .zip(sorted_part_ids.iter().map(|(_, pid)| *pid))
+    //     .collect::<Vec<_>>();
 
     if !matches.is_present("quiet") {
-        examples::plot_partition(points)
+        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+
+        examples::plot_partition(part)
     }
 }
