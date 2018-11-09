@@ -6,7 +6,6 @@ extern crate rand;
 
 use clap::load_yaml;
 use clap::App;
-use itertools::Itertools;
 
 use coupe::algorithms::geometric::rib;
 use coupe::geometry::Point2D;

@@ -6,7 +6,6 @@ extern crate rand;
 
 use clap::load_yaml;
 use clap::App;
-use itertools::Itertools;
 
 use coupe::algorithms::geometric::rcb;
 use coupe::geometry::Point2D;
@@ -36,16 +35,6 @@ fn main() {
         .collect::<Vec<_>>();
 
     let partition = rcb(&ids, &weights, &points.clone(), num_iter);
-
-    // sort ids
-    // let sorted_part_ids = partition
-    //     .iter()
-    //     .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
-
-    // let points = points
-    //     .into_iter()
-    //     .zip(sorted_part_ids.iter().map(|(_, pid)| *pid))
-    //     .collect::<Vec<_>>();
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

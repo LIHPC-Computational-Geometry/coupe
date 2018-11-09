@@ -60,6 +60,19 @@ fn rcb_recurse(
         let part_id = ProcessUniqueId::new();
         permutation.par_iter().for_each(|idx| {
             let ptr = partition.load(atomic::Ordering::Relaxed);
+
+            // Unsafe usage explanation:
+            //
+            // In this implementation, the partition is represented as
+            // a contiguous array of ids. It is allocated once, and modified in place.
+            // Neither the array nor a slice of it is ever copied. When recursing, a pointer to
+            // the array is passed to children functions, which both have mutable access to the
+            // partition array from different threads (That's why the pointer is wrapped in a
+            // Arc<AtomicPtr<T>>). It is not possible to have shared mutable access to memory
+            // across (one/several) threads in safe code. However, the raw pointer is indexed
+            // through the permutation array which contains valid indices and is not shared across
+            // children calls/threads. This ensures that ptr.add(*idx) is valid memory and every
+            // element of the partition array will be written on exactly once.
             unsafe { std::ptr::write(ptr.add(*idx), part_id) }
         });
     } else {
@@ -68,21 +81,7 @@ fn rcb_recurse(
         // alternating at each iteration.
 
         // We first need to sort the objects w.r.t. x or y position
-        if x_axis {
-            permutation.par_sort_by(|i1, i2| {
-                points[*i1]
-                    .x
-                    .partial_cmp(&points[*i2].x)
-                    .unwrap_or(Ordering::Equal)
-            });
-        } else {
-            permutation.par_sort_by(|i1, i2| {
-                points[*i1]
-                    .y
-                    .partial_cmp(&points[*i2].y)
-                    .unwrap_or(Ordering::Equal)
-            });
-        }
+        axis_sort_permu(points, permutation, x_axis);
 
         // We then seek the split position
         let split_pos = half_weight_pos_permu(weights, permutation);
@@ -118,6 +117,14 @@ fn rcb_recurse(
                 )
             },
         );
+    }
+}
+
+pub fn axis_sort_permu(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
+    if x_axis {
+        permutation.par_sort_by(|i1, i2| points[*i1].x.partial_cmp(&points[*i2].x).unwrap());
+    } else {
+        permutation.par_sort_by(|i1, i2| points[*i1].y.partial_cmp(&points[*i2].y).unwrap());
     }
 }
 
