@@ -11,6 +11,7 @@ use rayon::prelude::*;
 
 use coupe::algorithms;
 use coupe::algorithms::k_means::BalancedKmeansSettings;
+use coupe::algorithms::multi_jagged::*;
 use coupe::geometry::Point2D;
 use mesh_io::{mesh::Mesh, mesh::D3, xyz::XYZMesh};
 
@@ -24,6 +25,7 @@ fn main() -> Result<(), Error> {
     match matches.subcommand() {
         ("rcb", Some(submatches)) => rcb(mesh, submatches),
         ("rib", Some(submatches)) => rib(mesh, submatches),
+        ("multi_jagged", Some(submatches)) => multi_jagged(mesh, submatches),
         ("simplified_k_means", Some(submatches)) => simplified_k_means(mesh, submatches),
         ("balanced_k_means", Some(submatches)) => balanced_k_means(mesh, submatches),
         _ => bail! {"no subcommand specified"},
@@ -89,6 +91,33 @@ fn rib<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     println!("info: entering RIB algorithm");
     let partition = algorithms::geometric::rib(&weights, &points.clone(), num_iter);
     println!("info: left RIB algorithm");
+
+    if !matches.is_present("quiet") {
+        let part = points.into_par_iter().zip(partition).collect::<Vec<_>>();
+
+        examples::plot_partition(part)
+    }
+}
+
+fn multi_jagged<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+    let points = mesh
+        .vertices()
+        .into_par_iter()
+        .map(|p| Point2D::new(p.x, p.y))
+        .collect::<Vec<_>>();
+
+    let num_points = points.len();
+
+    let weights = (1..num_points)
+        .into_par_iter()
+        .map(|_| 1.)
+        .collect::<Vec<_>>();
+
+    println!("info: entering Multi-Jagged algorithm");
+    let now = std::time::Instant::now();
+    let partition = multi_jagged_2d_with_scheme(&points, &weights, &[1, 1, 1]);
+    let end = now.elapsed();
+    println!("info: left Multi-Jagged algorithm. elapsed = {:?}", end);
 
     if !matches.is_present("quiet") {
         let part = points.into_par_iter().zip(partition).collect::<Vec<_>>();

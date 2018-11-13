@@ -30,6 +30,12 @@ subcommands:
         long: quiet
         short: q
         help: Disables the GUI output
+ - multi_jagged:
+    args:
+     - quiet:
+        long: quiet
+        short: q
+        help: Disables the GUI output
  - simplified_k_means:
     about: "Simplified K-means partitioning algorithm"
     args:
