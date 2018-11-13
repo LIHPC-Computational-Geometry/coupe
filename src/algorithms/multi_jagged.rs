@@ -11,13 +11,12 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
-use std::sync::Arc;
 
 fn is_prime(n: u32) -> bool {
     if n < 2 {
         return false;
     }
-    let p: u32 = (n as f64).sqrt() as u32;
+    let p: u32 = (f64::from(n)).sqrt() as u32;
 
     for i in 2..=p {
         if n % i == 0 {
@@ -59,7 +58,7 @@ fn partition_scheme(_points: &[Point2D], num_parts: usize) -> Vec<usize> {
 pub fn multi_jagged_2d_with_scheme(
     points: &[Point2D],
     weights: &[f64],
-    partition_scheme: Vec<usize>,
+    partition_scheme: &[usize],
 ) -> Vec<ProcessUniqueId> {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
@@ -72,7 +71,7 @@ pub fn multi_jagged_2d_with_scheme(
         points,
         weights,
         &mut permutation,
-        Arc::new(AtomicPtr::new(initial_partition.as_mut_ptr())),
+        &AtomicPtr::new(initial_partition.as_mut_ptr()),
         true,
         &partition_scheme,
     );
@@ -84,7 +83,7 @@ fn multi_jagged_2d_recurse(
     points: &[Point2D],
     weights: &[f64],
     permutation: &mut [usize],
-    partition: Arc<AtomicPtr<ProcessUniqueId>>,
+    partition: &AtomicPtr<ProcessUniqueId>,
     x_axis: bool,
     partition_scheme: &[usize],
 ) {
@@ -100,7 +99,7 @@ fn multi_jagged_2d_recurse(
                 points,
                 weights,
                 permu,
-                partition.clone(),
+                partition,
                 x_axis,
                 &partition_scheme[1..],
             )
@@ -128,9 +127,9 @@ fn compute_split_positions(
     num_splits: usize,
 ) -> Vec<usize> {
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
+
     let weight_thresholds = (1..=num_splits)
-        .into_iter()
-        .map(|n| total_weight * (n / (num_splits + 1)) as f64)
+        .map(|n| total_weight * n as f64 / (num_splits + 1) as f64)
         .collect::<Vec<_>>();
 
     let mut ret = Vec::with_capacity(num_splits);
@@ -150,19 +149,27 @@ fn compute_split_positions(
     let mut current_weights_sum = 0.;
     let mut current_weights_sums_cache = Vec::with_capacity(num_splits);
 
-    // TODO remove scope braces when NLL is stable
-    {
-        let mut iter = weight_thresholds.iter();
-        while let Some(threshold) = iter.next() {
-            'inner: loop {
-                let current = scan.next().unwrap();
-                if current_weights_sum + current.1 > *threshold {
-                    ret.push(current.0);
-                    current_weights_sums_cache.push(current_weights_sum);
-                    break 'inner;
-                }
+    for threshold in weight_thresholds.iter() {
+        // if this condition is verified, it means that a block of the scan contained more than one threshold
+        // and the current threshold was skipped during previous iteration. We just
+        // push the last element again and skip the rest of the iteration
+        if current_weights_sum > *threshold {
+            let last = ret[ret.len() - 1];
+            ret.push(last);
+            let last = current_weights_sums_cache[current_weights_sums_cache.len() - 1];
+            current_weights_sums_cache.push(last);
+            continue;
+        }
+
+        'inner: loop {
+            let current = scan.next().unwrap();
+            if current_weights_sum + current.1 > *threshold {
+                ret.push(current.0);
+                current_weights_sums_cache.push(current_weights_sum);
                 current_weights_sum += current.1;
+                break 'inner;
             }
+            current_weights_sum += current.1;
         }
     }
 

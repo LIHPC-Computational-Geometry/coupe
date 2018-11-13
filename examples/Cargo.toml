@@ -19,6 +19,9 @@ name = "rcb"
 name = "rib"
 
 [[bin]]
+name = "multi_jagged"
+
+[[bin]]
 name = "simplified_k_means"
 
 [[bin]]

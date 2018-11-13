@@ -1,0 +1,12 @@
+name: "multi_jagged"
+about: "An example using the Multi-Jagged algorithm"
+args:
+ - num_points:
+    long: num_points
+    takes_value: true
+    default_value: "5000"
+    help: Sets the number of points randomly generated
+ - quiet:
+    long: quiet
+    short: q
+    help: Disables the GUI output
