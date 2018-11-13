@@ -6,7 +6,6 @@
 //! in each iteration which leads to decreasing recursion depth.
 
 use crate::geometry::*;
-use itertools::iproduct;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -57,23 +56,6 @@ fn partition_scheme(_points: &[Point2D], num_parts: usize) -> Vec<usize> {
     primes.into_iter().map(|p| p as usize).collect()
 }
 
-// returns split indices
-fn split_weights(weights: &[f64], num_parts: usize) -> Vec<usize> {
-    let target_weight = weights.iter().sum::<f64>() / num_parts as f64;
-    let mut ret = vec![];
-    let mut idx = 0;
-    for _ in 0..num_parts {
-        let mut weight = target_weight;
-        loop {
-            weight -= weights[idx];
-
-            idx += 1;
-        }
-    }
-
-    ret
-}
-
 pub fn multi_jagged_2d_with_scheme(
     points: &[Point2D],
     weights: &[f64],
@@ -107,7 +89,6 @@ fn multi_jagged_2d_recurse(
     partition_scheme: &[usize],
 ) {
     if let Some(num_splits) = partition_scheme.iter().next() {
-        // recurse
         axis_sort(points, permutation, x_axis);
 
         let split_positions = compute_split_positions(weights, permutation, *num_splits);
@@ -146,11 +127,74 @@ fn compute_split_positions(
     permutation: &[usize],
     num_splits: usize,
 ) -> Vec<usize> {
-    unimplemented!()
+    let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
+    let weight_thresholds = (1..=num_splits)
+        .into_iter()
+        .map(|n| total_weight * (n / (num_splits + 1)) as f64)
+        .collect::<Vec<_>>();
+
+    let mut ret = Vec::with_capacity(num_splits);
+
+    let mut scan = permutation
+        .par_iter()
+        .enumerate()
+        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
+            if idx < low {
+                (idx, acc + weights[*val])
+            } else {
+                (low, acc + weights[*val])
+            }
+        }).collect::<Vec<_>>()
+        .into_iter();
+
+    let mut current_weights_sum = 0.;
+    let mut current_weights_sums_cache = Vec::with_capacity(num_splits);
+
+    // TODO remove scope braces when NLL is stable
+    {
+        let mut iter = weight_thresholds.iter();
+        while let Some(threshold) = iter.next() {
+            'inner: loop {
+                let current = scan.next().unwrap();
+                if current_weights_sum + current.1 > *threshold {
+                    ret.push(current.0);
+                    current_weights_sums_cache.push(current_weights_sum);
+                    break 'inner;
+                }
+                current_weights_sum += current.1;
+            }
+        }
+    }
+
+    ret.into_par_iter()
+        .zip(current_weights_sums_cache)
+        .zip(weight_thresholds)
+        .map(|((mut idx, mut sum), threshold)| {
+            while sum < threshold {
+                idx += 1;
+                sum += weights[permutation[idx]];
+            }
+            idx
+        }).collect()
 }
 
+// Same as slice::split_at_mut but split in a arbitrary number of subslices
+// Sequential since `position` should be small
 fn split_at_mut_many<'a, T>(slice: &'a mut [T], positions: &[usize]) -> Vec<&'a mut [T]> {
-    unimplemented!()
+    let ret = Vec::with_capacity(positions.len() + 1);
+
+    let (mut head, tail, _) = positions.iter().fold(
+        (ret, slice, 0),
+        |(mut acc_ret, acc_slice, drained_count), pos| {
+            let (sub, next) = acc_slice.split_at_mut(*pos - drained_count);
+            let len = sub.len();
+            acc_ret.push(sub);
+            (acc_ret, next, drained_count + len)
+        },
+    );
+
+    head.push(tail);
+    head
 }
 
 fn is_less_cmp_f64(a: f64, b: f64) -> Ordering {
@@ -188,5 +232,24 @@ mod tests {
             prime_factors(2 * 3 * 3 * 5 * 7 * 11 * 13 * 17),
             vec![2, 3, 3, 5, 7, 11, 13, 17]
         );
+    }
+
+    #[test]
+    fn test_split_at_mut_many() {
+        let array = &mut [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+        let sub_arrays = split_at_mut_many(array, &[1, 3, 6, 9, 11]);
+
+        assert_eq!(
+            sub_arrays,
+            vec![
+                &mut [0][..],
+                &mut [1, 2][..],
+                &mut [3, 4, 5][..],
+                &mut [6, 7, 8][..],
+                &mut [9, 10][..],
+                &mut [11, 12][..],
+            ]
+        )
     }
 }
