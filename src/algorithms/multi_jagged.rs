@@ -63,17 +63,26 @@ fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionSche
     let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
     let rem = num_parts % approx_root;
     let quotient = num_parts / approx_root;
-    let modifiers = (0..rem)
-        .map(|_| 1. + 1. / quotient as f32)
-        .collect::<Vec<_>>();
 
-    eprintln!(
-        "CALLED WITH num_parts = {}, max_iter = {}",
-        num_parts, max_iter
-    );
-    eprintln!("root = {}", approx_root);
-    eprintln!("rem = {}", rem);
-    eprintln!("quotient = {}", quotient);
+    let n = quotient as f32;
+    let m = n + 1 as f32;
+    let M = rem as f32;
+    let N = (approx_root - rem) as f32;
+
+    println!("num_parts = {}", num_parts);
+    println!("max_iter = {}", max_iter);
+    println!("approx = {}", approx_root);
+    println!("rem = {}", rem);
+    println!("q = {}", quotient);
+
+    println!("n = {}", n);
+    println!("m = {}", m);
+    println!("N = {}", N);
+    println!("M = {}", M);
+    let modifiers = (0..rem)
+        .map(|_| m / (n * N + m * M))
+        .chain((rem..approx_root).map(|_| n / (n * N + m * M)))
+        .collect::<Vec<_>>();
 
     let next = if rem == 0 && max_iter == 0 {
         None
@@ -158,7 +167,12 @@ fn multi_jagged_2d_recurse(
 
         axis_sort(points, permutation, x_axis);
 
-        let split_positions = compute_split_positions(weights, permutation, num_splits);
+        let split_positions = compute_split_positions(
+            weights,
+            permutation,
+            num_splits,
+            &partition_scheme.modifiers,
+        );
         let mut sub_permutations = split_at_mut_many(permutation, &split_positions);
 
         let x_axis = !x_axis;
@@ -189,12 +203,27 @@ fn compute_split_positions(
     weights: &[f64],
     permutation: &[usize],
     num_splits: usize,
+    modifiers: &[f32],
 ) -> Vec<usize> {
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
 
     let weight_thresholds = (1..=num_splits)
         .map(|n| total_weight * n as f64 / (num_splits + 1) as f64)
         .collect::<Vec<_>>();
+
+    println!("modifiers = {:?}", modifiers);
+    println!("n_splits = {}", num_splits);
+    let mut modifiers = modifiers.into_iter();
+    let mut consumed_weight = total_weight * *modifiers.next().unwrap() as f64;
+    let mut weight_thresholds = Vec::with_capacity(num_splits);
+
+    while let Some(modifier) = modifiers.next() {
+        weight_thresholds.push(consumed_weight);
+        consumed_weight += total_weight * *modifier as f64;
+    }
+
+    assert_eq!(weight_thresholds.len(), num_splits);
+    println!("thresholds = {:?}", weight_thresholds);
 
     let mut ret = Vec::with_capacity(num_splits);
 
