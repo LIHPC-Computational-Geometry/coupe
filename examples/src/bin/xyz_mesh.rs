@@ -100,6 +100,18 @@ fn rib<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 }
 
 fn multi_jagged<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+    let num_partitions: usize = matches
+        .value_of("num_partitions")
+        .unwrap_or_default()
+        .parse()
+        .expect("Wrong value for num_partitions");
+
+    let max_iter: usize = matches
+        .value_of("max_iter")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for max_iter");
+
     let points = mesh
         .vertices()
         .into_par_iter()
@@ -108,14 +120,14 @@ fn multi_jagged<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let num_points = points.len();
 
-    let weights = (1..num_points)
+    let weights = (0..num_points)
         .into_par_iter()
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
     println!("info: entering Multi-Jagged algorithm");
     let now = std::time::Instant::now();
-    let partition = multi_jagged_2d_with_scheme(&points, &weights, &[1, 1, 1]);
+    let partition = multi_jagged_2d(&points, &weights, num_partitions, max_iter);
     let end = now.elapsed();
     println!("info: left Multi-Jagged algorithm. elapsed = {:?}", end);
 

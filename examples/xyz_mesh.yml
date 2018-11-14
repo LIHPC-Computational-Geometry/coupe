@@ -32,6 +32,16 @@ subcommands:
         help: Disables the GUI output
  - multi_jagged:
     args:
+     - num_partitions:
+        long: num_partitions
+        takes_value: true
+        default_value: "6"
+        help: Sets the number of wanted partitions
+     - max_iter:
+        long: max_iter
+        takes_value: true
+        default_value: "5"
+        help: Sets the maximum number of iterations of the algorithm
      - quiet:
         long: quiet
         short: q

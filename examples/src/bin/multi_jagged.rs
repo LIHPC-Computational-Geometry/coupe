@@ -7,7 +7,7 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::multi_jagged::multi_jagged_2d_with_scheme;
+use coupe::algorithms::multi_jagged::*;
 use coupe::geometry::Point2D;
 
 fn main() {
@@ -20,14 +20,24 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
+    let num_partitions: usize = matches
+        .value_of("num_partitions")
+        .unwrap_or_default()
+        .parse()
+        .expect("Wrong value for num_partitions");
+
+    let max_iter: usize = matches
+        .value_of("max_iter")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for max_iter");
+
     let weights = vec![1.; num_points];
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
-    let partition_scheme = vec![3, 3, 3];
-
     let now = std::time::Instant::now();
-    let partition = multi_jagged_2d_with_scheme(&points, &weights, &partition_scheme);
+    let partition = multi_jagged_2d(&points, &weights, num_partitions, max_iter);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

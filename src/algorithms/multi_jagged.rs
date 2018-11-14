@@ -46,6 +46,62 @@ fn prime_factors(mut n: u32) -> Vec<u32> {
     ret
 }
 
+// 7 in 3 steps:
+// ceil(7^(1/3)) = 2, 7/2 = 3, 7 % 2 = 1 => one cut
+// left: ceil(3 ^ (1/3)) = 2 2*1 + 1 => one cut then cut again
+// right: ceil((3 + 1) ^ (1/3)) = 2 => 2*2+0 => two cuts
+
+// Computes from a set of points, how many sections will be made at each iteration;
+// fn partition_scheme(points: &[Point2D], num_parts: usize, max_iter: usize) -> Vec<usize> {
+//     let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
+//     let rem = num_parts % approx_root;
+// }
+
+// Returns the number of splits for the iteration and an array of target_weights modifier to
+// take into account an asymetric split scheme
+fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionScheme {
+    let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
+    let rem = num_parts % approx_root;
+    let quotient = num_parts / approx_root;
+    let modifiers = (0..rem)
+        .map(|_| 1. + 1. / quotient as f32)
+        .collect::<Vec<_>>();
+
+    eprintln!(
+        "CALLED WITH num_parts = {}, max_iter = {}",
+        num_parts, max_iter
+    );
+    eprintln!("root = {}", approx_root);
+    eprintln!("rem = {}", rem);
+    eprintln!("quotient = {}", quotient);
+
+    let next = if rem == 0 && max_iter == 0 {
+        None
+    } else {
+        let mut next = Vec::new();
+        for _ in 0..rem {
+            next.push(partition_scheme_one_step(quotient + 1, max_iter - 1));
+        }
+        for _ in rem..approx_root {
+            next.push(partition_scheme_one_step(quotient, max_iter - 1));
+        }
+        Some(next)
+    };
+
+    PartitionScheme {
+        num_splits: approx_root - 1,
+        modifiers,
+        next,
+    }
+}
+
+#[derive(Debug)]
+pub struct PartitionScheme {
+    pub num_splits: usize,
+    pub modifiers: Vec<f32>,
+    pub next: Option<Vec<PartitionScheme>>,
+}
+
 // Computes from a set of points, how many sections will be made at each iteration;
 fn partition_scheme(_points: &[Point2D], num_parts: usize) -> Vec<usize> {
     // for now the points are ignored
@@ -55,10 +111,20 @@ fn partition_scheme(_points: &[Point2D], num_parts: usize) -> Vec<usize> {
     primes.into_iter().map(|p| p as usize).collect()
 }
 
+pub fn multi_jagged_2d(
+    points: &[Point2D],
+    weights: &[f64],
+    num_parts: usize,
+    max_iter: usize,
+) -> Vec<ProcessUniqueId> {
+    let partition_scheme = partition_scheme_one_step(num_parts, max_iter);
+    multi_jagged_2d_with_scheme(points, weights, partition_scheme)
+}
+
 pub fn multi_jagged_2d_with_scheme(
     points: &[Point2D],
     weights: &[f64],
-    partition_scheme: &[usize],
+    partition_scheme: PartitionScheme,
 ) -> Vec<ProcessUniqueId> {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
@@ -73,7 +139,7 @@ pub fn multi_jagged_2d_with_scheme(
         &mut permutation,
         &AtomicPtr::new(initial_partition.as_mut_ptr()),
         true,
-        &partition_scheme,
+        partition_scheme,
     );
 
     initial_partition
@@ -85,25 +151,23 @@ fn multi_jagged_2d_recurse(
     permutation: &mut [usize],
     partition: &AtomicPtr<ProcessUniqueId>,
     x_axis: bool,
-    partition_scheme: &[usize],
+    partition_scheme: PartitionScheme,
 ) {
-    if let Some(num_splits) = partition_scheme.iter().next() {
+    if partition_scheme.num_splits != 0 {
+        let num_splits = partition_scheme.num_splits;
+
         axis_sort(points, permutation, x_axis);
 
-        let split_positions = compute_split_positions(weights, permutation, *num_splits);
+        let split_positions = compute_split_positions(weights, permutation, num_splits);
         let mut sub_permutations = split_at_mut_many(permutation, &split_positions);
 
         let x_axis = !x_axis;
-        sub_permutations.par_iter_mut().for_each(|permu| {
-            multi_jagged_2d_recurse(
-                points,
-                weights,
-                permu,
-                partition,
-                x_axis,
-                &partition_scheme[1..],
-            )
-        });
+        sub_permutations
+            .par_iter_mut()
+            .zip(partition_scheme.next.unwrap())
+            .for_each(|(permu, scheme)| {
+                multi_jagged_2d_recurse(points, weights, permu, partition, x_axis, scheme)
+            });
     } else {
         let part_id = ProcessUniqueId::new();
         permutation.par_iter().for_each(|idx| {
@@ -231,6 +295,14 @@ mod tests {
         assert!(is_prime(11));
         assert!(!is_prime(12));
         assert!(is_prime(13));
+    }
+
+    #[test]
+    fn test_partition_scheme() {
+        let scheme = partition_scheme_one_step(7, 3);
+
+        eprintln!("{:#?}", scheme);
+        assert!(false);
     }
 
     #[test]
