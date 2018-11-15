@@ -67,6 +67,17 @@ pub fn imbalance_max_diff(weights: &[f64], partition: &[ProcessUniqueId]) -> f64
         .unwrap_or(0.)
 }
 
+pub fn imbalance_relative_diff(weights: &[f64], partition: &[ProcessUniqueId]) -> f64 {
+    if weights.len() == 0 {
+        return 0.;
+    }
+
+    let total_weight = weights.iter().sum::<f64>();
+    let max_diff = imbalance_max_diff(weights, partition);
+
+    max_diff / total_weight
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -46,11 +46,6 @@ fn prime_factors(mut n: u32) -> Vec<u32> {
     ret
 }
 
-// 7 in 3 steps:
-// ceil(7^(1/3)) = 2, 7/2 = 3, 7 % 2 = 1 => one cut
-// left: ceil(3 ^ (1/3)) = 2 2*1 + 1 => one cut then cut again
-// right: ceil((3 + 1) ^ (1/3)) = 2 => 2*2+0 => two cuts
-
 // Computes from a set of points, how many sections will be made at each iteration;
 // fn partition_scheme(points: &[Point2D], num_parts: usize, max_iter: usize) -> Vec<usize> {
 //     let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
@@ -64,25 +59,17 @@ fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionSche
     let rem = num_parts % approx_root;
     let quotient = num_parts / approx_root;
 
-    let n = quotient as f32;
-    let m = n + 1 as f32;
-    let M = rem as f32;
-    let N = (approx_root - rem) as f32;
+    // let n = quotient as f32;
+    // let m = n + 1 as f32;
+    // let M = rem as f32;
+    // let N = (approx_root - rem) as f32;
 
-    println!("num_parts = {}", num_parts);
-    println!("max_iter = {}", max_iter);
-    println!("approx = {}", approx_root);
-    println!("rem = {}", rem);
-    println!("q = {}", quotient);
+    // let modifiers = (0..rem)
+    //     .map(|_| m / (n * N + m * M))
+    //     .chain((rem..approx_root).map(|_| n / (n * N + m * M)))
+    //     .collect::<Vec<_>>();
 
-    println!("n = {}", n);
-    println!("m = {}", m);
-    println!("N = {}", N);
-    println!("M = {}", M);
-    let modifiers = (0..rem)
-        .map(|_| m / (n * N + m * M))
-        .chain((rem..approx_root).map(|_| n / (n * N + m * M)))
-        .collect::<Vec<_>>();
+    let modifiers = compute_modifiers(approx_root - rem, rem, quotient, quotient + 1);
 
     let next = if rem == 0 && max_iter == 0 {
         None
@@ -102,6 +89,56 @@ fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionSche
         modifiers,
         next,
     }
+}
+
+// Computes target weight modifiers for irregular partitions.
+//
+// Example:
+//    Consider the unit square [0, 1] x [0, 1] to be a uniform distribution of many points.
+//    We want to split it in 5 parts of equal weights with multi-jagged in 2 iterations.
+//     - First iteration: we split the square in two parts.
+//     - Second iteration: we split the left part in three subparts and the right part
+//       in two parts.
+//    Or, if we want to split it in 3 parts of equal weight in 2 iterations.
+//
+//    The first split must be done unevenly and will be done such that after the split,
+//    some parts will eventally contain exactly one more final part than others (e.g. below
+//    the first left split eventually contains 3 final parts and the right split only contains 2).
+//    Note: it also could be possible that the number of final parts difference between parts is higher than 1,
+//    but it's not the case here.
+//
+//    Given an iteration that requires N splits of the current part that contains the total weight W,
+//    the modifiers is an array [mod_1, ..., mod_n] of float values. The split should be done such that
+//    the i-th part contains the weight mod_i * W.
+//
+//                  5 parts in 2 iterations                         3 parts in 2 iterations
+//               _____________________________                  _____________________________
+//    |       | |                    |        | |            | |                  |          |
+//    |   1/3 | |                    |        | | 1/2    1/2 | |                  |          |
+//    |       | |                    |        | |            | |                  |          |
+//    |         |--------------------|        | |            | |                  |          |
+//    |       | |                    |        | |            | |                  |          |
+//  1 |   1/3 | |                    |--------|                |------------------|          |
+//    |       | |                    |        | |            | |                  |          |
+//    |       | |                    |        | |            | |                  |          |
+//    |         |--------------------|        | | 1/2    1/2 | |                  |          |
+//    |       | |                    |        | |            | |                  |          |
+//    |   1/3 | |                    |        | |            | |                  |          |
+//    |       | |____________________|________| |            | |__________________|__________|
+//               ____________________ ________                  __________________ __________
+//                         3/5             2/5                            2/3            1/3
+//
+fn compute_modifiers(
+    num_regular_parts: usize,
+    num_fat_parts: usize,
+    num_regular_subparts: usize, // the total number of subparts in the regular_parts
+    num_fat_subparts: usize,     // the total number of subparts in the fat_parts
+) -> Vec<f32> {
+    let num_subparts = num_regular_parts * num_regular_subparts + num_fat_parts * num_fat_subparts;
+    (0..num_fat_parts)
+        .map(|_| num_fat_subparts as f32 / num_subparts as f32)
+        .chain((0..num_regular_parts).map(|_| num_regular_subparts as f32 / num_subparts as f32))
+        .collect()
 }
 
 #[derive(Debug)]

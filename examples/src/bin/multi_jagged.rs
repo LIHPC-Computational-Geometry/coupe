@@ -33,6 +33,7 @@ fn main() {
         .expect("wrong value for max_iter");
 
     let weights = vec![1.; num_points];
+    // let weights = (1..=num_points).map(|i| i as f64).collect::<Vec<f64>>();
 
     // let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
     let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
@@ -46,11 +47,21 @@ fn main() {
         .into_iter()
         .map(|(_id, w)| w)
         .collect::<Vec<_>>();
-    let imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
+    let max_imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
+    let relative_imbalance = coupe::analysis::imbalance_relative_diff(&weights, &partition);
+    let mut aspect_ratios = coupe::analysis::aspect_ratios(&partition, &points)
+        .into_iter()
+        .map(|(_id, r)| r)
+        .collect::<Vec<_>>();;
+    aspect_ratios
+        .as_mut_slice()
+        .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
 
     println!("Partition analysis:");
-    println!("   > max weight diff: {}", imbalance);
-    println!("   > parts weights: {:?}", part_weights);
+    println!("   > max weight diff: {}", max_imbalance);
+    println!("   > relative weight diff: {}%", 100. * relative_imbalance);
+    println!("   > ordered aspect ratios: {:?}", aspect_ratios);
+    // println!("   > parts weights: {:?}", part_weights);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();
