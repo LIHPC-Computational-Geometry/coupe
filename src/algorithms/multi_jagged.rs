@@ -12,6 +12,10 @@ use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
+// prime functions are currently unused but may be useful to compute a
+// partitioning scheme based on a prime factor decomposition
+
+#[allow(unused)]
 fn is_prime(n: u32) -> bool {
     if n < 2 {
         return false;
@@ -27,6 +31,7 @@ fn is_prime(n: u32) -> bool {
 }
 
 // Computes the list of primes factors of a given number n
+#[allow(unused)]
 fn prime_factors(mut n: u32) -> Vec<u32> {
     if n <= 1 {
         return vec![1];
@@ -46,28 +51,25 @@ fn prime_factors(mut n: u32) -> Vec<u32> {
     ret
 }
 
-// Computes from a set of points, how many sections will be made at each iteration;
-// fn partition_scheme(points: &[Point2D], num_parts: usize, max_iter: usize) -> Vec<usize> {
-//     let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
-//     let rem = num_parts % approx_root;
-// }
+#[derive(Debug)]
+struct PartitionScheme {
+    pub num_splits: usize,
+    pub modifiers: Vec<f32>,
+    pub next: Option<Vec<PartitionScheme>>,
+}
 
-// Returns the number of splits for the iteration and an array of target_weights modifier to
-// take into account an asymetric split scheme
-fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionScheme {
+// Computes a partitioning scheme i.e. how to split points at each iteration given
+// a number of partitions and a number of max iterations.
+//
+// The current implementation is a recursive algorithm :
+//   - The first split generates num_parts^(1/max_iter) parts.
+//   - Some of those parts can be "fat" meaning that they will eventually contain
+//     one more part than the "non-fat" one.
+//   - Recursion is applied on each part.
+fn partition_scheme(num_parts: usize, max_iter: usize) -> PartitionScheme {
     let approx_root = (num_parts as f32).powf(1. / max_iter as f32).ceil() as usize;
     let rem = num_parts % approx_root;
     let quotient = num_parts / approx_root;
-
-    // let n = quotient as f32;
-    // let m = n + 1 as f32;
-    // let M = rem as f32;
-    // let N = (approx_root - rem) as f32;
-
-    // let modifiers = (0..rem)
-    //     .map(|_| m / (n * N + m * M))
-    //     .chain((rem..approx_root).map(|_| n / (n * N + m * M)))
-    //     .collect::<Vec<_>>();
 
     let modifiers = compute_modifiers(approx_root - rem, rem, quotient, quotient + 1);
 
@@ -76,10 +78,12 @@ fn partition_scheme_one_step(num_parts: usize, max_iter: usize) -> PartitionSche
     } else {
         let mut next = Vec::new();
         for _ in 0..rem {
-            next.push(partition_scheme_one_step(quotient + 1, max_iter - 1));
+            // recurse on "fat" parts
+            next.push(partition_scheme(quotient + 1, max_iter - 1));
         }
         for _ in rem..approx_root {
-            next.push(partition_scheme_one_step(quotient, max_iter - 1));
+            // recurse on "regular" parts
+            next.push(partition_scheme(quotient, max_iter - 1));
         }
         Some(next)
     };
@@ -141,33 +145,17 @@ fn compute_modifiers(
         .collect()
 }
 
-#[derive(Debug)]
-pub struct PartitionScheme {
-    pub num_splits: usize,
-    pub modifiers: Vec<f32>,
-    pub next: Option<Vec<PartitionScheme>>,
-}
-
-// Computes from a set of points, how many sections will be made at each iteration;
-fn partition_scheme(_points: &[Point2D], num_parts: usize) -> Vec<usize> {
-    // for now the points are ignored
-    // TODO: improve by adapting scheme with geometry, e.g. aspect ratio
-    let primes = prime_factors(num_parts as u32);
-
-    primes.into_iter().map(|p| p as usize).collect()
-}
-
 pub fn multi_jagged_2d(
     points: &[Point2D],
     weights: &[f64],
     num_parts: usize,
     max_iter: usize,
 ) -> Vec<ProcessUniqueId> {
-    let partition_scheme = partition_scheme_one_step(num_parts, max_iter);
+    let partition_scheme = partition_scheme(num_parts, max_iter);
     multi_jagged_2d_with_scheme(points, weights, partition_scheme)
 }
 
-pub fn multi_jagged_2d_with_scheme(
+fn multi_jagged_2d_with_scheme(
     points: &[Point2D],
     weights: &[f64],
     partition_scheme: PartitionScheme,
@@ -228,6 +216,7 @@ fn multi_jagged_2d_recurse(
     }
 }
 
+// TODO: this is a duplicate from `geometric` module
 fn axis_sort(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
     if x_axis {
         permutation.par_sort_by(|i1, i2| is_less_cmp_f64(points[*i1].x, points[*i2].x));
@@ -244,12 +233,6 @@ fn compute_split_positions(
 ) -> Vec<usize> {
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
 
-    let weight_thresholds = (1..=num_splits)
-        .map(|n| total_weight * n as f64 / (num_splits + 1) as f64)
-        .collect::<Vec<_>>();
-
-    println!("modifiers = {:?}", modifiers);
-    println!("n_splits = {}", num_splits);
     let mut modifiers = modifiers.into_iter();
     let mut consumed_weight = total_weight * *modifiers.next().unwrap() as f64;
     let mut weight_thresholds = Vec::with_capacity(num_splits);
@@ -259,8 +242,7 @@ fn compute_split_positions(
         consumed_weight += total_weight * *modifier as f64;
     }
 
-    assert_eq!(weight_thresholds.len(), num_splits);
-    println!("thresholds = {:?}", weight_thresholds);
+    debug_assert_eq!(weight_thresholds.len(), num_splits);
 
     let mut ret = Vec::with_capacity(num_splits);
 
