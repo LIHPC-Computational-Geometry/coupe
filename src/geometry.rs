@@ -265,6 +265,216 @@ impl Mbr2D {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Aabb3D {
+    p_min: Point3D,
+    p_max: Point3D,
+}
+
+impl Aabb3D {
+    pub fn new(p_min: Point3D, p_max: Point3D) -> Self {
+        Self { p_min, p_max }
+    }
+
+    pub fn p_min(&self) -> Point3D {
+        self.p_min
+    }
+
+    pub fn p_max(&self) -> Point3D {
+        self.p_max
+    }
+
+    /// Constructs a new `Aabb2D` from an iterator of `Point2D`.
+    ///
+    /// The resulting `Aabb` is the smallest Aabb that contains every points of the iterator.
+    pub fn from_points<'a, I>(points: I) -> Self
+    where
+        I: Iterator<Item = &'a Point3D> + Clone,
+    {
+        use itertools::MinMaxResult::*;
+
+        // FIX: what happens if the points are aligned and parallel to x or y axis?
+        let (x_min, x_max) = match points.clone().map(|p| p.x).minmax() {
+            MinMax(x_min, x_max) => (x_min, x_max),
+            _ => panic!("Cannot construct a bounding box from less than two points"),
+        };
+
+        let (y_min, y_max) = match points.clone().map(|p| p.y).minmax() {
+            MinMax(y_min, y_max) => (y_min, y_max),
+            _ => unreachable!(),
+        };
+
+        let (z_min, z_max) = match points.map(|p| p.z).minmax() {
+            MinMax(z_min, z_max) => (z_min, z_max),
+            _ => unreachable!(),
+        };
+
+        Self::new(
+            Point3D::new(x_min, y_min, z_min),
+            Point3D::new(x_max, y_max, z_max),
+        )
+    }
+
+    /// Constructs a new Aabb that is a sub-Aabb of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_aabb(&self, octant: Octant) -> Self {
+        use self::Octant::*;
+        let center = self.center();
+        match octant {
+            BottomLeftNear => Aabb3D::new(self.p_min, center),
+            BottomLeftFar => Aabb3D::new(
+                Point3D::new(self.p_min.x, self.p_min.y, center.z),
+                Point3D::new(center.x, center.y, self.p_max.z),
+            ),
+            BottomRightNear => Aabb3D::new(
+                Point3D::new(center.x, self.p_min.y, self.p_min.z),
+                Point3D::new(self.p_max.x, center.y, center.z),
+            ),
+            BottomRightFar => Aabb3D::new(
+                Point3D::new(center.x, self.p_min.y, center.z),
+                Point3D::new(self.p_max.x, center.y, self.p_max.z),
+            ),
+            TopLeftNear => Aabb3D::new(
+                Point3D::new(self.p_min.x, center.y, self.p_min.z),
+                Point3D::new(center.x, self.p_max.y, center.z),
+            ),
+            TopLeftFar => Aabb3D::new(
+                Point3D::new(self.p_min.x, center.y, center.z),
+                Point3D::new(center.x, self.p_max.y, self.p_max.z),
+            ),
+            TopRightNear => Aabb3D::new(
+                Point3D::new(center.x, center.y, self.p_min.z),
+                Point3D::new(self.p_max.x, self.p_max.y, center.z),
+            ),
+            TopRightFar => Aabb3D::new(center, self.p_max),
+        }
+    }
+
+    /// Computes the aspect ratio of the Aabb.
+    ///
+    /// It is defined as follows:
+    /// `ratio = long_side / short_side`
+    ///
+    /// If `width` or `height` is equal to `0` then `ratio = 0`.
+    /// Otherwise, `ratio >= 1`
+    pub fn aspect_ratio(&self) -> f64 {
+        let width = self.p_max.x - self.p_min.x;
+        let height = self.p_max.y - self.p_min.y;
+        let depth = self.p_max.z - self.p_min.z;
+
+        let mut array = [width, height, depth];
+
+        (&mut array[..]).sort_unstable_by(|a, b| a.partial_cmp(&b).unwrap());
+
+        if array[0] < std::f64::EPSILON {
+            0.
+        } else {
+            array[2] / array[0]
+        }
+    }
+
+    /// Computes the distance between a point and the current Aabb.
+    pub fn distance_to_point(&self, point: &Point3D) -> f64 {
+        if !self.contains(point) {
+            let clamped_x = match point.x {
+                x if x > self.p_max.x => self.p_max.x,
+                x if x < self.p_min.x => self.p_min.x,
+                x => x,
+            };
+            let clamped_y = match point.y {
+                y if y > self.p_max.y => self.p_max.y,
+                y if y < self.p_min.y => self.p_min.y,
+                y => y,
+            };
+            let clamped_z = match point.z {
+                z if z > self.p_max.z => self.p_max.z,
+                z if z < self.p_min.z => self.p_min.z,
+                z => z,
+            };
+            Vector3::new(
+                clamped_x - point.x,
+                clamped_y - point.y,
+                clamped_z - point.z,
+            ).norm()
+        } else {
+            let center = self.center();
+            let x_dist = if point.x > center.x {
+                (self.p_max.x - point.x).abs()
+            } else {
+                (self.p_min.x - point.x).abs()
+            };
+            let y_dist = if point.y > center.y {
+                (self.p_max.y - point.y).abs()
+            } else {
+                (self.p_min.y - point.y).abs()
+            };
+            let z_dist = if point.z > center.z {
+                (self.p_max.z - point.z).abs()
+            } else {
+                (self.p_min.z - point.z).abs()
+            };
+
+            x_dist.max(y_dist).max(z_dist)
+        }
+    }
+
+    /// Computes the center of the Aabb
+    pub fn center(&self) -> Point3D {
+        Point3D::new(
+            0.5 * (self.p_min.x + self.p_max.x),
+            0.5 * (self.p_min.y + self.p_max.y),
+            0.5 * (self.p_min.z + self.p_max.z),
+        )
+    }
+
+    /// Returns wheter or not the specified point is contained in the Aabb
+    pub fn contains(&self, point: &Point3D) -> bool {
+        let eps = 10. * ::std::f64::EPSILON;
+        point.x < self.p_max.x + eps
+            && point.x > self.p_min.x - eps
+            && point.y < self.p_max.y + eps
+            && point.y > self.p_min.y - eps
+            && point.z < self.p_max.z + eps
+            && point.z > self.p_min.z - eps
+    }
+
+    /// Returns the quadrant of the Aabb in which the specified point is.
+    /// Returns `None` if the specified point is not contained in the Aabb
+    pub fn octant(&self, point: &Point3D) -> Option<Octant> {
+        use self::Octant::*;
+        if !self.contains(point) {
+            return None;
+        }
+
+        let center = self.center();
+
+        match (point.x, point.y, point.z) {
+            (x, y, z) if x < center.x && y < center.y && z < center.z => Some(BottomLeftNear),
+            (x, y, z) if x < center.x && y < center.y && z > center.z => Some(BottomLeftFar),
+            (x, y, z) if x > center.x && y < center.y && z < center.z => Some(BottomRightNear),
+            (x, y, z) if x > center.x && y < center.y && z > center.z => Some(BottomRightFar),
+            (x, y, z) if x < center.x && y > center.y && z < center.z => Some(TopLeftNear),
+            (x, y, z) if x < center.x && y > center.y && z > center.z => Some(TopLeftFar),
+            (x, y, z) if x > center.x && y > center.y && z < center.z => Some(TopRightNear),
+            (x, y, z) if x > center.x && y > center.y && z > center.z => Some(TopRightFar),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Octant {
+    BottomLeftNear,
+    BottomLeftFar,
+    BottomRightNear,
+    BottomRightFar,
+    TopLeftNear,
+    TopLeftFar,
+    TopRightNear,
+    TopRightFar,
+}
+
 // Computes the inertia matrix of a
 // collection of weighted points.
 pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> {
