@@ -1,7 +1,7 @@
 //! A few useful geometric types
 
 use itertools::Itertools;
-use nalgebra::{DMatrix, DVector, Matrix2, SymmetricEigen, Vector2, Vector3};
+use nalgebra::{DMatrix, DVector, Matrix2, Matrix3, SymmetricEigen, Vector2, Vector3};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
@@ -199,11 +199,11 @@ impl Mbr2D {
         T: ::std::ops::Deref<Target = Point2D>,
     {
         let weights = points.clone().map(|_| 1.);
-        let mat = inertia_matrix(
+        let mat = inertia_matrix_2d(
             &weights.collect::<Vec<_>>(),
             &points.clone().map(|v| *v).collect::<Vec<_>>(),
         );
-        let vec = intertia_vector(mat);
+        let vec = intertia_vector_2d(mat);
         let angle = vec.dot(&Vector2::new(1., 0.)).acos();
 
         Self {
@@ -462,6 +462,105 @@ impl Aabb3D {
     }
 }
 
+/// A 3D Minimal bounding rectangle.
+///
+/// A MBR of a set of points is the smallest box that contains every element of the set.
+///
+/// As opposed to an Aabb, a Mbr is not always axis aligned.
+#[derive(Debug, Copy, Clone)]
+pub struct Mbr3D {
+    aabb: Aabb3D,
+    aabb_to_mbr: Matrix3<f64>, // base change matrix that maps the aabb to the mbr
+    mbr_to_aabb: Matrix3<f64>, // base change matrix that maps the mbr to the aabb
+}
+
+impl Mbr3D {
+    pub fn new(aabb: Aabb3D, aabb_to_mbr: Matrix3<f64>, mbr_to_aabb: Matrix3<f64>) -> Self {
+        Self {
+            aabb,
+            aabb_to_mbr,
+            mbr_to_aabb,
+        }
+    }
+
+    pub fn aabb(&self) -> &Aabb3D {
+        &self.aabb
+    }
+
+    /// Constructs a new `Mbr3D` from an iterator of `Point3D`.
+    ///
+    /// The resulting `Mbr3D` is the smallest Aabb that contains every points of the iterator.
+    pub fn from_points<I, T>(points: I) -> Self
+    where
+        I: Iterator<Item = T> + Clone,
+        T: ::std::ops::Deref<Target = Point3D>,
+    {
+        let weights = points.clone().map(|_| 1.);
+        let mat = inertia_matrix_3d(
+            &weights.collect::<Vec<_>>(),
+            &points.clone().map(|v| *v).collect::<Vec<_>>(),
+        );
+        let vec = intertia_vector_3d(mat);
+        let base_change = householder_reflection_3d(&vec);
+        let mbr_to_aabb = base_change.try_inverse().unwrap();
+        let mapped = points.map(|p| mbr_to_aabb * *p).collect::<Vec<_>>();
+        let aabb = Aabb3D::from_points(mapped.iter());
+
+        Self {
+            aabb,
+            aabb_to_mbr: base_change,
+            mbr_to_aabb,
+        }
+    }
+
+    /// Constructs a new Mbr that is a sub-Mbr of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_mbr(&self, octant: Octant) -> Self {
+        Self {
+            aabb: self.aabb.sub_aabb(octant),
+            aabb_to_mbr: self.aabb_to_mbr,
+            mbr_to_aabb: self.mbr_to_aabb,
+        }
+    }
+
+    /// Computes the aspect ratio of the Mbr.
+    ///
+    /// It is defined as follows:
+    /// `ratio = long_side / short_side`
+    pub fn aspect_ratio(&self) -> f64 {
+        self.aabb.aspect_ratio()
+    }
+
+    /// Computes the distance between a point and the current mbr.
+    pub fn distance_to_point(&self, point: &Point3D) -> f64 {
+        self.aabb.distance_to_point(&(self.mbr_to_aabb * *point))
+    }
+
+    /// Computes the center of the Mbr
+    pub fn center(&self) -> Point3D {
+        self.aabb_to_mbr * self.aabb.center()
+    }
+
+    /// Returns wheter or not the specified point is contained in the Mbr
+    pub fn contains(&self, point: &Point3D) -> bool {
+        self.aabb.contains(&(self.mbr_to_aabb * point))
+    }
+
+    /// Returns the quadrant of the Aabb in which the specified point is.
+    /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
+    /// Returns `None` if the specified point is not contained in the Aabb.
+    pub fn octant(&self, point: &Point3D) -> Option<Octant> {
+        self.aabb.octant(&(self.mbr_to_aabb * *point))
+    }
+
+    /// Returns the rotated min and max points of the Aabb.
+    pub fn minmax(&self) -> (Point3D, Point3D) {
+        let min = self.aabb_to_mbr * self.aabb.p_min;
+        let max = self.aabb_to_mbr * self.aabb.p_max;
+        (min, max)
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Octant {
@@ -477,7 +576,7 @@ pub enum Octant {
 
 // Computes the inertia matrix of a
 // collection of weighted points.
-pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> {
+pub fn inertia_matrix_2d(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> {
     // We compute the centroid of the collection
     // of points which is required to construct
     // the inertia matrix.
@@ -504,11 +603,51 @@ pub fn inertia_matrix(weights: &[f64], coordinates: &[Point2D]) -> Matrix2<f64> 
         }).sum()
 }
 
+// Computes the inertia matrix of a
+// collection of weighted points.
+pub fn inertia_matrix_3d(weights: &[f64], coordinates: &[Point3D]) -> Matrix3<f64> {
+    // We compute the centroid of the collection
+    // of points which is required to construct
+    // the inertia matrix.
+    // centroid = (1 / sum(weights)) \sum_i weight_i * point_i
+    let total_weight = weights.par_iter().sum::<f64>();
+    let centroid = weights
+        .par_iter()
+        .zip(coordinates)
+        .fold_with(Vector3::new(0., 0., 0.), |acc, (w, p)| {
+            acc + p.map(|e| e * w)
+        }).sum::<Vector3<_>>()
+        / total_weight;
+
+    // The inertia matrix is a 2x2 matrix (or a dxd matrix in dimension d)
+    // it is defined as follows:
+    // J = \sum_i (1/weight_i)*(point_i - centroid) * transpose(point_i - centroid)
+    // It is by construction a symmetric matrix
+    weights
+        .par_iter()
+        .zip(coordinates)
+        .fold(Matrix3::zeros, |acc, (w, p)| {
+            acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
+        }).sum()
+}
+
 // Computes an inertia vector of
 // an inertia matrix. Is is defined to be
 // an eigenvector of the smallest of the
 // matrix eigenvalues
-pub fn intertia_vector(mat: Matrix2<f64>) -> Vector2<f64> {
+pub fn intertia_vector_3d(mat: Matrix3<f64>) -> Vector3<f64> {
+    // by construction the inertia matrix is symmetric
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
+}
+
+// Computes an inertia vector of
+// an inertia matrix. Is is defined to be
+// an eigenvector of the smallest of the
+// matrix eigenvalues
+pub fn intertia_vector_2d(mat: Matrix2<f64>) -> Vector2<f64> {
     // by construction the inertia matrix is symmetric
     SymmetricEigen::new(mat)
         .eigenvectors
@@ -590,6 +729,15 @@ pub fn householder_reflection(element: &DVector<f64>) -> DMatrix<f64> {
     id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
 }
 
+// This might actually be overkill for 3d but it's a copy/paste from nd implementation
+pub fn householder_reflection_3d(element: &Vector3<f64>) -> Matrix3<f64> {
+    let e0 = Vector3::new(0., 0., 0.);
+    let sign = if element.x > 0. { -1. } else { 1. };
+    let w: Vector3<f64> = element + sign * e0 * element.norm();
+    let id = Matrix3::<f64>::identity();
+    id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
+}
+
 pub(crate) fn canonical_vector(dim: usize, nth: usize) -> DVector<f64> {
     let mut ret = DVector::<f64>::from_element(dim, 0.);
     ret[nth] = 1.0;
@@ -657,7 +805,7 @@ mod tests {
 
         let weights = vec![1.; 3];
 
-        let mat = inertia_matrix(&weights, &points);
+        let mat = inertia_matrix_2d(&weights, &points);
         let expected = Matrix2::new(18., -18., -18., 18.);
 
         assert_ulps_eq!(mat, expected);
@@ -673,8 +821,8 @@ mod tests {
 
         let weights = vec![1.; 3];
 
-        let mat = inertia_matrix(&weights, &points);
-        let vec = intertia_vector(mat);
+        let mat = inertia_matrix_2d(&weights, &points);
+        let vec = intertia_vector_2d(mat);
         let vec = Vector3::new(vec.x, vec.y, 0.);
         let expected = Vector3::<f64>::new(1., -1., 0.);
 

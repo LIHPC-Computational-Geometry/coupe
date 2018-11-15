@@ -494,8 +494,8 @@ fn half_weight_pos(sorted_weights: &[f64]) -> usize {
 /// partitions.
 pub fn rib_2d(weights: &[f64], coordinates: &[Point2D], n_iter: usize) -> Vec<ProcessUniqueId> {
     // Compute the inertia vector of the set of points
-    let j = inertia_matrix(weights, coordinates);
-    let inertia = intertia_vector(j);
+    let j = inertia_matrix_2d(weights, coordinates);
+    let inertia = intertia_vector_2d(j);
 
     // In this implementation, the separator is not actually
     // parallel to the inertia vector. Instead, a global rotation
