@@ -7,8 +7,8 @@ extern crate rayon;
 
 mod generator;
 
-use coupe::algorithms::geometric::{axis_sort, rcb, rcb_nd};
 use coupe::algorithms::k_means::simplified_k_means;
+use coupe::algorithms::recursive_bisection::{axis_sort_2d, rcb_2d, rcb_nd};
 use coupe::geometry::{Point, Point2D};
 use criterion::{Benchmark, Criterion, Throughput};
 use rayon::prelude::*;
@@ -27,7 +27,7 @@ fn bench_axis_sort_random(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort(&ids, &weights, &sample_points, true))
+            b.iter(|| axis_sort_2d(&ids, &weights, &sample_points, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -109,7 +109,7 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort(&ids, &weights, &sample_points, true))
+            b.iter(|| axis_sort_2d(&ids, &weights, &sample_points, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -125,7 +125,7 @@ fn bench_rcb_random(c: &mut Criterion) {
             );
             let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| rcb(&weights, &sample_points, NUM_ITER))
+            b.iter(|| rcb_2d(&weights, &sample_points, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }

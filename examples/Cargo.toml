@@ -13,7 +13,10 @@ autobins = false
 name = "balanced_k_means"
 
 [[bin]]
-name = "rcb"
+name = "rcb_2d"
+
+[[bin]]
+name = "rcb_3d"
 
 [[bin]]
 name = "rib"

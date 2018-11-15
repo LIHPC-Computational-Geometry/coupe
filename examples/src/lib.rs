@@ -46,7 +46,7 @@ fn random_color_string() -> String {
 }
 
 pub mod generator {
-    use coupe::geometry::Point2D;
+    use coupe::geometry::{Point2D, Point3D};
     use rand::{self, Rng};
 
     pub fn circle_uniform(num_points: usize, center: Point2D, radius: f64) -> Vec<Point2D> {
@@ -90,5 +90,17 @@ pub mod generator {
 
     pub fn square_uniform(num_points: usize, center: Point2D, length: f64) -> Vec<Point2D> {
         rectangle_uniform(num_points, center, length, length)
+    }
+
+    pub fn box_uniform(num_points: usize, p_min: Point3D, p_max: Point3D) -> Vec<Point3D> {
+        let mut rng = rand::thread_rng();
+        (0..num_points)
+            .map(|_| {
+                Point3D::new(
+                    rng.gen_range::<f64>(p_min.x, p_max.x),
+                    rng.gen_range::<f64>(p_min.y, p_max.y),
+                    rng.gen_range::<f64>(p_min.z, p_max.z),
+                )
+            }).collect()
     }
 }

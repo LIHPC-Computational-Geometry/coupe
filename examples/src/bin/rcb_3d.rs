@@ -7,8 +7,8 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rib_2d;
-use coupe::geometry::Point2D;
+use coupe::algorithms::recursive_bisection::rcb_3d;
+use coupe::geometry::Point3D;
 
 fn main() {
     let yaml = load_yaml!("../../rcb.yml");
@@ -28,15 +28,18 @@ fn main() {
 
     let weights = vec![1.; num_points];
 
-    let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.)
-        .into_iter()
-        .map(|p| p * p.y)
-        .collect::<Vec<_>>();
+    let points = examples::generator::box_uniform(
+        num_points,
+        Point3D::new(0., 0., 0.),
+        Point3D::new(1., 1., 1.),
+    ).into_iter()
+    .collect::<Vec<_>>();
 
-    let partition = rib_2d(&weights, &points.clone(), num_iter);
+    let partition = rcb_3d(&points, &weights, num_iter);
 
     if !matches.is_present("quiet") {
-        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
-        examples::plot_partition(part)
+        let _part = points.into_iter().zip(partition).collect::<Vec<_>>();
+
+        unimplemented!("3D plot is not supported yet")
     }
 }
