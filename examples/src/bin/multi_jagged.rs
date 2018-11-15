@@ -61,7 +61,6 @@ fn main() {
     println!("   > max weight diff: {}", max_imbalance);
     println!("   > relative weight diff: {}%", 100. * relative_imbalance);
     println!("   > ordered aspect ratios: {:?}", aspect_ratios);
-    // println!("   > parts weights: {:?}", part_weights);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();
