@@ -327,14 +327,6 @@ mod tests {
     }
 
     #[test]
-    fn test_partition_scheme() {
-        let scheme = partition_scheme_one_step(7, 3);
-
-        eprintln!("{:#?}", scheme);
-        assert!(false);
-    }
-
-    #[test]
     fn test_prime_factors() {
         assert_eq!(
             prime_factors(2 * 3 * 3 * 5 * 7 * 11 * 13 * 17),

@@ -28,7 +28,7 @@ fn main() {
 
     let weights = vec![1.; num_points];
 
-    let points = examples::generator::cicrcle_uniform(num_points, Point2D::new(0., 0.), 1.)
+    let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.)
         .into_iter()
         // .map(|p| p * p.y)
         .collect::<Vec<_>>();

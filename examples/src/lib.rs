@@ -49,7 +49,7 @@ pub mod generator {
     use coupe::geometry::Point2D;
     use rand::{self, Rng};
 
-    pub fn cicrcle_uniform(num_points: usize, center: Point2D, radius: f64) -> Vec<Point2D> {
+    pub fn circle_uniform(num_points: usize, center: Point2D, radius: f64) -> Vec<Point2D> {
         let bb_p_min = Point2D::new(center.x - radius, center.y - radius);
         let bb_p_max = Point2D::new(center.x + radius, center.y + radius);
 
