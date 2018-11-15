@@ -7,7 +7,7 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::geometric::rib;
+use coupe::algorithms::recursive_bisection::rib;
 use coupe::geometry::Point2D;
 
 fn main() {

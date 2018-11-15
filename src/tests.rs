@@ -15,7 +15,7 @@ fn test_rcb_basic() {
         Point2D::new(1.3, -2.),
     ];
 
-    let partition = algorithms::geometric::rcb(&weights, &coordinates, 2);
+    let partition = algorithms::recursive_bisection::rcb(&weights, &coordinates, 2);
 
     assert_eq!(partition[0], partition[6]);
     assert_eq!(partition[1], partition[7]);
