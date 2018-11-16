@@ -731,7 +731,7 @@ pub fn householder_reflection(element: &DVector<f64>) -> DMatrix<f64> {
 
 // This might actually be overkill for 3d but it's a copy/paste from nd implementation
 pub fn householder_reflection_3d(element: &Vector3<f64>) -> Matrix3<f64> {
-    let e0 = Vector3::new(0., 0., 0.);
+    let e0 = Vector3::new(1., 0., 0.);
     let sign = if element.x > 0. { -1. } else { 1. };
     let w: Vector3<f64> = element + sign * e0 * element.norm();
     let id = Matrix3::<f64>::identity();
@@ -749,7 +749,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_aabb2d() {
+    fn test_aabb_2d() {
         let points = vec![
             Point2D::new(1., 2.),
             Point2D::new(0., 0.),
@@ -781,7 +781,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mbr2d() {
+    fn test_mbr_2d() {
         let points = vec![
             Point2D::new(5., 3.),
             Point2D::new(0., 0.),
@@ -812,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inertia_vector() {
+    fn test_inertia_vector_2d() {
         let points = vec![
             Point2D::new(3., 0.),
             Point2D::new(0., 3.),
@@ -832,7 +832,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mbr_distance_to_point() {
+    fn test_mbr_distance_to_point_2d() {
         let points = vec![
             Point2D::new(0., 1.),
             Point2D::new(1., 0.),
@@ -942,5 +942,133 @@ mod tests {
         let unit_el = &el / el.norm();
         let fst_col = mat.column(0).clone_owned();
         relative_eq!(&unit_el * unit_el.dot(&fst_col), fst_col);
+    }
+
+    #[test]
+    fn test_aabb_3d() {
+        let points = vec![
+            Point3D::new(1., 2., 0.),
+            Point3D::new(0., 0., 5.),
+            Point3D::new(3., 1., 1.),
+            Point3D::new(5., 4., -2.),
+            Point3D::new(4., 5., 3.),
+        ];
+
+        let aabb = Aabb3D::from_points(points.iter());
+        let aspect_ratio = aabb.aspect_ratio();
+
+        assert_ulps_eq!(aabb.p_min, Point3D::new(0., 0., -2.));
+        assert_ulps_eq!(aabb.p_max, Point3D::new(5., 5., 5.));
+        assert_ulps_eq!(aspect_ratio, 7. / 5.);
+    }
+
+    #[test]
+    fn test_mbr_3d() {
+        let points = vec![
+            Point3D::new(5., 3., 0.),
+            Point3D::new(0., 0., 0.),
+            Point3D::new(1., -1., 0.),
+            Point3D::new(4., 4., 0.),
+            Point3D::new(5., 3., 2.),
+            Point3D::new(0., 0., 2.),
+            Point3D::new(1., -1., 2.),
+            Point3D::new(4., 4., 2.),
+        ];
+
+        let mbr = Mbr3D::from_points(points.iter());
+        println!("mbr = {:?}", mbr);
+        let aspect_ratio = mbr.aspect_ratio();
+
+        relative_eq!(aspect_ratio, 4.);
+    }
+
+    #[test]
+    fn test_inertia_vector_3d() {
+        let points = vec![
+            Point3D::new(3., 0., 0.),
+            Point3D::new(0., 3., 3.),
+            Point3D::new(6., -3., -3.),
+        ];
+
+        let weights = vec![1.; 3];
+
+        let mat = inertia_matrix_3d(&weights, &points);
+        let vec = intertia_vector_3d(mat);
+        let expected = Vector3::<f64>::new(1., -1., -1.);
+
+        eprintln!("{}", vec);
+
+        relative_eq!(expected.cross(&vec).norm(), 0.);
+    }
+
+    #[test]
+    fn test_mbr_distance_to_point_3d() {
+        let points = vec![
+            Point3D::new(0., 1., 0.),
+            Point3D::new(1., 0., 0.),
+            Point3D::new(5., 6., 0.),
+            Point3D::new(6., 5., 0.),
+            Point3D::new(0., 1., 4.),
+            Point3D::new(1., 0., 4.),
+            Point3D::new(5., 6., 4.),
+            Point3D::new(6., 5., 4.),
+        ];
+
+        let mbr = Mbr3D::from_points(points.iter());
+
+        let test_points = vec![
+            Point3D::new(2., 2., 1.),
+            Point3D::new(0., 0., 1.),
+            Point3D::new(5., 7., 1.),
+            Point3D::new(2., 2., 3.),
+            Point3D::new(0., 0., 3.),
+            Point3D::new(5., 7., 3.),
+        ];
+
+        let distances: Vec<_> = test_points
+            .iter()
+            .map(|p| mbr.distance_to_point(p))
+            .collect();
+
+        relative_eq!(distances[0], 0.5);
+        relative_eq!(distances[1], 2_f64.sqrt() / 2.);
+        relative_eq!(distances[2], 1.);
+        relative_eq!(distances[3], 0.5);
+        relative_eq!(distances[4], 2_f64.sqrt() / 2.);
+        relative_eq!(distances[5], 1.);
+    }
+
+    #[test]
+    fn test_mbr_octant() {
+        let points = vec![
+            Point3D::new(0., 1., 0.),
+            Point3D::new(1., 0., 0.),
+            Point3D::new(5., 6., 0.),
+            Point3D::new(6., 5., 0.),
+            Point3D::new(0., 1., 1.),
+            Point3D::new(1., 0., 1.),
+            Point3D::new(5., 6., 1.),
+            Point3D::new(6., 5., 1.),
+        ];
+
+        let mbr = Mbr3D::from_points(points.iter());
+        eprintln!("mbr = {:#?}", mbr);
+
+        let none = mbr.octant(&Point3D::new(0., 0., 0.));
+        let octants = vec![
+            mbr.octant(&Point3D::new(1.2, 1.2, 0.3)),
+            mbr.octant(&Point3D::new(5.8, 4.9, 0.3)),
+            mbr.octant(&Point3D::new(0.2, 1.1, 0.3)),
+            mbr.octant(&Point3D::new(5.1, 5.8, 0.3)),
+            mbr.octant(&Point3D::new(1.2, 1.2, 0.7)),
+            mbr.octant(&Point3D::new(5.8, 4.9, 0.7)),
+            mbr.octant(&Point3D::new(0.2, 1.1, 0.7)),
+            mbr.octant(&Point3D::new(5.1, 5.8, 0.7)),
+        ];
+        assert_eq!(none, None);
+        assert!(octants.iter().all(|o| o.is_some()));
+        // we cannot test if each octant is the right one because the orientation of the base
+        // change is unspecified
+        assert_eq!(8, octants.iter().unique().count());
     }
 }
