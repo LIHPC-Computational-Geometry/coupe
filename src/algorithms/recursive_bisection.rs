@@ -514,6 +514,18 @@ pub fn rib_2d(weights: &[f64], coordinates: &[Point2D], n_iter: usize) -> Vec<Pr
     rcb_2d(weights, &coordinates, n_iter)
 }
 
+pub fn rib_3d(points: &[Point3D], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId> {
+    let mbr = Mbr3D::from_points(points.iter());
+
+    let points = points
+        .par_iter()
+        .map(|p| mbr.mbr_to_aabb(p))
+        .collect::<Vec<_>>();
+
+    // When the rotation is done, we just apply RCB
+    rcb_3d(&points, weights, n_iter)
+}
+
 pub fn rib_nd(
     ids: Vec<usize>,
     weights: Vec<f64>,

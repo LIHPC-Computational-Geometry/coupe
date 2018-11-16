@@ -198,6 +198,7 @@ impl Mbr2D {
         I: Iterator<Item = T> + Clone,
         T: ::std::ops::Deref<Target = Point2D>,
     {
+        // TODO: use actual weights instead of a dummy 1.
         let weights = points.clone().map(|_| 1.);
         let mat = inertia_matrix_2d(
             &weights.collect::<Vec<_>>(),
@@ -487,6 +488,16 @@ impl Mbr3D {
         &self.aabb
     }
 
+    // Transform a point with the transformation which maps the Mbr to the underlying Aabb
+    pub fn mbr_to_aabb(&self, point: &Point3D) -> Point3D {
+        self.mbr_to_aabb * *point
+    }
+
+    // Transform a point with the transformation which maps the Aabb to the underlying Mbr
+    pub fn aabb_to_mbr(&self, point: &Point3D) -> Point3D {
+        self.aabb_to_mbr * *point
+    }
+
     /// Constructs a new `Mbr3D` from an iterator of `Point3D`.
     ///
     /// The resulting `Mbr3D` is the smallest Aabb that contains every points of the iterator.
@@ -495,6 +506,7 @@ impl Mbr3D {
         I: Iterator<Item = T> + Clone,
         T: ::std::ops::Deref<Target = Point3D>,
     {
+        // TODO: use actual weights instead of a dummy 1.
         let weights = points.clone().map(|_| 1.);
         let mat = inertia_matrix_3d(
             &weights.collect::<Vec<_>>(),

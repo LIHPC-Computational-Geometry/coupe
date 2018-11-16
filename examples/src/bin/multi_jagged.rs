@@ -43,10 +43,6 @@ fn main() {
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 
-    let part_weights = coupe::analysis::weights(&weights, &partition)
-        .into_iter()
-        .map(|(_id, w)| w)
-        .collect::<Vec<_>>();
     let max_imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
     let relative_imbalance = coupe::analysis::imbalance_relative_diff(&weights, &partition);
     let mut aspect_ratios = coupe::analysis::aspect_ratios(&partition, &points)
