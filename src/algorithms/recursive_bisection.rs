@@ -6,7 +6,6 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
-use std::sync::Arc;
 
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
@@ -32,7 +31,7 @@ pub fn rcb_2d(points: &[Point2D], weights: &[f64], n_iter: usize) -> Vec<Process
         &points,
         &weights,
         &mut permutation,
-        Arc::new(AtomicPtr::new(initial_partition.as_mut_ptr())),
+        &AtomicPtr::new(initial_partition.as_mut_ptr()),
         n_iter,
         true,
     );
@@ -43,7 +42,7 @@ fn rcb_2d_recurse(
     points: &[Point2D],
     weights: &[f64],
     permutation: &mut [usize],
-    partition: Arc<AtomicPtr<ProcessUniqueId>>,
+    partition: &AtomicPtr<ProcessUniqueId>,
     n_iter: usize,
     x_axis: bool, // set if bissection is performed w.r.t. x or y axis
 ) {
@@ -75,7 +74,7 @@ fn rcb_2d_recurse(
         // alternating at each iteration.
 
         // We first need to sort the objects w.r.t. x or y position
-        axis_sort_permu_2d(points, permutation, x_axis);
+        axis_sort_2d(points, permutation, x_axis);
 
         // We then seek the split position
         let split_pos = half_weight_pos_permu(weights, permutation);
@@ -86,92 +85,20 @@ fn rcb_2d_recurse(
         // the algorithm on the two generated parts.
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
-        let left_partition = partition.clone();
+
         rayon::join(
-            || {
-                rcb_2d_recurse(
-                    points,
-                    weights,
-                    left_permu,
-                    left_partition,
-                    n_iter - 1,
-                    !x_axis,
-                )
-            },
+            || rcb_2d_recurse(points, weights, left_permu, partition, n_iter - 1, !x_axis),
             || rcb_2d_recurse(points, weights, right_permu, partition, n_iter - 1, !x_axis),
         );
     }
 }
 
-pub fn axis_sort_permu_2d(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
+pub fn axis_sort_2d(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
     if x_axis {
-        permutation.par_sort_by(|i1, i2| points[*i1].x.partial_cmp(&points[*i2].x).unwrap());
+        permutation.par_sort_by(|i1, i2| fast_f64_cmp(points[*i1].x, points[*i2].x));
     } else {
-        permutation.par_sort_by(|i1, i2| points[*i1].y.partial_cmp(&points[*i2].y).unwrap());
+        permutation.par_sort_by(|i1, i2| fast_f64_cmp(points[*i1].y, points[*i2].y));
     }
-}
-
-// sort input vectors w.r.t. coordinates
-// i.e. by increasing x or increasing y
-pub fn axis_sort_2d(
-    ids: &[usize],
-    weights: &[f64],
-    coordinates: &[Point2D],
-    x_axis: bool,
-) -> (Vec<usize>, Vec<f64>, Vec<Point2D>) {
-    let mut zipped = ids
-        .par_iter()
-        .cloned()
-        .zip(weights.par_iter().cloned())
-        .zip(coordinates.par_iter().cloned())
-        .collect::<Vec<_>>();
-
-    if x_axis {
-        zipped
-            .as_mut_slice()
-            .par_sort_by(|(_, p1), (_, p2)| p1.x.partial_cmp(&p2.x).unwrap_or(Ordering::Equal));
-    } else {
-        zipped
-            .as_mut_slice()
-            .par_sort_by(|(_, p1), (_, p2)| p1.y.partial_cmp(&p2.y).unwrap_or(Ordering::Equal));
-    }
-
-    let (still_zipped, coordinates): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
-    let (ids, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
-    (ids, weights, coordinates)
-}
-
-/// Sort `ids`, `weights`, `points` simultaneously
-/// by increasing x' where x' is the first coordinate
-/// of an orthonormal basis (direction, e2, ..., ek) of R^k
-pub fn axis_sort_nd(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    points: Vec<Point>,
-    direction: &DVector<f64>,
-) -> (Vec<usize>, Vec<f64>, Vec<Point>) {
-    let base_shift = householder_reflection(&direction);
-    let new_points = points.iter().map(|p| &base_shift * p).collect::<Vec<_>>();
-
-    let mut zipped = ids
-        .into_par_iter()
-        .zip(weights)
-        .zip(points)
-        .enumerate()
-        .collect::<Vec<_>>();
-
-    zipped
-        .as_mut_slice()
-        .par_sort_unstable_by(|(i, _), (j, _)| {
-            new_points[*i][0]
-                .partial_cmp(&new_points[*j][0])
-                .unwrap_or(Ordering::Equal)
-        });
-
-    let (_is, still_zipped): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
-    let (still_zipped, points): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
-    let (ids, weights): (Vec<_>, Vec<_>) = still_zipped.into_par_iter().unzip();
-    (ids, weights, points)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -205,7 +132,7 @@ pub fn rcb_3d(points: &[Point3D], weights: &[f64], n_iter: usize) -> Vec<Process
         points,
         weights,
         &mut permutation,
-        Arc::new(AtomicPtr::new(initial_partition.as_mut_ptr())),
+        &AtomicPtr::new(initial_partition.as_mut_ptr()),
         n_iter,
         Axis::X,
     );
@@ -216,7 +143,7 @@ fn rcb_3d_recurse(
     points: &[Point3D],
     weights: &[f64],
     permutation: &mut [usize],
-    partition: Arc<AtomicPtr<ProcessUniqueId>>,
+    partition: &AtomicPtr<ProcessUniqueId>,
     n_iter: usize,
     axis: Axis,
 ) {
@@ -248,7 +175,7 @@ fn rcb_3d_recurse(
         // alternating at each iteration.
 
         // We first need to sort the objects w.r.t. x or y position
-        axis_sort_permu_3d(points, permutation, axis);
+        axis_sort_3d(points, permutation, axis);
 
         // We then seek the split position
         let split_pos = half_weight_pos_permu(weights, permutation);
@@ -259,14 +186,13 @@ fn rcb_3d_recurse(
         // the algorithm on the two generated parts.
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
-        let left_partition = partition.clone();
         rayon::join(
             || {
                 rcb_3d_recurse(
                     points,
                     weights,
                     left_permu,
-                    left_partition,
+                    partition,
                     n_iter - 1,
                     axis.next(),
                 )
@@ -285,16 +211,7 @@ fn rcb_3d_recurse(
     }
 }
 
-// a faster cmp than a.partial_cmp(&b) but does not handle NaNs
-fn fast_f64_cmp(a: f64, b: f64) -> Ordering {
-    if a < b {
-        Ordering::Less
-    } else {
-        Ordering::Greater
-    }
-}
-
-fn axis_sort_permu_3d(points: &[Point3D], permutation: &mut [usize], axis: Axis) {
+fn axis_sort_3d(points: &[Point3D], permutation: &mut [usize], axis: Axis) {
     match axis {
         Axis::X => permutation.par_sort_by(|i1, i2| fast_f64_cmp(points[*i1].x, points[*i2].x)),
         Axis::Y => permutation.par_sort_by(|i1, i2| fast_f64_cmp(points[*i1].y, points[*i2].y)),
@@ -314,46 +231,73 @@ fn axis_sort_permu_3d(points: &[Point3D], permutation: &mut [usize], axis: Axis)
 ///
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
-pub fn rcb_nd(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    points: Vec<Point>,
-    n_iter: usize,
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+pub fn rcb_nd(points: &[Point], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId> {
     let dim = points[0].len();
-    rcb_nd_recurse(ids, weights, points, n_iter, dim, 0)
+    let len = points.len();
+
+    let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
+    let initial_id = ProcessUniqueId::new();
+    let mut initial_partition = rayon::iter::repeat(initial_id)
+        .take(len)
+        .collect::<Vec<_>>();
+
+    rcb_nd_recurse(
+        points,
+        weights,
+        &mut permutation,
+        &AtomicPtr::new(initial_partition.as_mut_ptr()),
+        n_iter,
+        dim,
+        0,
+    );
+    initial_partition
 }
 
 fn rcb_nd_recurse(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    points: Vec<Point>,
+    points: &[Point],
+    weights: &[f64],
+    permutation: &mut [usize],
+    partition: &AtomicPtr<ProcessUniqueId>,
     n_iter: usize,
     dim: usize,
     current_coord: u32,
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+) {
     if n_iter == 0 {
+        // No iteration left. The current
+        // ids become a part of the final partition.
+        // Generate a partition id and return.
         let part_id = ProcessUniqueId::new();
-        (
-            ids.into_par_iter().map(|id| (id, part_id)).collect(),
-            weights,
-            points,
-        )
+        permutation.par_iter().for_each(|idx| {
+            let ptr = partition.load(atomic::Ordering::Relaxed);
+
+            // Unsafe usage explanation:
+            //
+            // In this implementation, the partition is represented as
+            // a contiguous array of ids. It is allocated once, and modified in place.
+            // Neither the array nor a slice of it is ever copied. When recursing, a pointer to
+            // the array is passed to children functions, which both have mutable access to the
+            // partition array from different threads (That's why the pointer is wrapped in a
+            // Arc<AtomicPtr<T>>). It is not possible to have shared mutable access to memory
+            // across (one/several) threads in safe code. However, the raw pointer is indexed
+            // through the permutation array which contains valid indices and is not shared across
+            // children calls/threads. This ensures that ptr.add(*idx) is valid memory and every
+            // element of the partition array will be written on exactly once.
+            unsafe { std::ptr::write(ptr.add(*idx), part_id) }
+        });
     } else {
         let normal = canonical_vector(dim, current_coord as usize);
-        let (mut ids, mut weights, mut points) = axis_sort_nd(ids, weights, points, &normal);
-        let split_pos = half_weight_pos(&weights);
+        axis_sort_nd(points, permutation, &normal);
+        let split_pos = half_weight_pos_permu(weights, permutation);
 
-        let left_ids = ids.drain(0..split_pos).collect();
-        let left_weights = weights.drain(0..split_pos).collect();
-        let left_points = points.drain(0..split_pos).collect();
+        let (left_permu, right_permu) = permutation.split_at_mut(split_pos);
 
-        let (left_partition, right_partition) = rayon::join(
+        rayon::join(
             || {
                 rcb_nd_recurse(
-                    left_ids,
-                    left_weights,
-                    left_points,
+                    points,
+                    weights,
+                    left_permu,
+                    partition,
                     n_iter - 1,
                     dim,
                     (current_coord + 1) % dim as u32,
@@ -361,34 +305,23 @@ fn rcb_nd_recurse(
             },
             || {
                 rcb_nd_recurse(
-                    ids,
-                    weights,
                     points,
+                    weights,
+                    right_permu,
+                    partition,
                     n_iter - 1,
                     dim,
                     (current_coord + 1) % dim as u32,
                 )
             },
         );
-
-        (
-            left_partition
-                .0
-                .into_par_iter()
-                .chain(right_partition.0)
-                .collect(),
-            left_partition
-                .1
-                .into_par_iter()
-                .chain(right_partition.1)
-                .collect(),
-            left_partition
-                .2
-                .into_par_iter()
-                .chain(right_partition.2)
-                .collect(),
-        )
     }
+}
+
+fn axis_sort_nd(points: &[Point], permutation: &mut [usize], direction: &DVector<f64>) {
+    let base_shift = householder_reflection(&direction);
+    let new_points = points.iter().map(|p| &base_shift * p).collect::<Vec<_>>();
+    permutation.par_sort_by(|p1, p2| fast_f64_cmp(new_points[*p1][0], new_points[*p2][0]));
 }
 
 // Computes a slice index which splits
@@ -429,46 +362,6 @@ fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
     while current_weight_sum < half_weight {
         current_weight_idx += 1;
         current_weight_sum += weights[permutation[current_weight_idx]];
-    }
-
-    current_weight_idx
-}
-
-fn half_weight_pos(sorted_weights: &[f64]) -> usize {
-    let half_weight = sorted_weights.par_iter().sum::<f64>() / 2.;
-
-    let mut current_weight_idx;
-    let mut current_weight_sum = 0.;
-
-    let mut scan = sorted_weights
-        .par_iter()
-        .enumerate()
-        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
-            if idx < low {
-                (idx, acc + val)
-            } else {
-                (low, acc + val)
-            }
-        }).collect::<Vec<_>>()
-        .into_iter();
-
-    // above this, the code was parallel
-    // what follows is sequential
-
-    loop {
-        let current = scan.next().unwrap();
-        if current_weight_sum + current.1 > half_weight {
-            current_weight_idx = current.0;
-            break;
-        }
-
-        current_weight_sum += current.1;
-    }
-
-    // seek from current_weight_idx
-    while current_weight_sum < half_weight {
-        current_weight_idx += 1;
-        current_weight_sum += sorted_weights[current_weight_idx];
     }
 
     current_weight_idx
@@ -526,12 +419,7 @@ pub fn rib_3d(points: &[Point3D], weights: &[f64], n_iter: usize) -> Vec<Process
     rcb_3d(&points, weights, n_iter)
 }
 
-pub fn rib_nd(
-    ids: Vec<usize>,
-    weights: Vec<f64>,
-    points: Vec<Point>,
-    n_iter: usize,
-) -> (Vec<(usize, ProcessUniqueId)>, Vec<f64>, Vec<Point>) {
+pub fn rib_nd(points: &[Point], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId> {
     let j = inertia_matrix_nd(&weights, &points);
     let inertia = intertia_vector_nd(j);
 
@@ -541,7 +429,16 @@ pub fn rib_nd(
         .map(|p| &base_shift * p)
         .collect::<Vec<_>>();
 
-    rcb_nd(ids, weights, points, n_iter)
+    rcb_nd(&points, weights, n_iter)
+}
+
+// a faster cmp than a.partial_cmp(&b) but does not handle NaNs
+fn fast_f64_cmp(a: f64, b: f64) -> Ordering {
+    if a < b {
+        Ordering::Less
+    } else {
+        Ordering::Greater
+    }
 }
 
 #[cfg(test)]
@@ -562,43 +459,39 @@ mod tests {
 
     #[test]
     fn test_axis_sort_x() {
-        let ids: Vec<usize> = (0..7).collect();
-        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
         let points = gen_point_sample();
+        let mut permutation = (0..points.len()).collect::<Vec<usize>>();
 
-        let (ids, _, _) = axis_sort_2d(&ids, &weights, &points, true);
+        axis_sort_2d(&points, &mut permutation, true);
 
-        assert_eq!(ids, vec![5, 2, 3, 6, 4, 0, 1]);
+        assert_eq!(permutation, vec![5, 2, 3, 6, 4, 0, 1]);
     }
 
     #[test]
     fn test_axis_sort_y() {
-        let ids: Vec<usize> = (0..7).collect();
-        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
         let points = gen_point_sample();
+        let mut permutation = (0..points.len()).collect::<Vec<usize>>();
 
-        let (ids, _, _) = axis_sort_2d(&ids, &weights, &points, false);
+        axis_sort_2d(&points, &mut permutation, false);
 
-        assert_eq!(ids, vec![3, 6, 5, 1, 0, 2, 4]);
+        assert_eq!(permutation, vec![3, 6, 5, 1, 0, 2, 4]);
     }
 
     #[test]
     fn test_hyperplane_sort() {
-        let ids: Vec<usize> = (0..3).collect();
-        let weights: Vec<f64> = ids.iter().map(|id| *id as f64).collect();
         let points = vec![
             Point::from_row_slice(3, &[0., 0., 0.]),
             Point::from_row_slice(3, &[-1., -1., 1.]),
             Point::from_row_slice(3, &[-2., -2., 2.]),
         ];
+        let mut permutation: Vec<usize> = (0..3).collect();
 
-        let (ids, _, _points) = axis_sort_nd(
-            ids,
-            weights,
-            points,
+        axis_sort_nd(
+            &points,
+            &mut permutation,
             &Point::from_row_slice(3, &[1., 1., -1.]),
         );
 
-        assert_eq!(ids, vec![2, 1, 0]);
+        assert_eq!(permutation, vec![2, 1, 0]);
     }
 }

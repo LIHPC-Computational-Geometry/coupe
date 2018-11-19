@@ -25,9 +25,9 @@ fn bench_axis_sort_random(c: &mut Criterion) {
                 Point2D::new(30., 10.),
                 SAMPLE_SIZE,
             );
-            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
-            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort_2d(&ids, &weights, &sample_points, true))
+            let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
+
+            b.iter(|| axis_sort_2d(&sample_points, &mut permutation, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -107,9 +107,8 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
                 Point2D::new(30., 10.),
                 SAMPLE_SIZE,
             );
-            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
-            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| axis_sort_2d(&ids, &weights, &sample_points, true))
+            let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
+            b.iter(|| axis_sort_2d(&sample_points, &mut permutation, true))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -140,16 +139,8 @@ fn bench_rcb_nd_2d_random(c: &mut Criterion) {
             ).into_iter()
             .map(|p| Point::from_row_slice(2, &[p.x, p.y]))
             .collect::<Vec<_>>();
-            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
-            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| {
-                rcb_nd(
-                    ids.clone(),
-                    weights.clone(),
-                    sample_points.clone(),
-                    NUM_ITER,
-                )
-            })
+            let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
+            b.iter(|| rcb_nd(&sample_points, &weights, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
