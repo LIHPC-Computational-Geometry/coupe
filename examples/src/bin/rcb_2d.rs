@@ -33,7 +33,7 @@ fn main() {
         // .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let partition = rcb_2d(&weights, &points.clone(), num_iter);
+    let partition = rcb_2d(&points, &weights, num_iter);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

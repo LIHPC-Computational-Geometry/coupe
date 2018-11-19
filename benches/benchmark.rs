@@ -123,9 +123,8 @@ fn bench_rcb_random(c: &mut Criterion) {
                 Point2D::new(30., 10.),
                 SAMPLE_SIZE,
             );
-            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
-            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
-            b.iter(|| rcb_2d(&weights, &sample_points, NUM_ITER))
+            let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
+            b.iter(|| rcb_2d(&sample_points, &weights, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }

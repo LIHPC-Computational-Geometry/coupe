@@ -4,7 +4,7 @@ use geometry::Point2D;
 #[test]
 fn test_rcb_basic() {
     let weights = vec![1.; 8];
-    let coordinates = vec![
+    let points = vec![
         Point2D::new(-1.3, 6.),
         Point2D::new(2., -4.),
         Point2D::new(1., 1.),
@@ -15,7 +15,7 @@ fn test_rcb_basic() {
         Point2D::new(1.3, -2.),
     ];
 
-    let partition = algorithms::recursive_bisection::rcb_2d(&weights, &coordinates, 2);
+    let partition = algorithms::recursive_bisection::rcb_2d(&points, &weights, 2);
 
     assert_eq!(partition[0], partition[6]);
     assert_eq!(partition[1], partition[7]);
