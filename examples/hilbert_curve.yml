@@ -1,0 +1,22 @@
+name: "hilbert_curve"
+about: "An example using the Hilbert space filling curve algorithm"
+args:
+ - num_points:
+    long: num_points
+    takes_value: true
+    default_value: "5000"
+    help: Sets the number of points randomly generated
+ - num_partitions:
+    long: num_partitions
+    takes_value: true
+    default_value: "6"
+    help: Sets the number of wanted partitions
+ - order:
+    long: order
+    takes_value: true
+    default_value: "4"
+    help: Sets the order of the Hilbert curve to construct
+ - quiet:
+    long: quiet
+    short: q
+    help: Disables the GUI output

@@ -22,6 +22,9 @@ name = "rib"
 name = "multi_jagged"
 
 [[bin]]
+name = "hilbert_curve"
+
+[[bin]]
 name = "simplified_k_means"
 
 [[bin]]

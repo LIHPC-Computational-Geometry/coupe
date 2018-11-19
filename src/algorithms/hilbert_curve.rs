@@ -12,6 +12,63 @@
 
 use geometry::{self, Mbr2D, Point2D};
 use rayon::prelude::*;
+use snowflake::ProcessUniqueId;
+
+pub fn hilbert_curve_partition(
+    points: &[Point2D],
+    weights: &[f64],
+    num_partitions: usize,
+    order: usize,
+) -> Vec<ProcessUniqueId> {
+    assert!(
+        order < 32,
+        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
+    );
+
+    let compute_hilbert_index = hilbert_index_computer(points, order);
+    let mut permutation = (0..points.len()).into_par_iter().collect::<Vec<_>>();
+    let hilbert_indices = points
+        .par_iter()
+        .map(|p| compute_hilbert_index((p.x, p.y)))
+        .collect::<Vec<_>>();
+
+    permutation
+        .as_mut_slice()
+        .par_sort_by_key(|idx| hilbert_indices[*idx]);
+
+    // dummy modifiers to use directly the routine from multi_jagged
+    let modifiers = vec![1. / num_partitions as f32; num_partitions];
+
+    let initial_id = ProcessUniqueId::new();
+    let mut partition = permutation
+        .par_iter()
+        .map(|_| initial_id)
+        .collect::<Vec<_>>();
+
+    let split_positions = super::multi_jagged::compute_split_positions(
+        weights,
+        &permutation,
+        num_partitions - 1,
+        &modifiers,
+    );
+
+    // TODO: remove these braces when NLL is available
+    {
+        let mut sub_permutation =
+            super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
+        let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
+
+        sub_permutation.par_iter_mut().for_each(|slice| {
+            let part_id = ProcessUniqueId::new();
+            let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
+            for i in slice.iter_mut() {
+                unsafe { std::ptr::write(ptr.add(*i), part_id) }
+            }
+        });
+    }
+
+    partition
+}
 
 /// Reorder a set of points and weights following the hilbert curve technique.
 /// First, the minimal bounding rectangle of the set of points is computed and local
@@ -22,6 +79,11 @@ pub fn hilbert_curve_reorder(
     mut weights: Vec<f64>,
     order: usize,
 ) -> (Vec<Point2D>, Vec<f64>) {
+    assert!(
+        order < 32,
+        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
+    );
+
     let compute_hilbert_index = hilbert_index_computer(&points, order);
 
     let mut zipped = points
@@ -62,6 +124,10 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64
 }
 
 fn encode(x: u32, y: u32, order: usize) -> u32 {
+    assert!(
+        order < 32,
+        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
+    );
     assert!(
         x < 2u32.pow(order as u32),
         format!(

@@ -225,7 +225,8 @@ fn axis_sort(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
     }
 }
 
-fn compute_split_positions(
+// This is pub(crate) because it's also used in the hilbert_curve module
+pub(crate) fn compute_split_positions(
     weights: &[f64],
     permutation: &[usize],
     num_splits: usize,
@@ -299,7 +300,12 @@ fn compute_split_positions(
 
 // Same as slice::split_at_mut but split in a arbitrary number of subslices
 // Sequential since `position` should be small
-fn split_at_mut_many<'a, T>(slice: &'a mut [T], positions: &[usize]) -> Vec<&'a mut [T]> {
+//
+// This is pub(crate) because it's also used in the hilbert_curve module
+pub(crate) fn split_at_mut_many<'a, T>(
+    slice: &'a mut [T],
+    positions: &[usize],
+) -> Vec<&'a mut [T]> {
     let ret = Vec::with_capacity(positions.len() + 1);
 
     let (mut head, tail, _) = positions.iter().fold(
