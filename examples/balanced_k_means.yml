@@ -14,12 +14,12 @@ args:
  - max_iter:
     long: max_iter
     takes_value: true
-    default_value: "1000"
+    default_value: "500"
     help: Sets the maximum number of iterations of the algorithm
  - max_balance_iter:
     long: max_balance_iter
     takes_value: true
-    default_value: "1"
+    default_value: "20"
     help: Sets the maximum number of iterations of the load balancing loop
  - imbalance_tol:
     long: imbalance_tol

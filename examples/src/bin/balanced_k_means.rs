@@ -53,7 +53,10 @@ fn main() {
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
-    let _weights: Vec<f64> = points.iter().map(|_| 1.).collect();
+    let weights = points
+        .iter()
+        .map(|p| if p.x < 0. { 1. } else { 2. })
+        .collect::<Vec<_>>();
 
     let settings = BalancedKmeansSettings {
         num_partitions,
@@ -66,7 +69,7 @@ fn main() {
         ..Default::default()
     };
 
-    let partition = balanced_k_means(points, settings);
+    let (partition, _weights) = balanced_k_means(points, weights.clone(), settings);
 
     if !matches.is_present("quiet") {
         examples::plot_partition(partition)

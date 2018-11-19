@@ -188,7 +188,7 @@ fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .map(|p| Point2D::new(p.x, p.y))
         .collect::<Vec<_>>();
 
-    let _weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
+    let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
 
     let max_iter: usize = matches
         .value_of("max_iter")
@@ -235,7 +235,7 @@ fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     };
 
     println!("info: entering balanced_k_means algorithm");
-    let partition = algorithms::k_means::balanced_k_means(points, settings);
+    let (partition, _weights) = algorithms::k_means::balanced_k_means(points, weights, settings);
     println!("info: left balanced_k_means algorithm");
 
     if !matches.is_present("quiet") {

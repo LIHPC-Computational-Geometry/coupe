@@ -200,12 +200,10 @@ impl Default for BalancedKmeansSettings {
 
 pub fn balanced_k_means(
     points: Vec<Point2D>,
+    weights: Vec<f64>,
     settings: impl Into<Option<BalancedKmeansSettings>>,
-) -> Vec<(Point2D, ProcessUniqueId)> {
+) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
     let settings = settings.into().unwrap_or_default();
-
-    // custom weights are not yet supported
-    let weights: Vec<_> = points.par_iter().map(|_| 1.).collect();
 
     // sort points with space filling curve
     let (points, weights) = if settings.hilbert {
@@ -259,20 +257,26 @@ pub fn balanced_k_means(
     let lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
     let ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
 
-    balanced_k_means_iter(
-        Inputs { points, weights },
-        Clusters {
-            centers,
-            center_ids: &center_ids,
-        },
-        AlgorithmState {
-            assignments,
-            influences,
-            lbs,
-            ubs,
-        },
-        &settings,
-        settings.max_iter,
+    (
+        balanced_k_means_iter(
+            Inputs {
+                points,
+                weights: weights.clone(),
+            },
+            Clusters {
+                centers,
+                center_ids: &center_ids,
+            },
+            AlgorithmState {
+                assignments,
+                influences,
+                lbs,
+                ubs,
+            },
+            &settings,
+            settings.max_iter,
+        ),
+        weights,
     )
 }
 
