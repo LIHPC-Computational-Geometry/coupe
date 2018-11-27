@@ -74,34 +74,18 @@ pub fn hilbert_curve_partition(
 /// First, the minimal bounding rectangle of the set of points is computed and local
 /// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
 /// Then the hilbert curve is computed from those local coordinates.
-pub fn hilbert_curve_reorder(
-    mut points: Vec<Point2D>,
-    mut weights: Vec<f64>,
-    order: usize,
-) -> (Vec<Point2D>, Vec<f64>) {
+pub fn hilbert_curve_reorder(points: &[Point2D], permutation: &mut [usize], order: usize) {
     assert!(
         order < 32,
         "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
     );
 
-    let compute_hilbert_index = hilbert_index_computer(&points, order);
+    let compute_hilbert_index = hilbert_index_computer(points, order);
 
-    let mut zipped = points
-        .par_iter()
-        .cloned()
-        .zip(weights.par_iter().cloned())
-        .zip(points.par_iter().map(|p| compute_hilbert_index((p.x, p.y))))
-        .collect::<Vec<_>>();
-
-    zipped.as_mut_slice().par_sort_by_key(|(_, idx)| *idx);
-
-    let (still_zipped, _): (Vec<_>, Vec<_>) = zipped.into_par_iter().unzip();
-
-    still_zipped
-        .into_par_iter()
-        .unzip_into_vecs(&mut points, &mut weights);
-
-    (points, weights)
+    permutation.par_sort_by_key(|idx| {
+        let p = points[*idx];
+        compute_hilbert_index((p.x, p.y))
+    });
 }
 
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {

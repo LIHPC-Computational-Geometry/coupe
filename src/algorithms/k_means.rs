@@ -203,6 +203,7 @@ pub fn balanced_k_means(
     weights: Vec<f64>,
     settings: impl Into<Option<BalancedKmeansSettings>>,
 ) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
+    unimplemented!()
     let settings = settings.into().unwrap_or_default();
 
     // sort points with space filling curve
