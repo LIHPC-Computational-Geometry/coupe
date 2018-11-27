@@ -70,11 +70,21 @@ pub fn hilbert_curve_partition(
     partition
 }
 
+pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usize> {
+    let mut permutation: Vec<usize> = (0..points.len()).into_par_iter().collect();
+    hilbert_curve_reorder_permu(points, &mut permutation, order);
+    permutation
+}
+
 /// Reorder a set of points and weights following the hilbert curve technique.
 /// First, the minimal bounding rectangle of the set of points is computed and local
 /// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
 /// Then the hilbert curve is computed from those local coordinates.
-pub fn hilbert_curve_reorder(points: &[Point2D], permutation: &mut [usize], order: usize) {
+pub(crate) fn hilbert_curve_reorder_permu(
+    points: &[Point2D],
+    permutation: &mut [usize],
+    order: usize,
+) {
     assert!(
         order < 32,
         "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."

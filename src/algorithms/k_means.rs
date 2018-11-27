@@ -27,28 +27,28 @@ type ClusterId = ProcessUniqueId;
 /// It also skips the bounding boxes optimization which would slightly reduce the complexity of the
 /// algorithm.
 pub fn simplified_k_means(
-    points: Vec<Point2D>,
-    weights: Vec<f64>,
+    points: &[Point2D],
+    weights: &[f64],
     num_partitions: usize,
     imbalance_tol: f64,
     mut n_iter: isize,
     hilbert: bool,
-) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
-    let (points, weights) = if hilbert {
-        let order = ((points.len() as f64).log2() + 10.) as usize;
-        hilbert_curve::hilbert_curve_reorder(points, weights, order)
+) -> Vec<ProcessUniqueId> {
+    let order = ((points.len() as f64).log2() + 10.) as usize;
+    let permu = if hilbert {
+        hilbert_curve::hilbert_curve_reorder(points, order)
     } else {
-        let qt = z_curve::ZCurveQuadtree::new(points, weights);
-        qt.reorder()
+        z_curve::z_curve_reorder(points, order as u32)
     };
 
     let points_per_center = points.len() / num_partitions;
 
-    let mut centers: Vec<_> = points
+    let mut centers: Vec<_> = permu
         .iter()
         .cloned()
         .skip(points_per_center / 2)
         .step_by(points_per_center)
+        .map(|idx| points[idx])
         .collect();
 
     let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
@@ -70,8 +70,9 @@ pub fn simplified_k_means(
         n_iter -= 1;
 
         // find new assignments
-        points
+        permu
             .par_iter()
+            .map(|idx| points[*idx])
             .zip(assignments.par_iter_mut())
             .for_each(|(point, assignment)| {
                 // find closest center
@@ -98,8 +99,9 @@ pub fn simplified_k_means(
             .zip(center_ids.par_iter())
             .for_each(|(center, id)| {
                 let new_center = geometry::center(
-                    &points
+                    &permu
                         .iter()
+                        .map(|idx| points[*idx])
                         .zip(assignments.iter())
                         .filter(|(_, point_id)| *id == **point_id)
                         .map(|(p, _)| *p)
@@ -142,7 +144,7 @@ pub fn simplified_k_means(
         imbalance = self::imbalance(&cluster_weights);
     }
 
-    (points.into_iter().zip(assignments).collect(), weights)
+    assignments
 }
 
 fn imbalance(weights: &[f64]) -> f64 {
