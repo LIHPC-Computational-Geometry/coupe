@@ -26,7 +26,11 @@ use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-pub fn z_curve_partition(points: &[Point2D], order: u32) -> Vec<ProcessUniqueId> {
+pub fn z_curve_partition(
+    points: &[Point2D],
+    num_partitions: usize,
+    order: u32,
+) -> Vec<ProcessUniqueId> {
     let mbr = Mbr2D::from_points(points.iter());
     let initial_id = ProcessUniqueId::new();
     let mut ininial_partition: Vec<_> = points.par_iter().map(|_| initial_id).collect();
@@ -40,6 +44,19 @@ pub fn z_curve_partition(points: &[Point2D], order: u32) -> Vec<ProcessUniqueId>
         &AtomicPtr::from(ininial_partition.as_mut_ptr()),
     );
 
+    let points_per_partition = points.len() / num_partitions;
+
+    let atomic_handle = AtomicPtr::from(ininial_partition.as_mut_ptr());
+    permutation
+        .par_chunks(points_per_partition)
+        .for_each(|chunk| {
+            let id = ProcessUniqueId::new();
+            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
+            for idx in chunk {
+                unsafe { std::ptr::write(ptr.add(*idx), id) }
+            }
+        });
+
     ininial_partition
 }
 
@@ -51,12 +68,6 @@ fn z_curve_partition_recurse(
     partition: &AtomicPtr<ProcessUniqueId>,
 ) {
     if order == 0 || permu.len() <= 1 {
-        // write id to partition
-        let id = ProcessUniqueId::new();
-        permu.par_iter().for_each(|idx| {
-            let ptr = partition.load(atomic::Ordering::Relaxed);
-            unsafe { std::ptr::write(ptr.add(*idx), id) }
-        });
         return;
     }
 
@@ -66,7 +77,7 @@ fn z_curve_partition_recurse(
         .collect::<Vec<_>>();
 
     // only 4 different elements
-    // use pdqsort to break equal elements pattern (O(N) ???)
+    // use pdqsort to break equal elements pattern (O(N)-ish??)
     permu.par_sort_unstable_by_key(|idx| quadrants[*idx] as u8);
 
     // find split positions in ordered array

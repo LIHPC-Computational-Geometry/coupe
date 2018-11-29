@@ -31,6 +31,9 @@ name = "multi_jagged"
 name = "hilbert_curve"
 
 [[bin]]
+name = "z_curve"
+
+[[bin]]
 name = "simplified_k_means"
 
 [[bin]]

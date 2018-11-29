@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
+use std::sync::atomic::{self, AtomicPtr};
 
 use super::hilbert_curve;
 use super::z_curve;
@@ -34,11 +35,10 @@ pub fn simplified_k_means(
     mut n_iter: isize,
     hilbert: bool,
 ) -> Vec<ProcessUniqueId> {
-    let order = ((points.len() as f64).log2() + 10.) as usize;
     let permu = if hilbert {
-        hilbert_curve::hilbert_curve_reorder(points, order)
+        hilbert_curve::hilbert_curve_reorder(points, 15)
     } else {
-        z_curve::z_curve_reorder(points, order as u32)
+        z_curve::z_curve_reorder(points, 15)
     };
 
     let points_per_center = points.len() / num_partitions;
@@ -55,43 +55,48 @@ pub fn simplified_k_means(
 
     let mut influences = centers.par_iter().map(|_| 1.).collect::<Vec<_>>();
 
-    let mut assignments: Vec<_> = center_ids
-        .iter()
-        .cloned()
-        .flat_map(|id| ::std::iter::repeat(id).take(points_per_center))
-        .take(points.len())
-        .collect();
+    let dummy_id = ClusterId::new();
+    let mut assignments = permu.par_iter().map(|_| dummy_id).collect::<Vec<_>>();
+    let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
+    permu
+        .par_chunks(points_per_center)
+        .zip(center_ids.par_iter())
+        .for_each(|(chunk, id)| {
+            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
+            for idx in chunk {
+                unsafe { std::ptr::write(ptr.add(*idx), *id) }
+            }
+        });
 
     let mut imbalance = ::std::f64::MAX;
 
     let target_weight = weights.par_iter().sum::<f64>() / num_partitions as f64;
 
-    while imbalance > imbalance_tol && n_iter > 0 {
+    while
+    /* imbalance > imbalance_tol && */
+    n_iter > 0 {
         n_iter -= 1;
 
         // find new assignments
-        permu
-            .par_iter()
-            .map(|idx| points[*idx])
-            .zip(assignments.par_iter_mut())
-            .for_each(|(point, assignment)| {
-                // find closest center
-                let mut distances = ::std::iter::repeat(*point)
-                    .zip(centers.iter())
-                    .zip(center_ids.iter())
-                    .zip(influences.iter())
-                    .map(|(((p, center), id), influence)| (*id, (p - center).norm() * influence))
-                    .collect::<Vec<_>>();
+        permu.par_iter().for_each(|idx| {
+            // find closest center
+            let mut distances = ::std::iter::repeat(points[*idx])
+                .zip(centers.iter())
+                .zip(center_ids.iter())
+                .zip(influences.iter())
+                .map(|(((p, center), id), influence)| (*id, (p - center).norm() * influence))
+                .collect::<Vec<_>>();
 
-                distances
-                    .as_mut_slice()
-                    .sort_unstable_by(|(_, d1), (_, d2)| {
-                        d1.partial_cmp(d2).unwrap_or(Ordering::Equal)
-                    });
+            distances
+                .as_mut_slice()
+                .sort_unstable_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
 
-                // update assignment with closest center found
-                *assignment = distances.into_iter().next().unwrap().0;
-            });
+            // update assignment with closest center found
+
+            let new_assignment = distances.into_iter().next().unwrap().0;
+            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
+            unsafe { std::ptr::write(ptr.add(*idx), new_assignment) }
+        });
 
         // update centers position from new assignments
         centers
@@ -101,10 +106,9 @@ pub fn simplified_k_means(
                 let new_center = geometry::center(
                     &permu
                         .iter()
-                        .map(|idx| points[*idx])
-                        .zip(assignments.iter())
-                        .filter(|(_, point_id)| *id == **point_id)
-                        .map(|(p, _)| *p)
+                        .map(|idx| (points[*idx], assignments[*idx]))
+                        .filter(|(_, point_id)| *id == *point_id)
+                        .map(|(p, _)| p)
                         .collect::<Vec<_>>(),
                 );
 
@@ -205,7 +209,7 @@ pub fn balanced_k_means(
     weights: Vec<f64>,
     settings: impl Into<Option<BalancedKmeansSettings>>,
 ) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
-    unimplemented!()
+    unimplemented!();
     let settings = settings.into().unwrap_or_default();
 
     // sort points with space filling curve

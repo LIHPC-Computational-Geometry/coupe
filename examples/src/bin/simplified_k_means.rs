@@ -46,9 +46,9 @@ fn main() {
 
     let weights: Vec<f64> = points.iter().map(|_| 1.).collect();
 
-    let (partition, _weights) = simplified_k_means(
-        points,
-        weights,
+    let partition = simplified_k_means(
+        &points,
+        &weights,
         num_partitions,
         imbalance_tol,
         max_iter,
@@ -56,6 +56,7 @@ fn main() {
     );
 
     if !matches.is_present("quiet") {
-        examples::plot_partition(partition)
+        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        examples::plot_partition(part)
     }
 }
