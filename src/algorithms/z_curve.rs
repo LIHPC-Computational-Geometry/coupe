@@ -30,22 +30,31 @@ pub fn z_curve_partition(
     num_partitions: usize,
     order: u32,
 ) -> Vec<ProcessUniqueId> {
+    assert!(
+        order <= 15, 
+        "Cannot use the z-curve partition algorithm with an order > 15 because it would currently overflow hashes capacity"
+    );
+
+    // Mbr used to construct Point hashes
     let mbr = Mbr2D::from_points(points.iter());
+    
+    let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
+    
     let initial_id = ProcessUniqueId::new();
     let mut ininial_partition: Vec<_> = points.par_iter().map(|_| initial_id).collect();
-    let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
+    // reorder points
     z_curve_partition_recurse(
         points,
         order,
         &mbr,
         &mut permutation,
-        &AtomicPtr::from(ininial_partition.as_mut_ptr()),
     );
 
     let points_per_partition = points.len() / num_partitions;
 
     let atomic_handle = AtomicPtr::from(ininial_partition.as_mut_ptr());
+    // give an id to each partition
     permutation
         .par_chunks(points_per_partition)
         .for_each(|chunk| {
@@ -59,17 +68,20 @@ pub fn z_curve_partition(
     ininial_partition
 }
 
+// reorders `permu` to sort points by increasing z-curve hash
 fn z_curve_partition_recurse(
     points: &[Point2D],
     order: u32,
     mbr: &Mbr2D,
     permu: &mut [usize],
-    partition: &AtomicPtr<ProcessUniqueId>,
 ) {
+    // we stop recursion if there is only 1 point left to avoid useless calls
     if order == 0 || permu.len() <= 1 {
         return;
     }
 
+    // compute the quadrant in which each point is.
+    // default to dummy value for points outside of the current mbr
     let quadrants = points
         .par_iter()
         .map(|p| mbr.quadrant(p).unwrap_or(Quadrant::BottomLeft))
@@ -78,6 +90,11 @@ fn z_curve_partition_recurse(
     // only 4 different elements
     // use pdqsort to break equal elements pattern (O(N)-ish??)
     permu.par_sort_unstable_by_key(|idx| quadrants[*idx] as u8);
+
+    // Now we need to split the permutation array in four subslices
+    // such that each subslice contains only points from the same quadrant
+    // instead of traversing the whole array, we can just perform 3 binary searches
+    // to find the split positions since the array is already sorted
 
     // find split positions in ordered array
     let p1 = permu
@@ -117,16 +134,24 @@ fn z_curve_partition_recurse(
             _ => unreachable!(),
         };
 
-        z_curve_partition_recurse(points, order - 1, &mbr.sub_mbr(quadrant), slice, partition);
+        z_curve_partition_recurse(points, order - 1, &mbr.sub_mbr(quadrant), slice);
     })
 }
 
+// reorders a slice of Point2D in increasing z-curve order
 pub(crate) fn z_curve_reorder(points: &[Point2D], order: u32) -> Vec<usize> {
+    assert!(
+        order <= 15, 
+        "Cannot use the z-curve partition algorithm with an order > 15 because it would currently overflow hashes capacity"
+    );
+    
     let mut permu: Vec<_> = (0..points.len()).into_par_iter().collect();
     z_curve_reorder_permu(points, permu.as_mut_slice(), order);
     permu
 }
 
+// reorders a slice of indices such that the associated array of Point2D is sorted 
+// by increasing z-order
 pub(crate) fn z_curve_reorder_permu(points: &[Point2D], permu: &mut [usize], order: u32) {
     let mbr = Mbr2D::from_points(points.iter());
     let hashes = permu
@@ -137,6 +162,7 @@ pub(crate) fn z_curve_reorder_permu(points: &[Point2D], permu: &mut [usize], ord
     permu.par_sort_by_key(|idx| hashes[*idx]);
 }
 
+// Compute the z-curve hash of a given Point in 2D
 fn compute_hash(point: &Point2D, order: u32, mbr: &Mbr2D) -> usize {
     let current_hash = mbr
         .quadrant(point)
@@ -145,6 +171,8 @@ fn compute_hash(point: &Point2D, order: u32, mbr: &Mbr2D) -> usize {
     if order == 0 {
         current_hash as usize
     } else {
+        // TODO: this can overflow if order > 15 since 4^16 = u32::MAX
+        // maybe we should use a BigInt
         4u32.pow(order) as usize * current_hash as usize
             + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
