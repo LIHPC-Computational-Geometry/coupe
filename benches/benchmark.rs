@@ -158,8 +158,8 @@ fn bench_simplified_k_means(c: &mut Criterion) {
             let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
             b.iter(|| {
                 simplified_k_means(
-                    sample_points.clone(),
-                    weights.clone(),
+                    &sample_points,
+                    &weights,
                     2usize.pow(NUM_ITER as u32),
                     5.,
                     1000,

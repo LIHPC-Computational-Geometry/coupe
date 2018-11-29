@@ -19,7 +19,6 @@
 use super::multi_jagged::split_at_mut_many;
 use geometry::{Mbr2D, Point2D, Quadrant};
 
-use rayon;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -193,7 +192,7 @@ mod tests {
             Point2D::new(4., 2.),
         ];
 
-        let ids = z_curve_partition(&points, 1);
+        let ids = z_curve_partition(&points, 4, 1);
         for id in ids.iter() {
             println!("{}", id);
         }

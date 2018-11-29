@@ -23,18 +23,18 @@ fn main() -> Result<(), Error> {
     let mesh = XYZMesh::from_file(file_name)?;
 
     match matches.subcommand() {
-        ("rcb", Some(submatches)) => rcb(mesh, submatches),
-        ("rib", Some(submatches)) => rib(mesh, submatches),
-        ("multi_jagged", Some(submatches)) => multi_jagged(mesh, submatches),
-        ("simplified_k_means", Some(submatches)) => simplified_k_means(mesh, submatches),
-        ("balanced_k_means", Some(submatches)) => balanced_k_means(mesh, submatches),
+        ("rcb", Some(submatches)) => rcb(&mesh, submatches),
+        ("rib", Some(submatches)) => rib(&mesh, submatches),
+        ("multi_jagged", Some(submatches)) => multi_jagged(&mesh, submatches),
+        ("simplified_k_means", Some(submatches)) => simplified_k_means(&mesh, submatches),
+        ("balanced_k_means", Some(submatches)) => balanced_k_means(&mesh, submatches),
         _ => bail! {"no subcommand specified"},
     }
 
     Ok(())
 }
 
-fn rcb<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+fn rcb<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let num_iter: usize = matches
         .value_of("num_iter")
         .unwrap_or_default()
@@ -67,7 +67,7 @@ fn rcb<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     }
 }
 
-fn rib<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+fn rib<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let num_iter: usize = matches
         .value_of("num_iter")
         .unwrap_or_default()
@@ -98,7 +98,7 @@ fn rib<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     }
 }
 
-fn multi_jagged<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+fn multi_jagged<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let num_partitions: usize = matches
         .value_of("num_partitions")
         .unwrap_or_default()
@@ -137,7 +137,7 @@ fn multi_jagged<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     }
 }
 
-fn simplified_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+fn simplified_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
@@ -165,9 +165,9 @@ fn simplified_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .expect("Wrong value for imbalance_tol");
 
     println!("info: entering simplified_k_means algorithm");
-    let (partition, _weights) = algorithms::k_means::simplified_k_means(
-        points,
-        weights,
+    let partition = algorithms::k_means::simplified_k_means(
+        &points,
+        &weights,
         num_partitions,
         imbalance_tol,
         max_iter,
@@ -176,11 +176,12 @@ fn simplified_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     println!("info: left simplified_k_means algorithm");
 
     if !matches.is_present("quiet") {
-        examples::plot_partition(partition)
+        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        examples::plot_partition(part)
     }
 }
 
-fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
+fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
@@ -224,20 +225,21 @@ fn balanced_k_means<'a>(mesh: impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let settings = BalancedKmeansSettings {
         num_partitions,
-        imbalance_tol: imbalance_tol,
+        imbalance_tol,
         max_iter,
         max_balance_iter,
         delta_threshold: delta_max,
-        erode: erode,
-        hilbert: hilbert,
+        erode,
+        hilbert,
         ..Default::default()
     };
 
     println!("info: entering balanced_k_means algorithm");
-    let (partition, _weights) = algorithms::k_means::balanced_k_means(points, weights, settings);
+    let partition = algorithms::k_means::balanced_k_means(&points, &weights, settings);
     println!("info: left balanced_k_means algorithm");
 
     if !matches.is_present("quiet") {
-        examples::plot_partition(partition)
+        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        examples::plot_partition(part)
     }
 }

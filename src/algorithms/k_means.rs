@@ -68,13 +68,11 @@ pub fn simplified_k_means(
             }
         });
 
-    let mut imbalance = ::std::f64::MAX;
+    let mut imbalance = std::f64::MAX;
 
     let target_weight = weights.par_iter().sum::<f64>() / num_partitions as f64;
 
-    while
-    /* imbalance > imbalance_tol && */
-    n_iter > 0 {
+    while imbalance > imbalance_tol && n_iter > 0 {
         n_iter -= 1;
 
         // find new assignments
@@ -279,6 +277,7 @@ pub fn balanced_k_means(
     assignments
 }
 
+#[derive(Clone, Copy)]
 struct Inputs<'a> {
     points: &'a [Point2D],
     weights: &'a [f64],
