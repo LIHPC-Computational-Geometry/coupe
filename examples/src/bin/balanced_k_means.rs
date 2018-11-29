@@ -55,7 +55,8 @@ fn main() {
 
     let weights = points
         .iter()
-        .map(|p| if p.x < 0. { 1. } else { 2. })
+        // .map(|p| if p.x < 0. { 1. } else { 2. })
+        .map(|p| 1.)
         .collect::<Vec<_>>();
 
     let settings = BalancedKmeansSettings {
@@ -69,9 +70,28 @@ fn main() {
         ..Default::default()
     };
 
-    let (partition, _weights) = balanced_k_means(points, weights.clone(), settings);
+    let now = std::time::Instant::now();
+    let partition = balanced_k_means(&points, &weights, settings);
+    let end = now.elapsed();
+    println!("elapsed in multi-jagged: {:?}", end);
+
+    let max_imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
+    let relative_imbalance = coupe::analysis::imbalance_relative_diff(&weights, &partition);
+    let mut aspect_ratios = coupe::analysis::aspect_ratios(&partition, &points)
+        .into_iter()
+        .map(|(_id, r)| r)
+        .collect::<Vec<_>>();;
+    aspect_ratios
+        .as_mut_slice()
+        .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+
+    println!("Partition analysis:");
+    println!("   > max weight diff: {}", max_imbalance);
+    println!("   > relative weight diff: {}%", 100. * relative_imbalance);
+    println!("   > ordered aspect ratios: {:?}", aspect_ratios);
 
     if !matches.is_present("quiet") {
-        examples::plot_partition(partition)
+        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        examples::plot_partition(part)
     }
 }

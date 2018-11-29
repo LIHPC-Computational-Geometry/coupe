@@ -205,91 +205,83 @@ impl Default for BalancedKmeansSettings {
 }
 
 pub fn balanced_k_means(
-    points: Vec<Point2D>,
-    weights: Vec<f64>,
+    points: &[Point2D],
+    weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
-) -> (Vec<(Point2D, ProcessUniqueId)>, Vec<f64>) {
-    unimplemented!();
+) -> Vec<ProcessUniqueId> {
     let settings = settings.into().unwrap_or_default();
 
     // sort points with space filling curve
-    let (points, weights) = if settings.hilbert {
-        let order = ((points.len() as f64).log2() + 10.) as usize;
-        hilbert_curve::hilbert_curve_reorder(points, weights, order)
+    let mut permu = if settings.hilbert {
+        hilbert_curve::hilbert_curve_reorder(points, 15)
     } else {
-        let qt = z_curve::ZCurveQuadtree::new(points, weights);
-        qt.reorder()
+        z_curve::z_curve_reorder(points, 15)
     };
 
     // Compute how many points will be initially assigned to each cluster
     let points_per_center = points.len() / settings.num_partitions;
 
     // select num_partitions initial centers from the ordered points
-    let centers: Vec<_> = points
+    let centers: Vec<_> = permu
         .iter()
-        .cloned()
         // for each partition yielded by the Z-curve reordering
         // we select the median point to be the initial cluster center
         // because it is in most cases in the middle of the partition
         .skip(points_per_center / 2)
         .step_by(points_per_center)
         .par_bridge()
+        .map(|idx| points[*idx])
         .collect();
 
     // generate unique ids for each initial partition that will live throughout
     // the algorithm (no new id is generated afterwards)
     let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
 
-    // generate initial assignments, i.e.
-    // map [id0, id1, ..., idn]
-    //    to [[id0, ..., id0], ..., [idn, ..., idn]]
-    //         partition_1             partition_n
-    let remainder = points.len() % settings.num_partitions;
-    let assignments: Vec<_> = rayon::iter::repeat(center_ids[0])
-        .take(remainder)
-        .chain(
-            center_ids
-                .par_iter()
-                .cloned()
-                .flat_map(|id| rayon::iter::repeat(id).take(points_per_center)),
-        ).collect();
+    let dummy_id = ProcessUniqueId::new();
+    let mut assignments = permu.par_iter().map(|_| dummy_id).collect::<Vec<_>>();
+    let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
+    permu
+        .par_chunks(points_per_center)
+        .zip(center_ids.par_iter())
+        .for_each(|(chunk, id)| {
+            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
+            for idx in chunk {
+                unsafe { std::ptr::write(ptr.add(*idx), *id) }
+            }
+        });
 
     debug_assert_eq!(assignments.len(), points.len());
 
     // Generate initial influences (to 1)
-    let influences: Vec<_> = centers.par_iter().map(|_| 1.).collect();
+    let mut influences: Vec<_> = centers.par_iter().map(|_| 1.).collect();
 
     // Generate initial lower and upper bounds. These two variables represent bounds on
     // the effective distance between an point and the cluster it is assigned to.
-    let lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
-    let ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+    let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
+    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
 
-    (
-        balanced_k_means_iter(
-            Inputs {
-                points,
-                weights: weights.clone(),
-            },
-            Clusters {
-                centers,
-                center_ids: &center_ids,
-            },
-            AlgorithmState {
-                assignments,
-                influences,
-                lbs,
-                ubs,
-            },
-            &settings,
-            settings.max_iter,
-        ),
-        weights,
-    )
+    balanced_k_means_iter(
+        Inputs { points, weights },
+        Clusters {
+            centers,
+            center_ids: &center_ids,
+        },
+        &mut permu,
+        AlgorithmState {
+            assignments: &mut assignments,
+            influences: &mut influences,
+            lbs: &mut lbs,
+            ubs: &mut ubs,
+        },
+        &settings,
+        settings.max_iter,
+    );
+    assignments
 }
 
-struct Inputs {
-    points: Vec<Point2D>,
-    weights: Vec<f64>,
+struct Inputs<'a> {
+    points: &'a [Point2D],
+    weights: &'a [f64],
 }
 
 #[derive(Clone, Copy)]
@@ -298,11 +290,11 @@ struct Clusters<T, U> {
     center_ids: U,
 }
 
-struct AlgorithmState {
-    assignments: Vec<ClusterId>,
-    influences: Vec<f64>,
-    lbs: Vec<f64>,
-    ubs: Vec<f64>,
+struct AlgorithmState<'a> {
+    assignments: &'a mut [ProcessUniqueId],
+    influences: &'a mut [f64],
+    lbs: &'a mut [f64],
+    ubs: &'a mut [f64],
 }
 
 // This is the main loop of the algorithm. It handles:
@@ -313,10 +305,11 @@ struct AlgorithmState {
 fn balanced_k_means_iter(
     inputs: Inputs,
     clusters: Clusters<Vec<Point2D>, &[ClusterId]>,
+    permutation: &mut [usize],
     state: AlgorithmState,
     settings: &BalancedKmeansSettings,
     current_iter: usize,
-) -> Vec<(Point2D, ClusterId)> {
+) {
     let Inputs { points, weights } = inputs;
     let Clusters {
         centers,
@@ -329,7 +322,10 @@ fn balanced_k_means_iter(
         ubs,
     } = state;
 
-    let (assignments, mut influences, mut ubs, mut lbs) = assign_and_balance(
+    assign_and_balance(
+        &points,
+        &weights,
+        permutation,
         AlgorithmState {
             assignments,
             influences,
@@ -340,8 +336,6 @@ fn balanced_k_means_iter(
             centers: &centers,
             center_ids: &center_ids,
         },
-        &points,
-        &weights,
         settings,
     );
 
@@ -395,16 +389,15 @@ fn balanced_k_means_iter(
 
     // if delta_max is below a given threshold, it means that the clusters no longer move a lot at each iteration
     // and the algorithm has become somewhat stable.
-    if *delta_max < settings.delta_threshold || current_iter == 0 {
-        points.into_par_iter().zip(assignments).collect()
-    } else {
-        relax_bounds(&mut lbs, &mut ubs, &distances_moved, &influences);
+    if !(*delta_max < settings.delta_threshold || current_iter == 0) {
+        relax_bounds(lbs, ubs, &distances_moved, &influences);
         balanced_k_means_iter(
             Inputs { points, weights },
             Clusters {
                 centers: new_centers,
                 center_ids,
             },
+            permutation,
             AlgorithmState {
                 assignments,
                 influences,
@@ -413,7 +406,7 @@ fn balanced_k_means_iter(
             },
             settings,
             current_iter - 1,
-        )
+        );
     }
 }
 
@@ -424,22 +417,18 @@ fn balanced_k_means_iter(
 //   - increasing of diminishing clusters influence based on their imbalance
 //   - relaxing upper and lower bounds
 fn assign_and_balance(
-    state: AlgorithmState,
-    clusters: Clusters<&[Point2D], &[ClusterId]>,
     points: &[Point2D],
     weights: &[f64],
+    permutation: &mut [usize],
+    state: AlgorithmState,
+    clusters: Clusters<&[Point2D], &[ClusterId]>,
     settings: &BalancedKmeansSettings,
-) -> (
-    Vec<ClusterId>, // assignments
-    Vec<f64>,       // influences
-    Vec<f64>,       // ubs
-    Vec<f64>,       // lbs
 ) {
     let AlgorithmState {
-        mut assignments,
-        mut influences,
-        mut lbs,
-        mut ubs,
+        assignments,
+        influences,
+        lbs,
+        ubs,
     } = state;
     let Clusters {
         centers,
@@ -471,18 +460,18 @@ fn assign_and_balance(
     // Compute the weight that each cluster should be after the end of the algorithm
     let target_weight = weights.par_iter().sum::<f64>() / (centers.len() as f64);
 
+    let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
     for _ in 0..settings.max_balance_iter {
         // Compute new assignments point to cluster assignments
         // based on the current clusters and influences state
-        points
+        permutation
             .par_iter()
-            .zip(assignments.par_iter_mut())
             .zip(lbs.par_iter_mut())
             .zip(ubs.par_iter_mut())
-            .for_each(|(((p, id), lb), ub)| {
+            .for_each(|((idx, lb), ub)| {
                 if lb < ub {
                     let (new_lb, new_ub, new_assignment) = best_values(
-                        *p,
+                        points[*idx],
                         &centers,
                         &center_ids,
                         &distances_to_mbr,
@@ -493,7 +482,10 @@ fn assign_and_balance(
                     *lb = new_lb;
                     *ub = new_ub;
                     if let Some(new_assignment) = new_assignment {
-                        *id = new_assignment;
+                        let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
+                        unsafe {
+                            std::ptr::write(ptr.add(*idx), new_assignment);
+                        }
                     }
                 }
             });
@@ -513,7 +505,7 @@ fn assign_and_balance(
 
         // return if maximum imbalance is small enough
         if imbalance(&new_weights) < settings.imbalance_tol {
-            return (assignments, influences, lbs, ubs);
+            return;
         }
 
         // If this point is reached, the current assignments
@@ -558,10 +550,8 @@ fn assign_and_balance(
             .map(|(center, new_center)| (*center - new_center).norm())
             .collect();
 
-        relax_bounds(&mut lbs, &mut ubs, &distances_to_old_centers, &influences);
+        relax_bounds(lbs, ubs, &distances_to_old_centers, &influences);
     }
-
-    (assignments, influences, lbs, ubs)
 }
 
 // relax lower and upper bounds according to influence
