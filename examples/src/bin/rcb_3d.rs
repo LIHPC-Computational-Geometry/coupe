@@ -7,7 +7,7 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rcb_3d;
+use coupe::algorithms::recursive_bisection::rcb;
 use coupe::geometry::Point3D;
 
 fn main() {
@@ -35,7 +35,7 @@ fn main() {
     ).into_iter()
     .collect::<Vec<_>>();
 
-    let partition = rcb_3d(&points, &weights, num_iter);
+    let partition = rcb(&points, &weights, num_iter);
 
     if !matches.is_present("quiet") {
         let _part = points.into_iter().zip(partition).collect::<Vec<_>>();

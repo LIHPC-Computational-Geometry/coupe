@@ -8,8 +8,8 @@ extern crate rayon;
 mod generator;
 
 use coupe::algorithms::k_means::simplified_k_means;
-use coupe::algorithms::recursive_bisection::{axis_sort_2d, rcb_2d, rcb_nd};
-use coupe::geometry::{Point, Point2D};
+use coupe::algorithms::recursive_bisection::{axis_sort, rcb};
+use coupe::geometry::Point2D;
 use criterion::{Benchmark, Criterion, Throughput};
 use rayon::prelude::*;
 
@@ -27,7 +27,7 @@ fn bench_axis_sort_random(c: &mut Criterion) {
             );
             let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
 
-            b.iter(|| axis_sort_2d(&sample_points, &mut permutation, true))
+            b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -108,7 +108,7 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
                 SAMPLE_SIZE,
             );
             let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
-            b.iter(|| axis_sort_2d(&sample_points, &mut permutation, true))
+            b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -123,24 +123,7 @@ fn bench_rcb_random(c: &mut Criterion) {
                 SAMPLE_SIZE,
             );
             let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
-            b.iter(|| rcb_2d(&sample_points, &weights, NUM_ITER))
-        }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
-    );
-}
-
-fn bench_rcb_nd_2d_random(c: &mut Criterion) {
-    c.bench(
-        "rcb_nd_2d_random",
-        Benchmark::new("rcb_2d_nd_random", move |b| {
-            let sample_points = generator::uniform_rectangle(
-                Point2D::new(0., 0.),
-                Point2D::new(30., 10.),
-                SAMPLE_SIZE,
-            ).into_iter()
-            .map(|p| Point::from_row_slice(2, &[p.x, p.y]))
-            .collect::<Vec<_>>();
-            let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
-            b.iter(|| rcb_nd(&sample_points, &weights, NUM_ITER))
+            b.iter(|| rcb(&sample_points, &weights, NUM_ITER))
         }).throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
     );
 }
@@ -179,7 +162,6 @@ criterion_group!(
     bench_raw_pdqsort_sorted,
     bench_parallel_raw_pdqsort_sorted,
     bench_rcb_random,
-    bench_rcb_nd_2d_random,
     bench_simplified_k_means
 );
 criterion_main!(benches);

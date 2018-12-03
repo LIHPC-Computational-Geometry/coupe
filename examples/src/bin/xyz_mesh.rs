@@ -56,7 +56,7 @@ fn rcb<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     println!("info: entering RCB algorithm");
     let now = std::time::Instant::now();
-    let partition = algorithms::recursive_bisection::rcb_2d(&points, &weights, num_iter);
+    let partition = algorithms::recursive_bisection::rcb(&points, &weights, num_iter);
     let end = now.elapsed();
     println!("info: left RCB algorithm. {:?} elapsed.", end);
 
