@@ -1,12 +1,215 @@
 //! A few useful geometric types
 
 use itertools::Itertools;
-use nalgebra::{DMatrix, DVector, Matrix2, Matrix3, SymmetricEigen, Vector2, Vector3};
+use nalgebra::allocator::Allocator;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
+use nalgebra::{DMatrix, DVector, Matrix2, Matrix3, SymmetricEigen, Vector2, Vector3, VectorN};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
 pub type Point3D = Vector3<f64>;
 pub type Point = DVector<f64>;
+pub type PointND<D> = VectorN<f64, D>;
+
+#[derive(Debug, Clone)]
+pub struct Aabb<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    p_min: PointND<D>,
+    p_max: PointND<D>,
+}
+
+impl<D> Aabb<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    pub fn new(p_min: PointND<D>, p_max: PointND<D>) -> Self {
+        Self { p_min, p_max }
+    }
+
+    pub fn p_min(&self) -> &PointND<D> {
+        &self.p_min
+    }
+
+    pub fn p_max(&self) -> &PointND<D> {
+        &self.p_max
+    }
+
+    pub fn from_points(points: &[PointND<D>]) -> Self
+    where
+        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    {
+        let (min, max) = points
+            .par_iter()
+            .fold_with(
+                (
+                    PointND::<D>::from_element(std::f64::MAX),
+                    PointND::<D>::from_element(std::f64::MIN),
+                ),
+                |(mut mins, mut maxs), vals| {
+                    for ((mut min, mut max), val) in
+                        mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter())
+                    {
+                        if *val < *min {
+                            *min = *val;
+                        }
+                        if *max < *val {
+                            *max = *val;
+                        }
+                    }
+                    (mins, maxs)
+                },
+            ).reduce_with(|(mins_left, maxs_left), (mins_right, maxs_right)| {
+                (
+                    PointND::<D>::from_iterator(
+                        mins_left
+                            .into_iter()
+                            .zip(mins_right.into_iter())
+                            .map(|(left, right)| left.min(*right)),
+                    ),
+                    PointND::<D>::from_iterator(
+                        maxs_left
+                            .into_iter()
+                            .zip(maxs_right.into_iter())
+                            .map(|(left, right)| left.min(*right)),
+                    ),
+                )
+            }).unwrap();
+
+        Self {
+            p_min: min,
+            p_max: max,
+        }
+    }
+
+    fn center(&self) -> PointND<D> {
+        PointND::from_iterator(
+            self.p_min
+                .iter()
+                .zip(self.p_max.iter())
+                .map(|(min, max)| 0.5 * (min + max)),
+        )
+    }
+
+    // region = bdim...b2b1b0 where bi are bits (0 or 1)
+    // if bi is set (i.e. bi == 1) then the matching region has a i-th coordinates from center[i] to p_max[i]
+    // otherwise, the matching region has a i-th coordinates from p_min[i] to center[i]
+    pub fn sub_aabb(&self, region: u32) -> Self {
+        let dim = D::dim();
+        assert!(
+            region < 2u32.pow(dim as u32),
+            "Wrong region. Region should be composed of dim bits."
+        );
+
+        let center = self.center();
+
+        let p_min =
+            PointND::<D>::from_iterator(self.p_min.iter().zip(center.iter()).enumerate().map(
+                |(i, (min, center))| {
+                    if (region >> i) & 1 == 0 {
+                        *min
+                    } else {
+                        *center
+                    }
+                },
+            ));
+
+        let p_max =
+            PointND::<D>::from_iterator(center.iter().zip(self.p_max.iter()).enumerate().map(
+                |(i, (center, max))| {
+                    if (region >> i) & 1 == 0 {
+                        *center
+                    } else {
+                        *max
+                    }
+                },
+            ));
+
+        Self { p_min, p_max }
+    }
+
+    pub fn aspect_ratio(&self) -> f64 {
+        use itertools::MinMaxResult::*;
+
+        let (min, max) = match self
+            .p_min()
+            .iter()
+            .zip(self.p_max().iter())
+            .map(|(min, max)| (max - min).abs())
+            .minmax()
+        {
+            MinMax(min, max) => (min, max),
+            _ => unimplemented!(),
+        };
+
+        max / min
+    }
+
+    pub fn contains(&self, point: &PointND<D>) -> bool {
+        let eps = 10. * std::f64::EPSILON;
+        self.p_min
+            .iter()
+            .zip(self.p_max.iter())
+            .zip(point.iter())
+            .all(|((min, max), point)| *point < *max + eps && *point > *min - eps)
+    }
+
+    pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
+        if !self.contains(point) {
+            let clamped = PointND::<D>::from_iterator(
+                self.p_min
+                    .iter()
+                    .zip(self.p_max.iter())
+                    .zip(point.iter())
+                    .map(|((min, max), point)| {
+                        if point > max {
+                            *max
+                        } else if point < min {
+                            *min
+                        } else {
+                            *point
+                        }
+                    }),
+            );
+            clamped.norm()
+        } else {
+            let center = self.center();
+
+            self.p_min
+                .iter()
+                .zip(self.p_max.iter())
+                .zip(point.iter())
+                .zip(center.into_iter())
+                .map(|(((min, max), point), center)| {
+                    if point > center {
+                        (max - point).abs()
+                    } else {
+                        (min - point).abs()
+                    }
+                }).max_by(|a, b| a.partial_cmp(&b).unwrap())
+                .unwrap()
+        }
+    }
+
+    pub fn region(&self, point: &PointND<D>) -> Option<u32> {
+        if !self.contains(point) {
+            return None;
+        }
+
+        let mut ret: u32 = 0;
+        let center = self.center();
+        for (i, (point, center)) in point.iter().zip(center.into_iter()).enumerate() {
+            if point > center {
+                ret |= 1 << i;
+            }
+        }
+        Some(ret)
+    }
+}
 
 /// An Axis Aligned Bounding Box
 #[derive(Debug, Clone, Copy)]

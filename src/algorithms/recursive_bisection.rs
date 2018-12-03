@@ -1,18 +1,14 @@
 use geometry::*;
-use nalgebra::{DVector, Vector2};
+use nalgebra::allocator::Allocator;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
+use nalgebra::Vector2;
 use rayon;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
-use nalgebra::VectorN;
-
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
-
-type PointND<D> = VectorN<f64, D>;
-use nalgebra::allocator::Allocator;
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
 
 /// # Recursive Coordinate Bisection algorithm
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
