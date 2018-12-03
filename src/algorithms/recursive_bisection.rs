@@ -1,7 +1,9 @@
 use geometry::*;
+
 use nalgebra::allocator::Allocator;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
+
 use nalgebra::Vector2;
 use rayon;
 use rayon::prelude::*;

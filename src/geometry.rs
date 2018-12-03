@@ -211,6 +211,188 @@ where
     }
 }
 
+use nalgebra::MatrixN;
+#[derive(Debug, Clone)]
+pub struct Mbr<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+{
+    aabb: Aabb<D>,
+    aabb_to_mbr: MatrixN<f64, D>,
+    mbr_to_aabb: MatrixN<f64, D>,
+}
+
+impl<D> Mbr<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+{
+    pub fn new(aabb: Aabb<D>, aabb_to_mbr: MatrixN<f64, D>, mbr_to_aabb: MatrixN<f64, D>) -> Self {
+        Self {
+            aabb,
+            aabb_to_mbr,
+            mbr_to_aabb,
+        }
+    }
+
+    pub fn aabb(&self) -> &Aabb<D> {
+        &self.aabb
+    }
+
+    // Transform a point with the transformation which maps the Mbr to the underlying Aabb
+    pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
+        &self.mbr_to_aabb * point
+    }
+
+    // Transform a point with the transformation which maps the Aabb to the underlying Mbr
+    pub fn aabb_to_mbr(&self, point: &PointND<D>) -> PointND<D> {
+        &self.aabb_to_mbr * point
+    }
+
+    /// Constructs a new `Mbr` from a slice of `PointND`.
+    ///
+    /// The resulting `Mbr` is the smallest Aabb that contains every points of the slice.
+    pub fn from_points(points: &[PointND<D>]) -> Self
+    where
+        D: DimSub<U1>,
+        DefaultAllocator:
+            Allocator<f64, U1, D> + Allocator<f64, U1, D> + Allocator<f64, DimDiff<D, U1>>,
+        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+        <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+    {
+        let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
+        let mat = inertia_matrix(&weights, points);
+        let vec = inertia_vector(mat);
+        let base_change = householder_reflection_TMP_NAME(&vec);
+        let mbr_to_aabb = base_change.clone().try_inverse().unwrap();
+        let mapped = points
+            .par_iter()
+            .map(|p| &mbr_to_aabb * p)
+            .collect::<Vec<_>>();
+        let aabb = Aabb::from_points(&mapped);
+
+        Self {
+            aabb,
+            aabb_to_mbr: base_change,
+            mbr_to_aabb,
+        }
+    }
+
+    /// Constructs a new Mbr that is a sub-Mbr of the current one.
+    /// More precisely, it bounds exactly the specified quadrant.
+    pub fn sub_mbr(&self, region: u32) -> Self {
+        Self {
+            aabb: self.aabb.sub_aabb(region),
+            aabb_to_mbr: self.aabb_to_mbr.clone(),
+            mbr_to_aabb: self.mbr_to_aabb.clone(),
+        }
+    }
+
+    /// Computes the aspect ratio of the Mbr.
+    ///
+    /// It is defined as follows:
+    /// `ratio = long_side / short_side`
+    pub fn aspect_ratio(&self) -> f64 {
+        self.aabb.aspect_ratio()
+    }
+
+    /// Computes the distance between a point and the current mbr.
+    pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
+        self.aabb.distance_to_point(&(&self.mbr_to_aabb * point))
+    }
+
+    /// Computes the center of the Mbr
+    pub fn center(&self) -> PointND<D> {
+        &self.aabb_to_mbr * &self.aabb.center()
+    }
+
+    /// Returns wheter or not the specified point is contained in the Mbr
+    pub fn contains(&self, point: &PointND<D>) -> bool {
+        self.aabb.contains(&(&self.mbr_to_aabb * point))
+    }
+
+    /// Returns the quadrant of the Aabb in which the specified point is.
+    /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
+    /// Returns `None` if the specified point is not contained in the Aabb.
+    pub fn region(&self, point: &PointND<D>) -> Option<u32> {
+        self.aabb.region(&(&self.mbr_to_aabb * point))
+    }
+
+    /// Returns the rotated min and max points of the Aabb.
+    pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
+        let min = &self.aabb_to_mbr * &self.aabb.p_min;
+        let max = &self.aabb_to_mbr * &self.aabb.p_max;
+        (min, max)
+    }
+}
+
+pub fn inertia_matrix<D>(weights: &[f64], points: &[PointND<D>]) -> MatrixN<f64, D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let total_weight = weights.par_iter().sum::<f64>();
+
+    let centroid: PointND<D> = weights
+        .par_iter()
+        .zip(points)
+        .fold_with(PointND::<D>::from_element(0.), |acc, (w, p)| {
+            acc + p.map(|e| e * w)
+        }).reduce_with(|a, b| a + b)
+        .unwrap()
+        / total_weight;
+
+    let ret: MatrixN<f64, D> = weights
+        .par_iter()
+        .zip(points)
+        .fold_with(MatrixN::<f64, D>::from_element(0.), |acc, (w, p)| {
+            acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w)
+        }).reduce_with(|a, b| a + b)
+        .unwrap();
+
+    ret
+}
+
+use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::base::{U0, U1};
+
+pub fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, DimDiff<D, U1>>,
+{
+    SymmetricEigen::new(mat)
+        .eigenvectors
+        .column(0)
+        .clone_owned()
+}
+
+pub fn householder_reflection_TMP_NAME<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
+{
+    let dim = element.len();
+    let e0 = canonical_vector_TMP_NAME(dim, 0);
+    let sign = if element[0] > 0. { -1. } else { 1. };
+    let w = element + sign * e0 * element.norm();
+    let id = MatrixN::<f64, D>::identity();
+    id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
+}
+
+pub(crate) fn canonical_vector_TMP_NAME<D>(dim: usize, nth: usize) -> VectorN<f64, D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
+{
+    let mut ret = VectorN::<f64, D>::from_element(0.);
+    ret[nth] = 1.0;
+    ret
+}
+
 /// An Axis Aligned Bounding Box
 #[derive(Debug, Clone, Copy)]
 pub struct Aabb2D {
