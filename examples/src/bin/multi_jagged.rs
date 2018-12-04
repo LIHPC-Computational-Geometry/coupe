@@ -39,7 +39,7 @@ fn main() {
     let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
     let now = std::time::Instant::now();
-    let partition = multi_jagged_2d(&points, &weights, num_partitions, max_iter);
+    let partition = multi_jagged(&points, &weights, num_partitions, max_iter);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

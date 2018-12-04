@@ -7,7 +7,7 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rib_3d;
+use coupe::algorithms::recursive_bisection::rib;
 use coupe::geometry::Point3D;
 
 fn main() {
@@ -36,13 +36,13 @@ fn main() {
 
     // dummy transform
     let axis = Point3D::new(1., 1., 1.);
-    let mat = coupe::geometry::householder_reflection_3d(&axis);
+    let mat = coupe::geometry::householder_reflection(&axis);
     let transform = |p| mat * p;
     for p in points.iter_mut() {
         *p = transform(*p);
     }
 
-    let _partition = rib_3d(&points, &weights, num_iter);
+    let _partition = rib(&points, &weights, num_iter);
 
     if !matches.is_present("quiet") {
         unimplemented!("3D plot is not supported yet")

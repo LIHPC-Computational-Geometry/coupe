@@ -11,7 +11,6 @@ use rayon::prelude::*;
 
 use coupe::algorithms;
 use coupe::algorithms::k_means::BalancedKmeansSettings;
-use coupe::algorithms::multi_jagged::*;
 use coupe::geometry::Point2D;
 use mesh_io::{mesh::Mesh, mesh::D3, xyz::XYZMesh};
 
@@ -88,7 +87,7 @@ fn rib<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .collect::<Vec<_>>();
 
     println!("info: entering RIB algorithm");
-    let partition = algorithms::recursive_bisection::rib_2d(&points, &weights, num_iter);
+    let partition = algorithms::recursive_bisection::rib(&points, &weights, num_iter);
     println!("info: left RIB algorithm");
 
     if !matches.is_present("quiet") {
@@ -126,7 +125,8 @@ fn multi_jagged<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     println!("info: entering Multi-Jagged algorithm");
     let now = std::time::Instant::now();
-    let partition = multi_jagged_2d(&points, &weights, num_partitions, max_iter);
+    let partition =
+        coupe::algorithms::multi_jagged::multi_jagged(&points, &weights, num_partitions, max_iter);
     let end = now.elapsed();
     println!("info: left Multi-Jagged algorithm. elapsed = {:?}", end);
 

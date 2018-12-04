@@ -7,7 +7,7 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rib_2d;
+use coupe::algorithms::recursive_bisection::rib;
 use coupe::geometry::Point2D;
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
         .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let partition = rib_2d(&points, &weights, num_iter);
+    let partition = rib(&points, &weights, num_iter);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

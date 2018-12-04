@@ -128,6 +128,7 @@ pub fn rcb_recurse<D>(
     }
 }
 
+// pub because it is also useful for multijagged and required for benchmarks
 pub fn axis_sort<D>(points: &[PointND<D>], permutation: &mut [usize], current_coord: usize)
 where
     D: DimName,

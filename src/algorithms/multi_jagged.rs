@@ -5,11 +5,14 @@
 //! It improves over RCB by following the same idea but by creating more than two subparts
 //! in each iteration which leads to decreasing recursion depth.
 
+use nalgebra::allocator::Allocator;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
+
 use crate::geometry::*;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
-use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
 // prime functions are currently unused but may be useful to compute a
@@ -145,21 +148,31 @@ fn compute_modifiers(
         .collect()
 }
 
-pub fn multi_jagged_2d(
-    points: &[Point2D],
+pub fn multi_jagged<D>(
+    points: &[PointND<D>],
     weights: &[f64],
     num_parts: usize,
     max_iter: usize,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<ProcessUniqueId>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
     let partition_scheme = partition_scheme(num_parts, max_iter);
-    multi_jagged_2d_with_scheme(points, weights, partition_scheme)
+    multi_jagged_with_scheme(points, weights, partition_scheme)
 }
 
-fn multi_jagged_2d_with_scheme(
-    points: &[Point2D],
+fn multi_jagged_with_scheme<D>(
+    points: &[PointND<D>],
     weights: &[f64],
     partition_scheme: PartitionScheme,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<ProcessUniqueId>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
@@ -167,30 +180,34 @@ fn multi_jagged_2d_with_scheme(
         .take(len)
         .collect::<Vec<_>>();
 
-    multi_jagged_2d_recurse(
+    multi_jagged_recurse(
         points,
         weights,
         &mut permutation,
         &AtomicPtr::new(initial_partition.as_mut_ptr()),
-        true,
+        0,
         partition_scheme,
     );
 
     initial_partition
 }
 
-fn multi_jagged_2d_recurse(
-    points: &[Point2D],
+fn multi_jagged_recurse<D>(
+    points: &[PointND<D>],
     weights: &[f64],
     permutation: &mut [usize],
     partition: &AtomicPtr<ProcessUniqueId>,
-    x_axis: bool,
+    current_coord: usize,
     partition_scheme: PartitionScheme,
-) {
+) where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
     if partition_scheme.num_splits != 0 {
         let num_splits = partition_scheme.num_splits;
 
-        axis_sort(points, permutation, x_axis);
+        super::recursive_bisection::axis_sort(points, permutation, current_coord);
 
         let split_positions = compute_split_positions(
             weights,
@@ -200,12 +217,19 @@ fn multi_jagged_2d_recurse(
         );
         let mut sub_permutations = split_at_mut_many(permutation, &split_positions);
 
-        let x_axis = !x_axis;
+        let dim = D::dim();
         sub_permutations
             .par_iter_mut()
             .zip(partition_scheme.next.unwrap())
             .for_each(|(permu, scheme)| {
-                multi_jagged_2d_recurse(points, weights, permu, partition, x_axis, scheme)
+                multi_jagged_recurse(
+                    points,
+                    weights,
+                    permu,
+                    partition,
+                    (current_coord + 1) % dim,
+                    scheme,
+                )
             });
     } else {
         let part_id = ProcessUniqueId::new();
@@ -213,15 +237,6 @@ fn multi_jagged_2d_recurse(
             let ptr = partition.load(atomic::Ordering::Relaxed);
             unsafe { std::ptr::write(ptr.add(*idx), part_id) }
         });
-    }
-}
-
-// TODO: this is a duplicate from `geometric` module
-fn axis_sort(points: &[Point2D], permutation: &mut [usize], x_axis: bool) {
-    if x_axis {
-        permutation.par_sort_by(|i1, i2| is_less_cmp_f64(points[*i1].x, points[*i2].x));
-    } else {
-        permutation.par_sort_by(|i1, i2| is_less_cmp_f64(points[*i1].y, points[*i2].y));
     }
 }
 
@@ -320,14 +335,6 @@ pub(crate) fn split_at_mut_many<'a, T>(
 
     head.push(tail);
     head
-}
-
-fn is_less_cmp_f64(a: f64, b: f64) -> Ordering {
-    if a < b {
-        Ordering::Less
-    } else {
-        Ordering::Greater
-    }
 }
 
 #[cfg(test)]
