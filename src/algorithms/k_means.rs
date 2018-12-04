@@ -51,7 +51,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let sfc_order = (std::u32::MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32 - 1;
+    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32 - 1;
     let permu = if hilbert {
         unimplemented!("hilbert curve currently not implemented for n-dimension");
     // hilbert_curve::hilbert_curve_reorder(points, 15)
@@ -239,7 +239,7 @@ where
     let settings = settings.into().unwrap_or_default();
 
     // sort points with space filling curve
-    let sfc_order = (std::u32::MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32 - 1;
+    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32 - 1;
     let mut permu = if settings.hilbert {
         unimplemented!("hilbert curve currently not implemented for n-dimension");
     // hilbert_curve::hilbert_curve_reorder(points, 15)
