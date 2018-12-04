@@ -4,7 +4,7 @@ use itertools::Itertools;
 use nalgebra::allocator::Allocator;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
-use nalgebra::{DMatrix, DVector, Matrix2, Matrix3, SymmetricEigen, Vector2, Vector3, VectorN};
+use nalgebra::{DVector, Matrix2, SymmetricEigen, Vector2, Vector3, VectorN};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
@@ -388,7 +388,7 @@ where
     id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
 }
 
-pub(crate) fn canonical_vector_TMP_NAME<D>(dim: usize, nth: usize) -> VectorN<f64, D>
+pub(crate) fn canonical_vector_TMP_NAME<D>(nth: usize) -> VectorN<f64, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
@@ -550,7 +550,6 @@ mod tests {
 
     #[test]
     fn test_mbr_quadrant() {
-        use super::Quadrant::*;
         let points = vec![
             Point2D::new(0., 1.),
             Point2D::new(1., 0.),

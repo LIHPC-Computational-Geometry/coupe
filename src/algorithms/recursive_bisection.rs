@@ -1,8 +1,11 @@
 use geometry::*;
 
 use nalgebra::allocator::Allocator;
+use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::constraint::{DimEq, ShapeConstraint};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
+use nalgebra::U1;
 
 use nalgebra::Vector2;
 use rayon;
@@ -203,30 +206,17 @@ fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib_2d(points: &[Point2D], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId> {
-    // Compute the inertia vector of the set of points
-    let j = inertia_matrix_2d(weights, points);
-    let inertia = intertia_vector_2d(j);
-
-    // In this implementation, the separator is not actually
-    // parallel to the inertia vector. Instead, a global rotation
-    // is performed on each point such that the inertia vector is
-    // mapped to be parallel to the x axis.
-
-    // such a rotation is given by the following angle
-    // alpha = arccos(dot(inertia, x_axis) / (norm(inertia) * norm(x_axis)))
-    // In our case, both the inertia and x_axis vector are unit vector.
-    let x_unit_vector = Vector2::new(1., 0.);
-    let angle = inertia.dot(&x_unit_vector).acos();
-
-    let points = rotate_vec(points.to_vec(), angle);
-
-    // When the rotation is done, we just apply RCB
-    rcb(&points, weights, n_iter)
-}
-
-pub fn rib_3d(points: &[Point3D], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId> {
-    let mbr = Mbr3D::from_points(points.iter());
+pub fn rib<D>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D>
+        + Allocator<f64, D, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let mbr = Mbr::from_points(&points);
 
     let points = points
         .par_iter()

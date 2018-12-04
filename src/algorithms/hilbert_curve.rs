@@ -10,7 +10,7 @@
 //!
 //! The complexity of encoding a point is O(order)
 
-use geometry::{self, Mbr2D, Point2D};
+use geometry::{self, Mbr, Point2D};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -99,21 +99,20 @@ pub(crate) fn hilbert_curve_reorder_permu(
 }
 
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
-    let mbr = Mbr2D::from_points(points.iter());
-    let rotation = mbr.rotation();
+    let mbr = Mbr::from_points(&points);
     let aabb = mbr.aabb();
 
     let ax = (aabb.p_min().x, aabb.p_max().x);
     let ay = (aabb.p_min().y, aabb.p_max().y);
 
-    let rotate = geometry::rotation(rotation);
+    let rotate = |p: &Point2D| mbr.mbr_to_aabb(p);
 
     let x_mapping = segment_to_segment(ax.0, ax.1, 0., order as f64);
     let y_mapping = segment_to_segment(ay.0, ay.1, 0., order as f64);
 
     move |p| {
-        let (x, y) = rotate(p);
-        encode(x_mapping(x) as u32, y_mapping(y) as u32, order)
+        let p = rotate(&Point2D::new(p.0, p.1));
+        encode(x_mapping(p.x) as u32, y_mapping(p.y) as u32, order)
     }
 }
 

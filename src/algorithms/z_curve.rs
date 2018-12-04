@@ -17,7 +17,13 @@
 //! Finally, the points are reordered according to the order of their hash.
 
 use super::multi_jagged::split_at_mut_many;
-use geometry::{Mbr2D, Mbr3D, Octant, Point2D, Point3D, Quadrant};
+use geometry::{Mbr, PointND};
+
+use nalgebra::allocator::Allocator;
+use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::base::{U0, U1};
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
 
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
@@ -25,18 +31,29 @@ use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-pub fn z_curve_partition(
-    points: &[Point2D],
+pub fn z_curve_partition<D>(
+    points: &[PointND<D>],
     num_partitions: usize,
     order: u32,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<ProcessUniqueId>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D, D>
+        + Allocator<f64, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let max_order = (std::u32::MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
     assert!(
-        order <= 15,
-        "Cannot use the z-curve partition algorithm with an order > 15 because it would currently overflow hashes capacity"
+        order < max_order,
+        format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
     );
 
     // Mbr used to construct Point hashes
-    let mbr = Mbr2D::from_points(points.iter());
+    let mbr = Mbr::from_points(&points);
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
@@ -64,150 +81,17 @@ pub fn z_curve_partition(
 }
 
 // reorders `permu` to sort points by increasing z-curve hash
-fn z_curve_partition_recurse(points: &[Point2D], order: u32, mbr: &Mbr2D, permu: &mut [usize]) {
-    // we stop recursion if there is only 1 point left to avoid useless calls
-    if order == 0 || permu.len() <= 1 {
-        return;
-    }
-
-    // compute the quadrant in which each point is.
-    // default to dummy value for points outside of the current mbr
-    let quadrants = points
-        .par_iter()
-        .map(|p| mbr.quadrant(p).unwrap_or(Quadrant::BottomLeft))
-        .collect::<Vec<_>>();
-
-    // only 4 different elements
-    // use pdqsort to break equal elements pattern (O(N)-ish??)
-    permu.par_sort_unstable_by_key(|idx| quadrants[*idx] as u8);
-
-    // Now we need to split the permutation array in four subslices
-    // such that each subslice contains only points from the same quadrant
-    // instead of traversing the whole array, we can just perform 3 binary searches
-    // to find the split positions since the array is already sorted
-
-    // find split positions in ordered array
-    let p1 = permu
-        .binary_search_by(|idx| {
-            if (quadrants[*idx] as u8) < 1 {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        }).unwrap_err();
-
-    let p2 = permu
-        .binary_search_by(|idx| {
-            if (quadrants[*idx] as u8) < 2 {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        }).unwrap_err();
-
-    let p3 = permu
-        .binary_search_by(|idx| {
-            if (quadrants[*idx] as u8) < 3 {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        }).unwrap_err();
-
-    let slices = split_at_mut_many(permu, &[p1, p2, p3]);
-    slices.into_par_iter().enumerate().for_each(|(i, slice)| {
-        let quadrant = match i {
-            0 => Quadrant::BottomLeft,
-            1 => Quadrant::BottomRight,
-            2 => Quadrant::TopLeft,
-            3 => Quadrant::TopRight,
-            _ => unreachable!(),
-        };
-
-        z_curve_partition_recurse(points, order - 1, &mbr.sub_mbr(quadrant), slice);
-    })
-}
-
-// reorders a slice of Point2D in increasing z-curve order
-pub(crate) fn z_curve_reorder(points: &[Point2D], order: u32) -> Vec<usize> {
-    assert!(
-        order <= 15,
-        "Cannot use the z-curve partition algorithm with an order > 15 because it would currently overflow hashes capacity"
-    );
-
-    let mut permu: Vec<_> = (0..points.len()).into_par_iter().collect();
-    z_curve_reorder_permu(points, permu.as_mut_slice(), order);
-    permu
-}
-
-// reorders a slice of indices such that the associated array of Point2D is sorted
-// by increasing z-order
-pub(crate) fn z_curve_reorder_permu(points: &[Point2D], permu: &mut [usize], order: u32) {
-    let mbr = Mbr2D::from_points(points.iter());
-    let hashes = permu
-        .par_iter()
-        .map(|idx| compute_hash(&points[*idx], order, &mbr))
-        .collect::<Vec<_>>();
-
-    permu.par_sort_by_key(|idx| hashes[*idx]);
-}
-
-// Compute the z-curve hash of a given Point in 2D
-fn compute_hash(point: &Point2D, order: u32, mbr: &Mbr2D) -> usize {
-    let current_hash = mbr
-        .quadrant(point)
-        .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
-
-    if order == 0 {
-        current_hash as usize
-    } else {
-        // TODO: this can overflow if order > 15 since 4^16 = u32::MAX
-        // maybe we should use a BigInt
-        4u32.pow(order) as usize * current_hash as usize
-            + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
-    }
-}
-
-pub fn z_curve_partition_3d(
-    points: &[Point3D],
-    num_partitions: usize,
+fn z_curve_partition_recurse<D>(
+    points: &[PointND<D>],
     order: u32,
-) -> Vec<ProcessUniqueId> {
-    assert!(
-        order <= 7,
-        "Cannot use the z-curve partition algorithm with an order > 15 because it would currently overflow hashes capacity"
-    );
-
-    // Mbr used to construct Point hashes
-    let mbr = Mbr3D::from_points(points.iter());
-
-    let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
-
-    let initial_id = ProcessUniqueId::new();
-    let mut ininial_partition: Vec<_> = points.par_iter().map(|_| initial_id).collect();
-
-    // reorder points
-    z_curve_partition_recurse_3d(points, order, &mbr, &mut permutation);
-
-    let points_per_partition = points.len() / num_partitions;
-
-    let atomic_handle = AtomicPtr::from(ininial_partition.as_mut_ptr());
-    // give an id to each partition
-    permutation
-        .par_chunks(points_per_partition)
-        .for_each(|chunk| {
-            let id = ProcessUniqueId::new();
-            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
-            for idx in chunk {
-                unsafe { std::ptr::write(ptr.add(*idx), id) }
-            }
-        });
-
-    ininial_partition
-}
-
-// reorders `permu` to sort points by increasing z-curve hash
-fn z_curve_partition_recurse_3d(points: &[Point3D], order: u32, mbr: &Mbr3D, permu: &mut [usize]) {
+    mbr: &Mbr<D>,
+    permu: &mut [usize],
+) where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
     // we stop recursion if there is only 1 point left to avoid useless calls
     if order == 0 || permu.len() <= 1 {
         return;
@@ -215,25 +99,24 @@ fn z_curve_partition_recurse_3d(points: &[Point3D], order: u32, mbr: &Mbr3D, per
 
     // compute the quadrant in which each point is.
     // default to dummy value for points outside of the current mbr
-    let octants = points
+    let regions = points
         .par_iter()
-        .map(|p| mbr.octant(p).unwrap_or(Octant::BottomLeftNear))
+        .map(|p| mbr.region(p).unwrap_or(0))
         .collect::<Vec<_>>();
 
-    // only 8 different elements
-    // use pdqsort to break equal elements pattern (O(N)-ish??)
-    permu.par_sort_unstable_by_key(|idx| octants[*idx] as u8);
+    // use pdqsort to break equal elements pattern
+    permu.par_sort_unstable_by_key(|idx| regions[*idx] as u8);
 
-    // Now we need to split the permutation array in four subslices
+    // Now we need to split the permutation array in 2^dim
     // such that each subslice contains only points from the same quadrant
-    // instead of traversing the whole array, we can just perform 3 binary searches
+    // instead of traversing the whole array, we can just perform a few binary searches
     // to find the split positions since the array is already sorted
 
-    let mut split_positions: [usize; 7] = [1, 2, 3, 4, 5, 6, 7];
+    let mut split_positions = (1..2usize.pow(D::dim() as u32)).collect::<Vec<_>>();
     for n in split_positions.iter_mut() {
         *n = permu
             .binary_search_by(|idx| {
-                if (octants[*idx] as u8) < *n as u8 {
+                if (regions[*idx] as u8) < *n as u8 {
                     Ordering::Less
                 } else {
                     Ordering::Greater
@@ -243,66 +126,80 @@ fn z_curve_partition_recurse_3d(points: &[Point3D], order: u32, mbr: &Mbr3D, per
 
     let slices = split_at_mut_many(permu, &split_positions);
     slices.into_par_iter().enumerate().for_each(|(i, slice)| {
-        let octant = match i {
-            0 => Octant::BottomLeftNear,
-            1 => Octant::BottomRightNear,
-            2 => Octant::TopLeftNear,
-            3 => Octant::TopRightNear,
-            4 => Octant::BottomLeftFar,
-            5 => Octant::BottomRightFar,
-            6 => Octant::TopLeftFar,
-            7 => Octant::TopRightFar,
-            _ => unreachable!(),
-        };
-
-        z_curve_partition_recurse_3d(points, order - 1, &mbr.sub_mbr(octant), slice);
+        z_curve_partition_recurse(points, order - 1, &mbr.sub_mbr(i as u32), slice);
     })
 }
 
 // reorders a slice of Point3D in increasing z-curve order
 #[allow(unused)]
-pub(crate) fn z_curve_reorder_3d(points: &[Point3D], order: u32) -> Vec<usize> {
+pub(crate) fn z_curve_reorder<D>(points: &[PointND<D>], order: u32) -> Vec<usize>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D, D>
+        + Allocator<f64, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let max_order = (std::u32::MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
     assert!(
-        order <= 7,
-        "Cannot use the z-curve partition algorithm with an order > 7 because it would currently overflow hashes capacity"
+        order < max_order,
+        format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
     );
 
     let mut permu: Vec<_> = (0..points.len()).into_par_iter().collect();
-    z_curve_reorder_permu_3d(points, permu.as_mut_slice(), order);
+    z_curve_reorder_permu(points, permu.as_mut_slice(), order);
     permu
 }
 
 // reorders a slice of indices such that the associated array of Point3D is sorted
 // by increasing z-order
 #[allow(unused)]
-pub(crate) fn z_curve_reorder_permu_3d(points: &[Point3D], permu: &mut [usize], order: u32) {
-    let mbr = Mbr3D::from_points(points.iter());
+pub(crate) fn z_curve_reorder_permu<D>(points: &[PointND<D>], permu: &mut [usize], order: u32)
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D, D>
+        + Allocator<f64, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let mbr = Mbr::from_points(&points);
     let hashes = permu
         .par_iter()
-        .map(|idx| compute_hash_3d(&points[*idx], order, &mbr))
+        .map(|idx| compute_hash(&points[*idx], order, &mbr))
         .collect::<Vec<_>>();
 
     permu.par_sort_by_key(|idx| hashes[*idx]);
 }
 
-fn compute_hash_3d(point: &Point3D, order: u32, mbr: &Mbr3D) -> usize {
+fn compute_hash<D>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> usize
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D>,
+{
     let current_hash = mbr
-        .octant(point)
+        .region(point)
         .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
 
     if order == 0 {
         current_hash as usize
     } else {
-        // TODO: this can overflow if order > 7 since 8^8 = u32::MAX
+        // TODO: this can overflow if (2^dim)^order > u32::MAX
         // maybe we should use a BigInt
-        8u32.pow(order) as usize * current_hash as usize
-            + compute_hash_3d(point, order - 1, &mbr.sub_mbr(current_hash))
+        (2usize.pow(D::dim() as u32)).pow(order) * current_hash as usize
+            + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geometry::Point2D;
+    use geometry::Point3D;
     #[test]
     fn test_reorder() {
         let mut points = vec![
