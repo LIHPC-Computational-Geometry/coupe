@@ -100,12 +100,16 @@ pub(crate) fn hilbert_curve_reorder_permu(
 
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
     let mbr = Mbr::from_points(&points);
-    let aabb = mbr.aabb();
 
-    let ax = (aabb.p_min().x, aabb.p_max().x);
-    let ay = (aabb.p_min().y, aabb.p_max().y);
+    let (ax, ay) = {
+        let aabb = mbr.aabb();
+        (
+            (aabb.p_min().x, aabb.p_max().x),
+            (aabb.p_min().y, aabb.p_max().y),
+        )
+    };
 
-    let rotate = |p: &Point2D| mbr.mbr_to_aabb(p);
+    let rotate = move |p: &Point2D| mbr.mbr_to_aabb(p);
 
     let x_mapping = segment_to_segment(ax.0, ax.1, 0., order as f64);
     let y_mapping = segment_to_segment(ay.0, ay.1, 0., order as f64);

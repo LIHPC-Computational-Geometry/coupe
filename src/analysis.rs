@@ -4,7 +4,13 @@
 use itertools::Itertools;
 use snowflake::ProcessUniqueId;
 
-use geometry::{Mbr2D, Point2D};
+use geometry::{Mbr, PointND};
+
+use nalgebra::allocator::Allocator;
+use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
+use nalgebra::U1;
 
 /// Computes the aspect_ratios of several partitions.
 ///
@@ -13,16 +19,25 @@ use geometry::{Mbr2D, Point2D};
 ///
 /// The size of the returned vector is equal to the number of different
 /// ids contained in `partition_id`.
-pub fn aspect_ratios(
+pub fn aspect_ratios<D>(
     partition_ids: &[ProcessUniqueId],
-    points: &[Point2D],
-) -> Vec<(ProcessUniqueId, f64)> {
+    points: &[PointND<D>],
+) -> Vec<(ProcessUniqueId, f64)>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D>
+        + Allocator<f64, D, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
     // Extract each unique partition id from the inpu vector
     let possible_ids = partition_ids.iter().unique();
 
     // Construct a mapping from each unique partition id
     // to an array containing the points that are contained in that partition
-    let id_map: Vec<(ProcessUniqueId, Vec<Point2D>)> = possible_ids
+    let id_map: Vec<(ProcessUniqueId, Vec<PointND<D>>)> = possible_ids
         .map(|id| {
             (
                 *id,
@@ -30,7 +45,7 @@ pub fn aspect_ratios(
                     .iter()
                     .zip(points)
                     .filter(|(id_local, _)| *id == **id_local)
-                    .map(|(_, p)| *p)
+                    .map(|(_, p)| p.clone())
                     .collect(),
             )
         }).collect();
@@ -39,7 +54,7 @@ pub fn aspect_ratios(
     // array of points into its aspect ratio
     id_map
         .into_iter()
-        .map(|(id, points)| (id, Mbr2D::from_points(points.iter()).aspect_ratio()))
+        .map(|(id, points)| (id, Mbr::from_points(&points).aspect_ratio()))
         .collect()
 }
 
@@ -80,7 +95,7 @@ pub fn imbalance_relative_diff(weights: &[f64], partition: &[ProcessUniqueId]) -
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use geometry::Point2D;
     #[test]
     fn test_weights() {
         use std::collections::HashMap;

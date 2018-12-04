@@ -2,12 +2,10 @@ use geometry::*;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::constraint::{DimEq, ShapeConstraint};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
 
-use nalgebra::Vector2;
 use rayon;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;

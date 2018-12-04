@@ -381,7 +381,7 @@ where
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
 {
     let dim = element.len();
-    let e0 = canonical_vector_TMP_NAME(dim, 0);
+    let e0 = canonical_vector_TMP_NAME(0);
     let sign = if element[0] > 0. { -1. } else { 1. };
     let w = element + sign * e0 * element.norm();
     let id = MatrixN::<f64, D>::identity();
@@ -396,6 +396,17 @@ where
     let mut ret = VectorN::<f64, D>::from_element(0.);
     ret[nth] = 1.0;
     ret
+}
+
+pub(crate) fn center<D>(points: &[PointND<D>]) -> PointND<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    assert!(!points.is_empty());
+    let total = points.len() as f64;
+    points.par_iter().sum::<PointND<D>>() / total
 }
 
 #[cfg(test)]
