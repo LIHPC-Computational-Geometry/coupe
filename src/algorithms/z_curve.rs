@@ -21,7 +21,7 @@ use geometry::{Mbr, PointND};
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::base::{U0, U1};
+use nalgebra::base::U1;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 
@@ -199,32 +199,6 @@ where
 mod tests {
     use super::*;
     use geometry::Point2D;
-    use geometry::Point3D;
-    #[test]
-    fn test_reorder() {
-        let mut points = vec![
-            Point2D::new(0., 0.),
-            Point2D::new(20., 10.),
-            Point2D::new(0., 10.),
-            Point2D::new(20., 0.),
-            Point2D::new(14., 7.),
-            Point2D::new(4., 7.),
-            Point2D::new(14., 2.),
-            Point2D::new(4., 2.),
-        ];
-
-        let indices = z_curve_reorder(points.as_mut_slice(), 2);
-        println!("{:?}", indices);
-
-        assert_eq!(indices[0], 0);
-        assert_eq!(indices[1], 7);
-        assert_eq!(indices[2], 6);
-        assert_eq!(indices[3], 3);
-        assert_eq!(indices[4], 5);
-        assert_eq!(indices[5], 2);
-        assert_eq!(indices[6], 4);
-        assert_eq!(indices[7], 1);
-    }
 
     #[test]
     fn test_partition() {

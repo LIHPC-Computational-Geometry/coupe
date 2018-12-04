@@ -3,14 +3,14 @@
 //! Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne)
 
 use geometry::Mbr;
-use geometry::{self, Point2D, PointND};
+use geometry::{self, PointND};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-use super::hilbert_curve;
+// use super::hilbert_curve;
 use super::z_curve;
 
 use itertools::iproduct;

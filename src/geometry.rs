@@ -1,10 +1,13 @@
 //! A few useful geometric types
 
+use approx::Ulps;
 use itertools::Itertools;
 use nalgebra::allocator::Allocator;
+use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
-use nalgebra::{DVector, Matrix2, SymmetricEigen, Vector2, Vector3, VectorN};
+use nalgebra::U1;
+use nalgebra::{DVector, SymmetricEigen, Vector2, Vector3, VectorN};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
@@ -269,7 +272,7 @@ where
         let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
         let mat = inertia_matrix(&weights, points);
         let vec = inertia_vector(mat);
-        let base_change = householder_reflection_TMP_NAME(&vec);
+        let base_change = householder_reflection(&vec);
         let mbr_to_aabb = base_change.clone().try_inverse().unwrap();
         let mapped = points
             .par_iter()
@@ -361,9 +364,6 @@ where
     ret
 }
 
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::base::{U0, U1};
-
 pub fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
 where
     D: DimName + DimSub<U1>,
@@ -375,20 +375,27 @@ where
         .clone_owned()
 }
 
-pub fn householder_reflection_TMP_NAME<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>
+pub fn householder_reflection<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
 {
-    let dim = element.len();
-    let e0 = canonical_vector_TMP_NAME(0);
+    let e0 = canonical_vector(0);
+
+    // if element is parallel to e0, then the reflection is not valid.
+    // return identity (canonical basis)
+    let norm = element.norm();
+    if Ulps::default().eq(&(element / norm), &e0) {
+        return MatrixN::<f64, D>::identity();
+    }
+
     let sign = if element[0] > 0. { -1. } else { 1. };
     let w = element + sign * e0 * element.norm();
     let id = MatrixN::<f64, D>::identity();
     id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
 }
 
-pub(crate) fn canonical_vector_TMP_NAME<D>(nth: usize) -> VectorN<f64, D>
+pub(crate) fn canonical_vector<D>(nth: usize) -> VectorN<f64, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
@@ -412,6 +419,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::Matrix2;
 
     #[test]
     fn test_aabb_2d() {
@@ -592,7 +600,7 @@ mod tests {
     fn test_householder_reflexion() {
         use nalgebra::Vector6;
         let el = Vector6::<f64>::new_random();
-        let mat = householder_reflection_TMP_NAME(&el);
+        let mat = householder_reflection(&el);
 
         // check that columns are of norm 1
         for col in 0..6 {

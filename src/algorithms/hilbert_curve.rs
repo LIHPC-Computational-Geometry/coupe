@@ -10,7 +10,7 @@
 //!
 //! The complexity of encoding a point is O(order)
 
-use geometry::{self, Mbr, Point2D};
+use geometry::{Mbr, Point2D};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -70,6 +70,7 @@ pub fn hilbert_curve_partition(
     partition
 }
 
+#[allow(unused)]
 pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usize> {
     let mut permutation: Vec<usize> = (0..points.len()).into_par_iter().collect();
     hilbert_curve_reorder_permu(points, &mut permutation, order);
