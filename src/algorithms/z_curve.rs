@@ -46,9 +46,9 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32 - 1;
+    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
-        order < max_order,
+        order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
     );
 
@@ -143,9 +143,9 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32 - 1;
+    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
-        order < max_order,
+        order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
     );
 
