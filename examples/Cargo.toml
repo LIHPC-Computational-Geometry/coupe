@@ -10,6 +10,9 @@ publish = false
 autobins = false
 
 [[bin]]
+name = "api"
+
+[[bin]]
 name = "balanced_k_means"
 
 [[bin]]

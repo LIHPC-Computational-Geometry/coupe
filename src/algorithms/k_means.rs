@@ -308,6 +308,84 @@ where
     assignments
 }
 
+pub fn balanced_k_means_with_initial_partition<D>(
+    points: &[PointND<D>],
+    weights: &[f64],
+    settings: impl Into<Option<BalancedKmeansSettings>>,
+    initial_partition: &mut [ProcessUniqueId],
+) where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D, D>
+        + Allocator<f64, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    let settings = settings.into().unwrap_or_default();
+
+    println!("Settings = {:?}", settings);
+
+    // validate partition soundness
+    // TODO: put this in a separate function
+    let expected_num_parts = settings.num_partitions;
+    // TODO: make this parallel
+    let center_ids = initial_partition
+        .iter()
+        .cloned()
+        .unique()
+        .collect::<Vec<_>>();
+    let current_num_parts = center_ids.len();
+    if current_num_parts != expected_num_parts {
+        panic!(
+            "Input partition is unsound, found {} initial parts",
+            center_ids.len()
+        );
+    }
+
+    // construct centers
+    let centers = center_ids
+        .par_iter()
+        .map(|center_id| {
+            let owned_points = points
+                .par_iter()
+                .zip(initial_partition.par_iter())
+                .filter(|(_, id)| *id == center_id)
+                .map(|(p, _)| p.clone())
+                .collect::<Vec<_>>();
+            crate::geometry::center(&owned_points)
+        }).collect::<Vec<_>>();
+
+    // construct permutation
+    let mut permu = (0..points.len()).collect::<Vec<_>>();
+
+    // Generate initial influences (to 1)
+    let mut influences: Vec<_> = centers.par_iter().map(|_| 1.).collect();
+
+    // Generate initial lower and upper bounds. These two variables represent bounds on
+    // the effective distance between an point and the cluster it is assigned to.
+    let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
+    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+
+    balanced_k_means_iter(
+        Inputs { points, weights },
+        Clusters {
+            centers,
+            center_ids: &center_ids,
+        },
+        &mut permu,
+        AlgorithmState {
+            assignments: initial_partition,
+            influences: &mut influences,
+            lbs: &mut lbs,
+            ubs: &mut ubs,
+        },
+        &settings,
+        settings.max_iter,
+    );
+}
+
 #[derive(Clone, Copy)]
 struct Inputs<'a, D>
 where
