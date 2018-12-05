@@ -12,11 +12,10 @@ use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
 pub type Point3D = Vector3<f64>;
-pub type Point = DVector<f64>;
 pub type PointND<D> = VectorN<f64, D>;
 
 #[derive(Debug, Clone)]
-pub struct Aabb<D>
+pub(crate) struct Aabb<D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -221,7 +220,7 @@ where
 
 use nalgebra::MatrixN;
 #[derive(Debug, Clone)]
-pub struct Mbr<D>
+pub(crate) struct Mbr<D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
@@ -335,7 +334,7 @@ where
     }
 }
 
-pub fn inertia_matrix<D>(weights: &[f64], points: &[PointND<D>]) -> MatrixN<f64, D>
+pub(crate) fn inertia_matrix<D>(weights: &[f64], points: &[PointND<D>]) -> MatrixN<f64, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
@@ -364,7 +363,7 @@ where
     ret
 }
 
-pub fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
+pub(crate) fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, DimDiff<D, U1>>,

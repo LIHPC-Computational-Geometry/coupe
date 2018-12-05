@@ -1,3 +1,29 @@
+//! A mesh partitioning library that implements multithreaded, composable geometric algorithms.
+//!
+//! # Crate Layout
+//!
+//! Coupe exposes each algorithm with a struct that implements a trait. There are currently two traits available:
+//!
+//! - [`InitialPartition`] represents an algorithm that will generate a partition given a set of geometric points and weights.
+//! - [`ImprovePartition`] represents an algorithm that will improve an existing partition (previously generated with a [`InitialPartition`]).
+//!
+//! # Available algorithms
+//!
+//! ## Initial partitioning algorithms
+//! - Space filling curves:
+//!   + [`Z-curve`]
+//!   + [`Hilbert curve`]
+//! - [`Rcb`]: Recursive Coordinate Bisection
+//! - [`Rib`]: Recursive Inertial Bisection
+//! - [`Multi jagged`]
+//!
+//! ## Partition improving algorithms
+//! - [`KMeans`]
+//!
+//! [`Z-curve`]: ZCurve
+//! [`Hilbert curve`]: HilbertCurve
+//! [`Multi jagged`]: MultiJagged
+
 #[cfg(test)]
 #[macro_use]
 extern crate approx;
@@ -17,6 +43,9 @@ mod tests;
 
 // API
 
+// SUBMODULES REEXPORT
+pub use geometry::{Point2D, Point3D, PointND};
+
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
@@ -26,8 +55,6 @@ use nalgebra::U1;
 use snowflake::ProcessUniqueId;
 
 use std::marker::PhantomData;
-
-use crate::geometry::PointND;
 
 pub trait InitialPartition<D>
 where
@@ -50,6 +77,43 @@ where
     );
 }
 
+/// # Recursive Coordinate Bisection algorithm
+/// Partitions a mesh based on the nodes coordinates and coresponding weights.
+///
+/// This is the most simple and straightforward geometric algorithm. It operates as follows for a N-dimensional set of points:
+///
+/// At each iteration, select a vector `n` of the canonical basis `(e_0, ..., e_{n-1})`. Then, split the set of points with an hyperplane orthogonal
+/// to `n`, such that the two parts of the splits are evenly weighted. Finally, recurse by reapplying the algorithm to the two parts with an other
+/// normal vector selection.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Point2D;
+/// use coupe::InitialPartition;
+///
+/// let points = vec![
+///     Point2D::new(1., 1.),
+///     Point2D::new(-1., 1.),
+///     Point2D::new(1., -1.),
+///     Point2D::new(-1., -1.),
+/// ];
+///
+/// let weights = vec![1., 1., 1., 1.];
+///
+/// // generate a partition of 4 parts
+/// let rcb = coupe::Rcb { num_iter: 2 };
+/// let partition = rcb.partition(&points, &weights);
+///
+/// for i in 0..4 {
+///     for j in 0..4 {
+///         if j == i {
+///             continue    
+///         }
+///         assert_ne!(partition[i], partition[j])
+///     }
+/// }
+/// ```
 pub struct Rcb {
     pub num_iter: usize,
 }
@@ -64,6 +128,9 @@ where
         crate::algorithms::recursive_bisection::rcb(points, weights, self.num_iter)
     }
 }
+
+pub struct Rib;
+pub struct MultiJagged;
 
 pub struct ZCurve {
     pub num_partitions: usize,
@@ -85,6 +152,8 @@ where
         crate::algorithms::z_curve::z_curve_partition(points, self.num_partitions, self.order)
     }
 }
+
+pub struct HilbertCurve;
 
 #[derive(Debug, Clone, Copy)]
 pub struct KMeans {
