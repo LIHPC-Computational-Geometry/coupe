@@ -28,10 +28,7 @@ fn main() {
 
     let weights = vec![1.; num_points];
 
-    let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.)
-        .into_iter()
-        .map(|p| p * p.y)
-        .collect::<Vec<_>>();
+    let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 2., 8.);
 
     let partition = rib(&points, &weights, num_iter);
 

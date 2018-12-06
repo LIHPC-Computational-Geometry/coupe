@@ -325,8 +325,6 @@ pub fn balanced_k_means_with_initial_partition<D>(
 {
     let settings = settings.into().unwrap_or_default();
 
-    println!("Settings = {:?}", settings);
-
     // validate partition soundness
     // TODO: put this in a separate function
     let expected_num_parts = settings.num_partitions;

@@ -5,6 +5,8 @@
 //! It improves over RCB by following the same idea but by creating more than two subparts
 //! in each iteration which leads to decreasing recursion depth.
 
+use approx::Ulps;
+
 use nalgebra::allocator::Allocator;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
@@ -57,7 +59,7 @@ fn prime_factors(mut n: u32) -> Vec<u32> {
 #[derive(Debug)]
 struct PartitionScheme {
     pub num_splits: usize,
-    pub modifiers: Vec<f32>,
+    pub modifiers: Vec<f64>,
     pub next: Option<Vec<PartitionScheme>>,
 }
 
@@ -140,11 +142,11 @@ fn compute_modifiers(
     num_fat_parts: usize,
     num_regular_subparts: usize, // the total number of subparts in the regular_parts
     num_fat_subparts: usize,     // the total number of subparts in the fat_parts
-) -> Vec<f32> {
+) -> Vec<f64> {
     let num_subparts = num_regular_parts * num_regular_subparts + num_fat_parts * num_fat_subparts;
     (0..num_fat_parts)
-        .map(|_| num_fat_subparts as f32 / num_subparts as f32)
-        .chain((0..num_regular_parts).map(|_| num_regular_subparts as f32 / num_subparts as f32))
+        .map(|_| num_fat_subparts as f64 / num_subparts as f64)
+        .chain((0..num_regular_parts).map(|_| num_regular_subparts as f64 / num_subparts as f64))
         .collect()
 }
 
@@ -245,7 +247,7 @@ pub(crate) fn compute_split_positions(
     weights: &[f64],
     permutation: &[usize],
     num_splits: usize,
-    modifiers: &[f32],
+    modifiers: &[f64],
 ) -> Vec<usize> {
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
 
@@ -305,9 +307,13 @@ pub(crate) fn compute_split_positions(
         .zip(current_weights_sums_cache)
         .zip(weight_thresholds)
         .map(|((mut idx, mut sum), threshold)| {
-            while sum < threshold {
-                idx += 1;
+            while sum + weights[permutation[idx]] < threshold
+                // multiplication between modifiers and weights can cause nasty
+                // rounding precision loss which would put an element in a wrong part
+                || Ulps::default().eq(&threshold, &(sum + weights[permutation[idx]]))
+            {
                 sum += weights[permutation[idx]];
+                idx += 1;
             }
             idx
         }).collect()

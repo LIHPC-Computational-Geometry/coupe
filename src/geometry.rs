@@ -368,10 +368,17 @@ where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, DimDiff<D, U1>>,
 {
-    SymmetricEigen::new(mat)
-        .eigenvectors
-        .column(0)
-        .clone_owned()
+    let sym_eigen = SymmetricEigen::new(mat);
+    let mut indices = (0..D::dim()).collect::<Vec<_>>();
+
+    // sort indices in decreasing order
+    indices.as_mut_slice().sort_unstable_by(|a, b| {
+        sym_eigen.eigenvalues[*b]
+            .partial_cmp(&sym_eigen.eigenvalues[*a])
+            .unwrap()
+    });
+
+    sym_eigen.eigenvectors.column(indices[0]).clone_owned()
 }
 
 pub fn householder_reflection<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>

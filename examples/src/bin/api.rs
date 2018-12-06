@@ -13,13 +13,17 @@ fn main() {
         num_partitions: 10,
         order: 4,
     }; // 8 partitions
+    let multi_jagged = coupe::MultiJagged {
+        num_partitions: 7,
+        max_iter: 3,
+    };
     let mut k_means: coupe::KMeans = Default::default();
-    k_means.num_partitions = 10;
+    k_means.num_partitions = 7;
     k_means.delta_threshold = 0.000000001;
-    k_means.max_balance_iter = 20;
-    k_means.max_iter = 500;
+    k_means.max_balance_iter = 0;
+    k_means.max_iter = 0;
 
-    let algo = coupe::compose_two_initial_improver(z_curve, k_means);
+    let algo = coupe::compose_two_initial_improver(multi_jagged, k_means);
 
     let weights = vec![1.; NUM_POINTS];
     let points = examples::generator::rectangle_uniform(NUM_POINTS, Point2D::new(0., 0.), 4., 2.);

@@ -37,7 +37,7 @@ pub fn hilbert_curve_partition(
         .par_sort_by_key(|idx| hilbert_indices[*idx]);
 
     // dummy modifiers to use directly the routine from multi_jagged
-    let modifiers = vec![1. / num_partitions as f32; num_partitions];
+    let modifiers = vec![1. / num_partitions as f64; num_partitions];
 
     let initial_id = ProcessUniqueId::new();
     let mut partition = permutation
