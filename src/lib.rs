@@ -45,14 +45,13 @@ mod tests;
 
 // SUBMODULES REEXPORT
 pub use geometry::{Point2D, Point3D, PointND};
+pub use snowflake::ProcessUniqueId;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
-
-use snowflake::ProcessUniqueId;
 
 use std::marker::PhantomData;
 
@@ -262,6 +261,43 @@ where
     }
 }
 
+/// # Z space-filling curve algorithm
+///
+/// The Z-curve uses space hashing to partition points. The points in the same part of a partition
+/// have the same Z-hash. This hash is computed by recursively constructing a N-dimensional region tree.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Point2D;
+/// use coupe::InitialPartition;
+///
+/// let points = vec![
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 9.),
+///     Point2D::new(9., 1.),
+///     Point2D::new(10., 0.),
+///     Point2D::new(10., 10.),
+///     Point2D::new(9., 9.),
+/// ];
+///
+/// let weights = vec![1.; 8];
+///
+/// // generate a partition of 4 parts
+/// let z_curve = coupe::ZCurve {
+///     num_partitions: 4,
+///     order: 5,
+/// };
+///
+/// let partition = z_curve.partition(&points, &weights);
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(partition[4], partition[5]);
+/// assert_eq!(partition[6], partition[7]);
+/// ```  
 pub struct ZCurve {
     pub num_partitions: usize,
     pub order: u32,
@@ -283,11 +319,119 @@ where
     }
 }
 
+/// # Hilbert space-filling curve algorithm
+///
+/// An implementation of the Hilbert curve based on
+/// "Encoding and Decoding the Hilbert Order" by XIAN LIU and GÜNTHER SCHRACK.
+///
+/// This algorithm uses space hashing to reorder points alongside the Hilbert curve ov a giver order.
+/// See [wikipedia](https://en.wikipedia.org/wiki/Hilbert_curve) for more details.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Point2D;
+/// use coupe::InitialPartition;
+///
+/// let points = vec![
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 9.),
+///     Point2D::new(9., 1.),
+///     Point2D::new(10., 0.),
+///     Point2D::new(10., 10.),
+///     Point2D::new(9., 9.),
+/// ];
+///
+/// let weights = vec![1.; 8];
+///
+/// // generate a partition of 4 parts
+/// let hilbert = coupe::HilbertCurve {
+///     num_partitions: 4,
+///     order: 5,
+/// };
+///
+/// let partition = hilbert.partition(&points, &weights);
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(partition[4], partition[5]);
+/// assert_eq!(partition[6], partition[7]);
+/// ```
 pub struct HilbertCurve {
     pub num_partitions: usize,
     pub order: u32,
 }
 
+use nalgebra::base::U2;
+
+// hilbert curve is only implemented in 2d for now
+impl InitialPartition<U2> for HilbertCurve {
+    fn partition(&self, points: &[PointND<U2>], _weights: &[f64]) -> Vec<ProcessUniqueId> {
+        crate::algorithms::hilbert_curve::hilbert_curve_partition(
+            points,
+            _weights,
+            self.num_partitions,
+            self.order as usize,
+        )
+    }
+}
+
+/// K-means algorithm
+///
+/// An implementation of the balanced k-means algorithm inspired from
+/// "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
+/// Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne).
+///
+/// From an initial partition, the K-means algorithm will generate points clusters that will,
+/// at each iteration, exchage points with other clusters that "closer", and move by recomputing the clusters position (defined as
+/// the centroid of the points assigned to the cluster). Eventually the clusters will stop moving, yielding a new partition.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Point2D;
+/// use coupe::ImprovePartition;
+/// use coupe::ProcessUniqueId;
+///
+/// let p1 = ProcessUniqueId::new();
+/// let p2 = ProcessUniqueId::new();
+/// let p3 = ProcessUniqueId::new();
+///
+/// let points = vec![
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 0.),
+///     Point2D::new(2., 0.),
+///     Point2D::new(0., 5.),
+///     Point2D::new(1., 5.),
+///     Point2D::new(2., 5.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 10.),
+///     Point2D::new(2., 10.),
+/// ];
+///
+/// let weights = vec![1.; 9];
+///
+/// let mut partition = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
+///
+/// let k_means = coupe::KMeans {
+///     num_partitions: 3,
+///     delta_threshold: 0.,
+///     ..Default::default()
+/// };
+///
+/// k_means.improve_partition(&points, &weights, &mut partition);
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[0], partition[2]);
+///
+/// assert_eq!(partition[3], partition[4]);
+/// assert_eq!(partition[3], partition[5]);
+///
+/// assert_eq!(partition[6], partition[7]);
+/// assert_eq!(partition[6], partition[8]);
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KMeans {
     pub num_partitions: usize,
