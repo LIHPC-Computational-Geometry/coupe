@@ -20,9 +20,14 @@
 //! ## Partition improving algorithms
 //! - [`KMeans`]
 //!
-//! [`Z-curve`]: ZCurve
-//! [`Hilbert curve`]: HilbertCurve
-//! [`Multi jagged`]: MultiJagged
+//! [`InitialPartition`]: trait.InitialPartition.html
+//! [`ImprovePartition`]: trait.ImprovePartition.html
+//! [`Z-curve`]: struct.ZCurve.html
+//! [`Hilbert curve`]: struct.HilbertCurve.html
+//! [`Rcb`]: struct.Rcb.html
+//! [`Rib`]: struct.Rib.html
+//! [`Multi jagged`]: struct.MultiJagged.html
+//! [`KMeans`]: struct.KMeans.html
 
 #[cfg(test)]
 #[macro_use]
@@ -46,6 +51,10 @@ mod tests;
 // SUBMODULES REEXPORT
 pub use geometry::{Point2D, Point3D, PointND};
 pub use snowflake::ProcessUniqueId;
+
+pub mod dimension {
+    pub use nalgebra::base::dimension::*;
+}
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
@@ -133,9 +142,9 @@ where
 ///
 /// Partitions a mesh based on the nodes coordinates and coresponding weights
 ///
-/// This is a variant of the [`Rcb`] algorithm, where a basis change is performed beforehand so that
+/// This is a variant of the [Rcb](struct.Rcb.html) algorithm, where a basis change is performed beforehand so that
 /// the first coordinate of the new basis is colinear to the inertia axis of the set of points. This has the goal
-/// of producing better shaped partition than [`Rcb`].
+/// of producing better shaped partition than [Rcb](struct.Rcb.html).
 ///
 /// # Example
 ///
@@ -194,7 +203,7 @@ where
 /// This algorithm is inspired by Multi-Jagged: A Scalable Parallel Spatial Partitioning Algorithm"
 /// by Mehmet Deveci, Sivasankaran Rajamanickam, Karen D. Devine, Umit V. Catalyurek.
 ///
-/// It improves over RCB by following the same idea but by creating more than two subparts
+/// It improves over [RCB](struct.Rcb.html) by following the same idea but by creating more than two subparts
 /// in each iteration which leads to decreasing recursion depth. It also allows to generate a partition
 /// of any number of parts.
 ///
@@ -385,7 +394,7 @@ impl InitialPartition<U2> for HilbertCurve {
 /// Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne).
 ///
 /// From an initial partition, the K-means algorithm will generate points clusters that will,
-/// at each iteration, exchage points with other clusters that "closer", and move by recomputing the clusters position (defined as
+/// at each iteration, exchage points with other clusters that are "closer", and move by recomputing the clusters position (defined as
 /// the centroid of the points assigned to the cluster). Eventually the clusters will stop moving, yielding a new partition.
 ///
 /// # Example
@@ -395,6 +404,7 @@ impl InitialPartition<U2> for HilbertCurve {
 /// use coupe::ImprovePartition;
 /// use coupe::ProcessUniqueId;
 ///
+/// // create ids for initial partition
 /// let p1 = ProcessUniqueId::new();
 /// let p2 = ProcessUniqueId::new();
 /// let p3 = ProcessUniqueId::new();
@@ -413,6 +423,10 @@ impl InitialPartition<U2> for HilbertCurve {
 ///
 /// let weights = vec![1.; 9];
 ///
+/// // create an unbalanced partition:
+/// //  - p1: total weight = 1
+/// //  - p2: total weight = 7
+/// //  - p3: total weight = 1
 /// let mut partition = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
 ///
 /// let k_means = coupe::KMeans {
@@ -492,31 +506,27 @@ where
     }
 }
 
-struct ImproverComposition<D, T, U>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    T: ImprovePartition<D>,
-    U: ImprovePartition<D>,
-{
+pub struct Composition<T, U> {
     first: T,
     second: U,
-    _marker: PhantomData<D>,
 }
 
-struct InitialImproverComposition<D, T, U>
+impl<D, T, U> InitialPartition<D> for Composition<T, U>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
     T: InitialPartition<D>,
     U: ImprovePartition<D>,
 {
-    first: T,
-    second: U,
-    _marker: PhantomData<D>,
+    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
+        let mut partition = self.first.partition(points, weights);
+        self.second
+            .improve_partition(points, weights, &mut partition);
+        partition
+    }
 }
 
-impl<D, T, U> ImprovePartition<D> for ImproverComposition<D, T, U>
+impl<D, T, U> ImprovePartition<D> for Composition<T, U>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -534,47 +544,20 @@ where
     }
 }
 
-impl<D, T, U> InitialPartition<D> for InitialImproverComposition<D, T, U>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    T: InitialPartition<D>,
-    U: ImprovePartition<D>,
-{
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
-        let mut partition = self.first.partition(points, weights);
-        self.second
-            .improve_partition(points, weights, &mut partition);
-        partition
-    }
+pub trait Compose<T> {
+    type Composed;
+    fn compose<D>(self, other: T) -> Self::Composed
+    where
+        D: DimName,
+        DefaultAllocator: Allocator<f64, D>;
 }
 
-pub fn compose_two_improvers<D>(
-    improver_1: impl ImprovePartition<D>,
-    improver_2: impl ImprovePartition<D>,
-) -> impl ImprovePartition<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
-    ImproverComposition {
-        first: improver_1,
-        second: improver_2,
-        _marker: PhantomData,
-    }
-}
-
-pub fn compose_two_initial_improver<D>(
-    initial: impl InitialPartition<D>,
-    improver: impl ImprovePartition<D>,
-) -> impl InitialPartition<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
-    InitialImproverComposition {
-        first: initial,
-        second: improver,
-        _marker: PhantomData,
+impl<T, U> Compose<T> for U {
+    type Composed = Composition<Self, T>;
+    fn compose<D>(self, other: T) -> Self::Composed {
+        Composition {
+            first: self,
+            second: other,
+        }
     }
 }
