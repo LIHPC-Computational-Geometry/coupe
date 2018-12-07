@@ -32,7 +32,8 @@ fn main() {
         num_points,
         Point3D::new(0., 0., 0.),
         Point3D::new(1., 1., 1.),
-    ).into_iter()
+    )
+    .into_iter()
     .collect::<Vec<_>>();
 
     let partition = rcb(&points, &weights, num_iter);

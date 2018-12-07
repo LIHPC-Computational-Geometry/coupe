@@ -48,7 +48,8 @@ where
                     .map(|(_, p)| p.clone())
                     .collect(),
             )
-        }).collect();
+        })
+        .collect();
 
     // for each unique id, turn the constructed
     // array of points into its aspect ratio

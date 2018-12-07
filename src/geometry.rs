@@ -7,7 +7,7 @@ use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
-use nalgebra::{DVector, SymmetricEigen, Vector2, Vector3, VectorN};
+use nalgebra::{SymmetricEigen, Vector2, Vector3, VectorN};
 use rayon::prelude::*;
 
 pub type Point2D = Vector2<f64>;
@@ -29,10 +29,6 @@ where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
 {
-    pub fn new(p_min: PointND<D>, p_max: PointND<D>) -> Self {
-        Self { p_min, p_max }
-    }
-
     pub fn p_min(&self) -> &PointND<D> {
         &self.p_min
     }
@@ -69,7 +65,8 @@ where
                     }
                     (mins, maxs)
                 },
-            ).reduce_with(|(mins_left, maxs_left), (mins_right, maxs_right)| {
+            )
+            .reduce_with(|(mins_left, maxs_left), (mins_right, maxs_right)| {
                 (
                     PointND::<D>::from_iterator(
                         mins_left
@@ -84,7 +81,8 @@ where
                             .map(|(left, right)| left.max(*right)),
                     ),
                 )
-            }).unwrap();
+            })
+            .unwrap();
 
         Self {
             p_min: min,
@@ -197,7 +195,8 @@ where
                     } else {
                         (min - point).abs()
                     }
-                }).max_by(|a, b| a.partial_cmp(&b).unwrap())
+                })
+                .max_by(|a, b| a.partial_cmp(&b).unwrap())
                 .unwrap()
         }
     }
@@ -235,14 +234,6 @@ where
     D: DimName,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
 {
-    pub fn new(aabb: Aabb<D>, aabb_to_mbr: MatrixN<f64, D>, mbr_to_aabb: MatrixN<f64, D>) -> Self {
-        Self {
-            aabb,
-            aabb_to_mbr,
-            mbr_to_aabb,
-        }
-    }
-
     pub fn aabb(&self) -> &Aabb<D> {
         &self.aabb
     }
@@ -250,11 +241,6 @@ where
     // Transform a point with the transformation which maps the Mbr to the underlying Aabb
     pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
         &self.mbr_to_aabb * point
-    }
-
-    // Transform a point with the transformation which maps the Aabb to the underlying Mbr
-    pub fn aabb_to_mbr(&self, point: &PointND<D>) -> PointND<D> {
-        &self.aabb_to_mbr * point
     }
 
     /// Constructs a new `Mbr` from a slice of `PointND`.
@@ -310,11 +296,13 @@ where
     }
 
     /// Computes the center of the Mbr
+    #[allow(unused)]
     pub fn center(&self) -> PointND<D> {
         &self.aabb_to_mbr * &self.aabb.center()
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
+    #[allow(unused)]    
     pub fn contains(&self, point: &PointND<D>) -> bool {
         self.aabb.contains(&(&self.mbr_to_aabb * point))
     }
@@ -327,6 +315,7 @@ where
     }
 
     /// Returns the rotated min and max points of the Aabb.
+    #[allow(unused)]    
     pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
         let min = &self.aabb_to_mbr * &self.aabb.p_min;
         let max = &self.aabb_to_mbr * &self.aabb.p_max;
@@ -348,7 +337,8 @@ where
         .zip(points)
         .fold_with(PointND::<D>::from_element(0.), |acc, (w, p)| {
             acc + p.map(|e| e * w)
-        }).reduce_with(|a, b| a + b)
+        })
+        .reduce_with(|a, b| a + b)
         .unwrap()
         / total_weight;
 
@@ -357,7 +347,8 @@ where
         .zip(points)
         .fold_with(MatrixN::<f64, D>::from_element(0.), |acc, (w, p)| {
             acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w)
-        }).reduce_with(|a, b| a + b)
+        })
+        .reduce_with(|a, b| a + b)
         .unwrap();
 
     ret

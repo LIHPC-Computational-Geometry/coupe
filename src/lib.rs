@@ -62,8 +62,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
 
-use std::marker::PhantomData;
-
 pub trait InitialPartition<D>
 where
     D: DimName,

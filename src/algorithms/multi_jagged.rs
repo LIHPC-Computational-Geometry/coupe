@@ -252,12 +252,12 @@ pub(crate) fn compute_split_positions(
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
 
     let mut modifiers = modifiers.into_iter();
-    let mut consumed_weight = total_weight * f64::from(*modifiers.next().unwrap());
+    let mut consumed_weight = total_weight * *modifiers.next().unwrap();
     let mut weight_thresholds = Vec::with_capacity(num_splits);
 
     for modifier in modifiers {
         weight_thresholds.push(consumed_weight);
-        consumed_weight += total_weight * f64::from(*modifier);
+        consumed_weight += total_weight * *modifier;
     }
 
     debug_assert_eq!(weight_thresholds.len(), num_splits);
@@ -273,7 +273,8 @@ pub(crate) fn compute_split_positions(
             } else {
                 (low, acc + weights[*val])
             }
-        }).collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
         .into_iter();
 
     let mut current_weights_sum = 0.;
@@ -316,7 +317,8 @@ pub(crate) fn compute_split_positions(
                 idx += 1;
             }
             idx
-        }).collect()
+        })
+        .collect()
 }
 
 // Same as slice::split_at_mut but split in a arbitrary number of subslices

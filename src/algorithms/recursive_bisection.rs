@@ -162,7 +162,8 @@ fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
             } else {
                 (low, acc + weights[*val])
             }
-        }).collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
         .into_iter();
 
     // above this, the code was parallel

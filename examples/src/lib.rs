@@ -25,7 +25,8 @@ pub fn plot_partition(points: Vec<(Point2D, ProcessUniqueId)>) {
                 points.iter().map(|p| p.x).collect::<Vec<_>>(),
                 points.iter().map(|p| p.y).collect::<Vec<_>>(),
             )
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     let mut fg = Figure::new();
     {
@@ -85,7 +86,8 @@ pub mod generator {
                     rng.gen_range::<f64>(p_min.x, p_max.x),
                     rng.gen_range::<f64>(p_min.y, p_max.y),
                 )
-            }).collect()
+            })
+            .collect()
     }
 
     pub fn square_uniform(num_points: usize, center: Point2D, length: f64) -> Vec<Point2D> {
@@ -101,6 +103,7 @@ pub mod generator {
                     rng.gen_range::<f64>(p_min.y, p_max.y),
                     rng.gen_range::<f64>(p_min.z, p_max.z),
                 )
-            }).collect()
+            })
+            .collect()
     }
 }

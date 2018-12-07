@@ -121,7 +121,8 @@ fn z_curve_partition_recurse<D>(
                 } else {
                     Ordering::Greater
                 }
-            }).unwrap_err();
+            })
+            .unwrap_err();
     }
 
     let slices = split_at_mut_many(permu, &split_positions);

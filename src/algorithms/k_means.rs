@@ -141,7 +141,8 @@ where
                     .zip(weights.iter())
                     .filter(|(point_id, _)| *id == **point_id)
                     .fold(0., |acc, (_, weight)| acc + weight)
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         // update influence
         cluster_weights
@@ -353,7 +354,8 @@ pub fn balanced_k_means_with_initial_partition<D>(
                 .map(|(p, _)| p.clone())
                 .collect::<Vec<_>>();
             crate::geometry::center(&owned_points)
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     // construct permutation
     let mut permu = (0..points.len()).collect::<Vec<_>>();
@@ -473,7 +475,8 @@ fn balanced_k_means_iter<D>(
                 .map(|(_, point)| point)
                 .collect::<Vec<_>>();
             geometry::center(&points)
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     // Compute the distances moved by each center from their previous location
     let distances_moved: Vec<_> = centers
@@ -630,7 +633,8 @@ fn assign_and_balance<D>(
                     .filter(|(assignment, _)| *assignment == *center_id)
                     .map(|(_, weight)| *weight)
                     .sum::<f64>()
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         // return if maximum imbalance is small enough
         if imbalance(&new_weights) < settings.imbalance_tol {
@@ -671,7 +675,8 @@ fn assign_and_balance<D>(
                     .map(|(_, point)| point)
                     .collect::<Vec<_>>();
                 geometry::center(&points)
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         let distances_to_old_centers: Vec<_> = centers
             .par_iter()
