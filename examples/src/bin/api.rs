@@ -3,7 +3,7 @@ extern crate coupe;
 use coupe::dimension::U2;
 use coupe::geometry::Point2D;
 use coupe::Compose;
-use coupe::InitialPartition;
+use coupe::Partitioner;
 
 const NUM_POINTS: usize = 5000;
 
@@ -11,7 +11,6 @@ fn main() {
     // algorithm composition:
     //    - initial partitioner: Multi-Jagged
     //    - then improve with k-means
-
     let algo = coupe::MultiJagged {
         num_partitions: 7,
         max_iter: 3,

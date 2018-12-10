@@ -302,7 +302,7 @@ where
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
-    #[allow(unused)]    
+    #[allow(unused)]
     pub fn contains(&self, point: &PointND<D>) -> bool {
         self.aabb.contains(&(&self.mbr_to_aabb * point))
     }
@@ -315,7 +315,7 @@ where
     }
 
     /// Returns the rotated min and max points of the Aabb.
-    #[allow(unused)]    
+    #[allow(unused)]
     pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
         let min = &self.aabb_to_mbr * &self.aabb.p_min;
         let max = &self.aabb_to_mbr * &self.aabb.p_max;
