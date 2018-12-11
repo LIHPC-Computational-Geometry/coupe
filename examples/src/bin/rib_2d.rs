@@ -7,8 +7,9 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rib;
 use coupe::geometry::Point2D;
+use coupe::Partitioner;
+use coupe::Rib;
 
 fn main() {
     let yaml = load_yaml!("../../rcb.yml");
@@ -26,11 +27,13 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
+    let rib = Rib { num_iter };
+
     let weights = vec![1.; num_points];
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 2., 8.);
 
-    let partition = rib(&points, &weights, num_iter);
+    let partition = rib.partition(&points, &weights);
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

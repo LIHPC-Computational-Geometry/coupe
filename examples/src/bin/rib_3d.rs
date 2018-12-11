@@ -7,8 +7,9 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::recursive_bisection::rib;
 use coupe::geometry::Point3D;
+use coupe::Partitioner;
+use coupe::Rib;
 
 fn main() {
     let yaml = load_yaml!("../../rcb.yml");
@@ -26,6 +27,8 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
+    let rib = Rib { num_iter };
+
     let weights = vec![1.; num_points];
 
     let mut points = examples::generator::box_uniform(
@@ -42,7 +45,7 @@ fn main() {
         *p = transform(*p);
     }
 
-    let _partition = rib(&points, &weights, num_iter);
+    let _partition = rib.partition(&points, &weights);
 
     if !matches.is_present("quiet") {
         unimplemented!("3D plot is not supported yet")

@@ -5,8 +5,9 @@ extern crate itertools;
 
 use clap::load_yaml;
 use clap::App;
-use coupe::algorithms::k_means::{balanced_k_means, BalancedKmeansSettings};
 use coupe::geometry::Point2D;
+use coupe::{Compose, Partitioner};
+use coupe::{HilbertCurve, KMeans};
 
 fn main() {
     let yaml = load_yaml!("../../balanced_k_means.yml");
@@ -49,7 +50,20 @@ fn main() {
         .expect("wrong value for delta_max");
 
     let erode = matches.is_present("erode");
-    let hilbert = matches.is_present("hilbert");
+
+    let k_means = HilbertCurve {
+        num_partitions,
+        order: 14,
+    }
+    .compose::<coupe::dimension::U2>(KMeans {
+        num_partitions,
+        imbalance_tol,
+        max_iter,
+        max_balance_iter,
+        delta_threshold: delta_max,
+        erode,
+        ..Default::default()
+    });
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
@@ -59,19 +73,8 @@ fn main() {
         .map(|_p| 1.)
         .collect::<Vec<_>>();
 
-    let settings = BalancedKmeansSettings {
-        num_partitions,
-        imbalance_tol,
-        max_iter,
-        max_balance_iter,
-        delta_threshold: delta_max,
-        erode,
-        hilbert,
-        ..Default::default()
-    };
-
     let now = std::time::Instant::now();
-    let partition = balanced_k_means(&points, &weights, settings);
+    let partition = k_means.partition(&points, &weights);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

@@ -7,8 +7,9 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::multi_jagged::*;
 use coupe::geometry::Point2D;
+use coupe::MultiJagged;
+use coupe::Partitioner;
 
 fn main() {
     let yaml = load_yaml!("../../multi_jagged.yml");
@@ -32,6 +33,11 @@ fn main() {
         .parse()
         .expect("wrong value for max_iter");
 
+    let mj = MultiJagged {
+        num_partitions,
+        max_iter,
+    };
+
     let weights = vec![1.; num_points];
     // let weights = (1..=num_points).map(|i| i as f64).collect::<Vec<f64>>();
 
@@ -39,7 +45,7 @@ fn main() {
     let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
     let now = std::time::Instant::now();
-    let partition = multi_jagged(&points, &weights, num_partitions, max_iter);
+    let partition = mj.partition(&points, &weights);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

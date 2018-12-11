@@ -130,7 +130,7 @@ where
 /// for i in 0..4 {
 ///     for j in 0..4 {
 ///         if j == i {
-///             continue    
+///             continue
 ///         }
 ///         assert_ne!(partition[i], partition[j])
 ///     }

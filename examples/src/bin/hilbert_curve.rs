@@ -7,8 +7,9 @@ extern crate rand;
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::hilbert_curve::*;
 use coupe::geometry::Point2D;
+use coupe::HilbertCurve;
+use coupe::Partitioner;
 
 fn main() {
     let yaml = load_yaml!("../../hilbert_curve.yml");
@@ -32,13 +33,18 @@ fn main() {
         .parse()
         .expect("wrong value for order");
 
+    let hilbert_curve = HilbertCurve {
+        num_partitions,
+        order: order as u32,
+    };
+
     let weights = vec![1.; num_points];
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
     // let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
     let now = std::time::Instant::now();
-    let partition = hilbert_curve_partition(&points, &weights, num_partitions, order);
+    let partition = hilbert_curve.partition(&points, &weights);
     let end = now.elapsed();
     println!("elapsed in hilbert_curve_partition: {:?}", end);
 
