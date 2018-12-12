@@ -52,7 +52,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (HASH_TYPE_MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
         order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
@@ -159,7 +159,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (HASH_TYPE_MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
         order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
@@ -202,9 +202,9 @@ where
         .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
 
     if order == 0 {
-        current_hash as HashType
+        HashType::from(current_hash)
     } else {
-        ((2 as HashType).pow(D::dim() as u32)).pow(order) * current_hash as HashType
+        ((2 as HashType).pow(D::dim() as u32)).pow(order) * HashType::from(current_hash)
             + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
 }
