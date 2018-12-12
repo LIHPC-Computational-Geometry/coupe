@@ -31,6 +31,12 @@ use snowflake::ProcessUniqueId;
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
+// Z-curve hash can get quite large. For instance,
+// in 2D, an order greater than 64 will overflow u128.
+// maybe it would be more appropriate to use a BigInt
+type HashType = u128;
+const HASH_TYPE_MAX: HashType = std::u128::MAX;
+
 pub fn z_curve_partition<D>(
     points: &[PointND<D>],
     num_partitions: usize,
@@ -46,7 +52,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
     assert!(
         order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
@@ -64,11 +70,20 @@ where
     z_curve_partition_recurse(points, order, &mbr, &mut permutation);
 
     let points_per_partition = points.len() / num_partitions;
+    let remainder = points.len() % num_partitions;
 
     let atomic_handle = AtomicPtr::from(ininial_partition.as_mut_ptr());
+
     // give an id to each partition
-    permutation
-        .par_chunks(points_per_partition)
+    //
+    // instead of calling par_chunks with points_per_partition, which could yield an extra
+    // undesired partition, or a quite high partition imbalance, we compute an index threshold
+    // that splits chunks of len points_per_partition and point_per_partition + 1.
+    // Doing so makes sure there is always the correct amount of chunks, and that they are not too imbalanced.
+    let threshold_idx = (points_per_partition + 1) * remainder;
+    permutation[..threshold_idx]
+        .par_chunks(points_per_partition + 1)
+        .chain(permutation[threshold_idx..].par_chunks(points_per_partition))
         .for_each(|chunk| {
             let id = ProcessUniqueId::new();
             let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
@@ -144,7 +159,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let max_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(2u32.pow(D::dim() as u32) as f64) as u32;
     assert!(
         order <= max_order,
         format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
@@ -177,7 +192,7 @@ where
     permu.par_sort_by_key(|idx| hashes[*idx]);
 }
 
-fn compute_hash<D>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> usize
+fn compute_hash<D>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> HashType
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D>,
@@ -187,11 +202,9 @@ where
         .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
 
     if order == 0 {
-        current_hash as usize
+        current_hash as HashType
     } else {
-        // TODO: this can overflow if (2^dim)^order > u32::MAX
-        // maybe we should use a BigInt
-        (2usize.pow(D::dim() as u32)).pow(order) * current_hash as usize
+        ((2 as HashType).pow(D::dim() as u32)).pow(order) * current_hash as HashType
             + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
 }
