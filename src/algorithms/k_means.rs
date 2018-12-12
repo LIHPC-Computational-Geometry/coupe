@@ -2,8 +2,8 @@
 //! "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
 //! Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne)
 
-use geometry::Mbr;
-use geometry::{self, PointND};
+use crate::geometry::Mbr;
+use crate::geometry::{self, PointND};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 

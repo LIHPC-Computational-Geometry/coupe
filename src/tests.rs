@@ -1,5 +1,5 @@
-use algorithms;
-use geometry::Point2D;
+use crate::algorithms;
+use crate::geometry::Point2D;
 
 #[test]
 fn test_rcb_basic() {

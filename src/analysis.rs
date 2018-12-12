@@ -4,7 +4,7 @@
 use itertools::Itertools;
 use snowflake::ProcessUniqueId;
 
-use geometry::{Mbr, PointND};
+use crate::geometry::{Mbr, PointND};
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
@@ -96,7 +96,7 @@ pub fn imbalance_relative_diff(weights: &[f64], partition: &[ProcessUniqueId]) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geometry::Point2D;
+    use crate::geometry::Point2D;
     #[test]
     fn test_weights() {
         use std::collections::HashMap;

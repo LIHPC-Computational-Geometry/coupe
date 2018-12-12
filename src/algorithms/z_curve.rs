@@ -17,7 +17,7 @@
 //! Finally, the points are reordered according to the order of their hash.
 
 use super::multi_jagged::split_at_mut_many;
-use geometry::{Mbr, PointND};
+use crate::geometry::{Mbr, PointND};
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};
@@ -199,7 +199,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geometry::Point2D;
+    use crate::geometry::Point2D;
 
     #[test]
     fn test_partition() {

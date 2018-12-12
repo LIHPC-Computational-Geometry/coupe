@@ -6,6 +6,7 @@ authors = [
     "Cédric Chevalier", 
     "Sébastien Morais"
 ]
+edition = "2018"
 publish = false
 autobins = false
 

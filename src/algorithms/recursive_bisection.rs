@@ -1,4 +1,4 @@
-use geometry::*;
+use crate::geometry::*;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::{DimDiff, DimSub};

@@ -49,7 +49,7 @@ mod tests;
 // API
 
 // SUBMODULES REEXPORT
-pub use geometry::{Point2D, Point3D, PointND};
+pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use snowflake::ProcessUniqueId;
 
 pub mod dimension {

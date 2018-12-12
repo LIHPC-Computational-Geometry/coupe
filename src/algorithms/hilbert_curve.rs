@@ -10,7 +10,7 @@
 //!
 //! The complexity of encoding a point is O(order)
 
-use geometry::{Mbr, Point2D};
+use crate::geometry::{Mbr, Point2D};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
