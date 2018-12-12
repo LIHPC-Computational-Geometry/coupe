@@ -1,10 +1,3 @@
-extern crate clap;
-extern crate coupe;
-extern crate gnuplot;
-extern crate itertools;
-extern crate rand;
-extern crate snowflake;
-
 use gnuplot::{Color, Figure};
 use itertools::Itertools;
 use rand::Rng;

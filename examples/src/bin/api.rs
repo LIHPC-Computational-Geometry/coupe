@@ -1,5 +1,3 @@
-extern crate coupe;
-
 use coupe::dimension::U2;
 use coupe::geometry::Point2D;
 use coupe::Compose;

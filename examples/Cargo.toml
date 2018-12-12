@@ -8,40 +8,6 @@ authors = [
 ]
 edition = "2018"
 publish = false
-autobins = false
-
-[[bin]]
-name = "api"
-
-[[bin]]
-name = "balanced_k_means"
-
-[[bin]]
-name = "rcb_2d"
-
-[[bin]]
-name = "rcb_3d"
-
-[[bin]]
-name = "rib_2d"
-
-[[bin]]
-name = "rib_3d"
-
-[[bin]]
-name = "multi_jagged"
-
-[[bin]]
-name = "hilbert_curve"
-
-[[bin]]
-name = "z_curve"
-
-[[bin]]
-name = "simplified_k_means"
-
-[[bin]]
-name = "xyz_mesh"
 
 [dependencies]
 coupe = { version = "0.1.0", path = "../" }

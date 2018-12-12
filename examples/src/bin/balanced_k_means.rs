@@ -1,8 +1,3 @@
-extern crate clap;
-extern crate coupe;
-extern crate examples;
-extern crate itertools;
-
 use clap::load_yaml;
 use clap::App;
 use coupe::geometry::Point2D;

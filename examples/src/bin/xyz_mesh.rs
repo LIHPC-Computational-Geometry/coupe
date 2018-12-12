@@ -1,9 +1,3 @@
-extern crate clap;
-extern crate coupe;
-extern crate failure;
-extern crate mesh_io;
-extern crate rayon;
-
 use clap::load_yaml;
 use clap::{App, ArgMatches};
 use failure::{bail, Error};

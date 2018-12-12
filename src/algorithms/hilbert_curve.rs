@@ -52,20 +52,17 @@ pub fn hilbert_curve_partition(
         &modifiers,
     );
 
-    // TODO: remove these braces when NLL is available
-    {
-        let mut sub_permutation =
-            super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
-        let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
+    let mut sub_permutation =
+        super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
+    let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
 
-        sub_permutation.par_iter_mut().for_each(|slice| {
-            let part_id = ProcessUniqueId::new();
-            let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
-            for i in slice.iter_mut() {
-                unsafe { std::ptr::write(ptr.add(*i), part_id) }
-            }
-        });
-    }
+    sub_permutation.par_iter_mut().for_each(|slice| {
+        let part_id = ProcessUniqueId::new();
+        let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
+        for i in slice.iter_mut() {
+            unsafe { std::ptr::write(ptr.add(*i), part_id) }
+        }
+    });
 
     partition
 }
@@ -224,6 +221,7 @@ fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::*;
 
     #[test]
     fn test_segment_to_segment() {

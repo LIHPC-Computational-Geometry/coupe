@@ -53,9 +53,7 @@ where
                     PointND::<D>::from_element(std::f64::MIN),
                 ),
                 |(mut mins, mut maxs), vals| {
-                    for ((mut min, mut max), val) in
-                        mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter())
-                    {
+                    for ((min, max), val) in mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter()) {
                         if *val < *min {
                             *min = *val;
                         }
@@ -416,6 +414,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::*;
     use nalgebra::Matrix2;
 
     #[test]

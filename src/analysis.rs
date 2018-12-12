@@ -97,6 +97,8 @@ pub fn imbalance_relative_diff(weights: &[f64], partition: &[ProcessUniqueId]) -
 mod tests {
     use super::*;
     use crate::geometry::Point2D;
+    use approx::*;
+
     #[test]
     fn test_weights() {
         use std::collections::HashMap;

@@ -1,7 +1,3 @@
-extern crate clap;
-extern crate coupe;
-extern crate examples;
-
 use clap::load_yaml;
 use clap::App;
 use coupe::algorithms::k_means::simplified_k_means;

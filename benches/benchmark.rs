@@ -1,15 +1,9 @@
-#[macro_use]
-extern crate criterion;
-extern crate coupe;
-extern crate itertools;
-extern crate rand;
-extern crate rayon;
-
 mod generator;
 
 use coupe::algorithms::k_means::simplified_k_means;
 use coupe::algorithms::recursive_bisection::{axis_sort, rcb};
 use coupe::geometry::Point2D;
+use criterion::{criterion_group, criterion_main};
 use criterion::{Benchmark, Criterion, Throughput};
 use rayon::prelude::*;
 
