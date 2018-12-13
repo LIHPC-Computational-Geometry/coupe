@@ -1,9 +1,21 @@
 //! Utilities to manipulate partitions
 
 use itertools::Itertools;
+use nalgebra::allocator::Allocator;
+use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::DefaultAllocator;
+use nalgebra::DimName;
+use nalgebra::U1;
+
+use num::{Num, Signed};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
-use std::sync::atomic::{self, AtomicPtr};
+
+use std::cmp::PartialOrd;
+use std::iter::Sum;
+
+use crate::geometry::Mbr;
+use crate::PointND;
 
 pub struct Partition<'a, P, W> {
     points: &'a [P],
@@ -57,6 +69,24 @@ impl<'a, P, W> Partition<'a, P, W> {
         }
     }
 
+    /// Returns the array of ids representing the partition,
+    /// consuming the partition
+    pub fn into_ids(self) -> Vec<ProcessUniqueId> {
+        self.ids
+    }
+
+    pub fn ids(&self) -> &[ProcessUniqueId] {
+        &self.ids
+    }
+
+    pub fn points(&self) -> &[P] {
+        &self.points
+    }
+
+    pub fn weights(&self) -> &[W] {
+        &self.weights
+    }
+
     pub fn parts(&'a self) -> impl Iterator<Item = Part<'a, P, W>> {
         let indices = (0..self.points.len()).collect::<Vec<_>>();
         self.ids.iter().unique().map(move |id| {
@@ -74,7 +104,7 @@ impl<'a, P, W> Partition<'a, P, W> {
 
     pub fn max_imbalance(&'a self) -> W
     where
-        W: std::ops::Sub<Output = W> + std::iter::Sum + Clone,
+        W: Num + PartialOrd + Signed + Sum + Clone,
     {
         let total_weights = self
             .parts()
@@ -82,10 +112,35 @@ impl<'a, P, W> Partition<'a, P, W> {
             .collect::<Vec<_>>();
         total_weights
             .iter()
-            .flat_map(|w1| total_weights.iter().map(move |w2| (*w1 - *w2).abs()))
+            .flat_map(|w1| {
+                total_weights
+                    .iter()
+                    .map(move |w2| (w1.clone() - w2.clone()).abs())
+            })
             .max_by(|a, b| a.partial_cmp(&b).unwrap())
             // if the partition is empty, then there is the imbalance is null
-            .unwrap_or(0.)
+            .unwrap_or(W::zero())
+    }
+
+    pub fn relative_imbalance(&'a self) -> W
+    where
+        W: Num + PartialOrd + Signed + Sum + Clone,
+    {
+        let total_weights = self
+            .parts()
+            .map(|part| part.total_weight())
+            .collect::<Vec<_>>();
+        let max_imbalance = total_weights
+            .iter()
+            .flat_map(|w1| {
+                total_weights
+                    .iter()
+                    .map(move |w2| (w1.clone() - w2.clone()).abs())
+            })
+            .max_by(|a, b| a.partial_cmp(&b).unwrap())
+            .unwrap_or(W::zero());
+
+        max_imbalance / total_weights.into_iter().sum()
     }
 }
 
@@ -97,7 +152,7 @@ pub struct Part<'a, P, W> {
 impl<'a, P, W> Part<'a, P, W> {
     pub fn total_weight(&self) -> W
     where
-        W: std::iter::Sum + Clone,
+        W: Sum + Clone,
     {
         self.indices
             .iter()
@@ -105,14 +160,42 @@ impl<'a, P, W> Part<'a, P, W> {
             .cloned()
             .sum()
     }
+
+    pub fn iter(&self) -> PartIter<P, W> {
+        PartIter {
+            partition: self.partition,
+            indices: &self.indices,
+        }
+    }
 }
 
-impl<'a, P, W> Iterator for Part<'a, P, W> {
+impl<'a, W, D> Part<'a, PointND<D>, W>
+where
+    D: DimName + DimSub<U1>,
+    DefaultAllocator: Allocator<f64, D>
+        + Allocator<f64, D, D>
+        + Allocator<f64, U1, D>
+        + Allocator<f64, DimDiff<D, U1>>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+{
+    pub fn aspect_ratio(&self) -> f64 {
+        Mbr::from_points(self.partition.points()).aspect_ratio()
+    }
+}
+
+pub struct PartIter<'a, P, W> {
+    partition: &'a Partition<'a, P, W>,
+    indices: &'a [usize],
+}
+
+impl<'a, P, W> Iterator for PartIter<'a, P, W> {
     type Item = (&'a P, &'a W);
     fn next(&mut self) -> Option<Self::Item> {
-        self.indices
-            .pop()
-            .and_then(|idx| Some((&self.partition.points[idx], &self.partition.weights[idx])))
+        self.indices.get(0).and_then(|idx| {
+            self.indices = &self.indices[1..];
+            Some((&self.partition.points[*idx], &self.partition.weights[*idx]))
+        })
     }
 }
 
@@ -147,7 +230,7 @@ mod tests {
 
         for part in partition.parts() {
             println!("new part of weight {}", part.total_weight());
-            for (p, _) in part {
+            for (p, _) in part.iter() {
                 println!("{}", p);
             }
         }
