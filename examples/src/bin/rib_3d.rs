@@ -39,7 +39,19 @@ fn main() {
         *p = transform(*p);
     }
 
-    let _partition = rib.partition(&points, &weights);
+    let partition = rib.partition(&points, &weights);
+
+    let aspect_ratios = partition
+        .parts()
+        .map(|p| p.aspect_ratio())
+        .collect::<Vec<_>>();
+    let weights = partition
+        .parts()
+        .map(|p| p.total_weight())
+        .collect::<Vec<_>>();
+
+    println!("aspect ratios: {:#?}", aspect_ratios);
+    println!("weights: {:#?}", weights);
 
     if !matches.is_present("quiet") {
         unimplemented!("3D plot is not supported yet")

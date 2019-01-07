@@ -75,8 +75,16 @@ impl<'a, P, W> Partition<'a, P, W> {
         self.ids
     }
 
+    pub fn into_raw(self) -> (&'a [P], &'a [W], Vec<ProcessUniqueId>) {
+        (self.points, self.weights, self.ids)
+    }
+
     pub fn ids(&self) -> &[ProcessUniqueId] {
         &self.ids
+    }
+
+    pub fn ids_mut(&mut self) -> &mut [ProcessUniqueId] {
+        &mut self.ids
     }
 
     pub fn points(&self) -> &[P] {

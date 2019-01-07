@@ -53,6 +53,8 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
 
+use crate::partition::*;
+
 /// # A geometric partitioning algorithm.
 ///
 /// Algorithms that implement [`Partitioner`](trait.Partitioner.html) operate on a set of geometric points and associated weights and generate
@@ -67,7 +69,11 @@ where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
 {
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId>;
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64>;
 }
 
 /// A geometric algorithm to improve a partition.
@@ -81,12 +87,10 @@ where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
 {
-    fn improve_partition(
+    fn improve_partition<'a>(
         &self,
-        points: &[PointND<D>],
-        weights: &[f64],
-        partition: &mut [ProcessUniqueId],
-    );
+        partition: Partition<'a, PointND<D>, f64>,
+    ) -> Partition<'a, PointND<D>, f64>;
 }
 
 /// # Recursive Coordinate Bisection algorithm
@@ -118,12 +122,13 @@ where
 /// let rcb = coupe::Rcb { num_iter: 2 };
 /// let partition = rcb.partition(&points, &weights);
 ///
+/// let ids = partition.ids();
 /// for i in 0..4 {
 ///     for j in 0..4 {
 ///         if j == i {
 ///             continue
 ///         }
-///         assert_ne!(partition[i], partition[j])
+///         assert_ne!(ids[i], ids[j])
 ///     }
 /// }
 /// ```
@@ -137,8 +142,13 @@ where
     DefaultAllocator: Allocator<f64, D>,
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
 {
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
-        crate::algorithms::recursive_bisection::rcb(points, weights, self.num_iter)
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let ids = crate::algorithms::recursive_bisection::rcb(points, weights, self.num_iter);
+        Partition::from_ids(points, weights, ids)
     }
 }
 
@@ -170,16 +180,17 @@ where
 /// // generate a partition of 2 parts (1 split)
 /// let rib = coupe::Rib { num_iter: 1 };
 /// let partition = rib.partition(&points, &weights);
-/// eprintln!("partition = {:?}", partition);
+///
+/// let ids = partition.ids();
 ///
 /// // the two points at the top are in the same partition
-/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(ids[0], ids[1]);
 ///
 /// // the two points at the bottom are in the same partition
-/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(ids[2], ids[3]);
 ///
 /// // there are two different partition
-/// assert_ne!(partition[1], partition[2]);
+/// assert_ne!(ids[1], ids[2]);
 /// ```
 pub struct Rib {
     /// The number of iterations of the algorithm. This will yield a partition of `2^num_iter` parts.
@@ -197,8 +208,13 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
-        crate::algorithms::recursive_bisection::rib(points, weights, self.num_iter)
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let ids = crate::algorithms::recursive_bisection::rib(points, weights, self.num_iter);
+        Partition::from_ids(points, weights, ids)
     }
 }
 
@@ -244,12 +260,14 @@ where
 ///
 /// let partition = multi_jagged.partition(&points, &weights);
 ///
+/// let ids = partition.ids();
+///
 /// for i in 0..9 {
 ///     for j in 0..9 {
 ///         if j == i {
 ///             continue    
 ///         }
-///         assert_ne!(partition[i], partition[j])
+///         assert_ne!(ids[i], ids[j])
 ///     }
 /// }
 /// ```
@@ -264,13 +282,19 @@ where
     DefaultAllocator: Allocator<f64, D>,
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
 {
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
-        crate::algorithms::multi_jagged::multi_jagged(
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let ids = crate::algorithms::multi_jagged::multi_jagged(
             points,
             weights,
             self.num_partitions,
             self.max_iter,
-        )
+        );
+
+        Partition::from_ids(points, weights, ids)
     }
 }
 
@@ -305,11 +329,12 @@ where
 /// };
 ///
 /// let partition = z_curve.partition(&points, &weights);
+/// let ids = partition.ids();
 ///
-/// assert_eq!(partition[0], partition[1]);
-/// assert_eq!(partition[2], partition[3]);
-/// assert_eq!(partition[4], partition[5]);
-/// assert_eq!(partition[6], partition[7]);
+/// assert_eq!(ids[0], ids[1]);
+/// assert_eq!(ids[2], ids[3]);
+/// assert_eq!(ids[4], ids[5]);
+/// assert_eq!(ids[6], ids[7]);
 /// ```  
 pub struct ZCurve {
     pub num_partitions: usize,
@@ -327,8 +352,14 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    fn partition(&self, points: &[PointND<D>], _weights: &[f64]) -> Vec<ProcessUniqueId> {
-        crate::algorithms::z_curve::z_curve_partition(points, self.num_partitions, self.order)
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let ids =
+            crate::algorithms::z_curve::z_curve_partition(points, self.num_partitions, self.order);
+        Partition::from_ids(points, weights, ids)
     }
 }
 
@@ -366,11 +397,12 @@ where
 /// };
 ///
 /// let partition = hilbert.partition(&points, &weights);
+/// let ids = partition.ids();
 ///
-/// assert_eq!(partition[0], partition[1]);
-/// assert_eq!(partition[2], partition[3]);
-/// assert_eq!(partition[4], partition[5]);
-/// assert_eq!(partition[6], partition[7]);
+/// assert_eq!(ids[0], ids[1]);
+/// assert_eq!(ids[2], ids[3]);
+/// assert_eq!(ids[4], ids[5]);
+/// assert_eq!(ids[6], ids[7]);
 /// ```
 pub struct HilbertCurve {
     pub num_partitions: usize,
@@ -381,13 +413,19 @@ use nalgebra::base::U2;
 
 // hilbert curve is only implemented in 2d for now
 impl Partitioner<U2> for HilbertCurve {
-    fn partition(&self, points: &[PointND<U2>], _weights: &[f64]) -> Vec<ProcessUniqueId> {
-        crate::algorithms::hilbert_curve::hilbert_curve_partition(
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<U2>],
+        _weights: &'a [f64],
+    ) -> Partition<'a, PointND<U2>, f64> {
+        let ids = crate::algorithms::hilbert_curve::hilbert_curve_partition(
             points,
             _weights,
             self.num_partitions,
             self.order as usize,
-        )
+        );
+
+        Partition::from_ids(points, _weights, ids)
     }
 }
 
@@ -407,6 +445,7 @@ impl Partitioner<U2> for HilbertCurve {
 /// use coupe::Point2D;
 /// use coupe::PartitionImprover;
 /// use coupe::ProcessUniqueId;
+/// use coupe::partition::Partition;
 ///
 /// // create ids for initial partition
 /// let p1 = ProcessUniqueId::new();
@@ -431,7 +470,8 @@ impl Partitioner<U2> for HilbertCurve {
 /// //  - p1: total weight = 1
 /// //  - p2: total weight = 7
 /// //  - p3: total weight = 1
-/// let mut partition = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
+/// let ids = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
+/// let partition = Partition::from_ids(&points, &weights, ids);
 ///
 /// let k_means = coupe::KMeans {
 ///     num_partitions: 3,
@@ -439,16 +479,17 @@ impl Partitioner<U2> for HilbertCurve {
 ///     ..Default::default()
 /// };
 ///
-/// k_means.improve_partition(&points, &weights, &mut partition);
+/// let partition = k_means.improve_partition(partition);
+/// let ids = partition.ids();
 ///
-/// assert_eq!(partition[0], partition[1]);
-/// assert_eq!(partition[0], partition[2]);
+/// assert_eq!(ids[0], ids[1]);
+/// assert_eq!(ids[0], ids[2]);
 ///
-/// assert_eq!(partition[3], partition[4]);
-/// assert_eq!(partition[3], partition[5]);
+/// assert_eq!(ids[3], ids[4]);
+/// assert_eq!(ids[3], ids[5]);
 ///
-/// assert_eq!(partition[6], partition[7]);
-/// assert_eq!(partition[6], partition[8]);
+/// assert_eq!(ids[6], ids[7]);
+/// assert_eq!(ids[6], ids[8]);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KMeans {
@@ -488,12 +529,10 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    fn improve_partition(
+    fn improve_partition<'a>(
         &self,
-        points: &[PointND<D>],
-        weights: &[f64],
-        partition: &mut [ProcessUniqueId],
-    ) {
+        partition: Partition<'a, PointND<D>, f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
         let settings = crate::algorithms::k_means::BalancedKmeansSettings {
             num_partitions: self.num_partitions,
             imbalance_tol: self.imbalance_tol,
@@ -504,9 +543,11 @@ where
             hilbert: self.hilbert,
             mbr_early_break: self.mbr_early_break,
         };
+        let (points, weights, mut ids) = partition.into_raw();
         crate::algorithms::k_means::balanced_k_means_with_initial_partition(
-            points, weights, settings, partition,
-        )
+            points, weights, settings, &mut ids,
+        );
+        Partition::from_ids(points, weights, ids)
     }
 }
 
@@ -526,11 +567,13 @@ where
     T: Partitioner<D>,
     U: PartitionImprover<D>,
 {
-    fn partition(&self, points: &[PointND<D>], weights: &[f64]) -> Vec<ProcessUniqueId> {
-        let mut partition = self.first.partition(points, weights);
-        self.second
-            .improve_partition(points, weights, &mut partition);
-        partition
+    fn partition<'a>(
+        &self,
+        points: &'a [PointND<D>],
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let partition = self.first.partition(points, weights);
+        self.second.improve_partition(partition)
     }
 }
 
@@ -541,14 +584,12 @@ where
     T: PartitionImprover<D>,
     U: PartitionImprover<D>,
 {
-    fn improve_partition(
+    fn improve_partition<'a>(
         &self,
-        points: &[PointND<D>],
-        weights: &[f64],
-        partition: &mut [ProcessUniqueId],
-    ) {
-        self.first.improve_partition(points, weights, partition);
-        self.second.improve_partition(points, weights, partition);
+        partition: Partition<'a, PointND<D>, f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        self.second
+            .improve_partition(self.first.improve_partition(partition))
     }
 }
 
