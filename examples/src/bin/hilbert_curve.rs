@@ -42,12 +42,12 @@ fn main() {
     let end = now.elapsed();
     println!("elapsed in hilbert_curve_partition: {:?}", end);
 
-    let max_imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
-    let relative_imbalance = coupe::analysis::imbalance_relative_diff(&weights, &partition);
-    let mut aspect_ratios = coupe::analysis::aspect_ratios(&partition, &points)
-        .into_iter()
-        .map(|(_id, r)| r)
-        .collect::<Vec<_>>();;
+    let max_imbalance = partition.max_imbalance();
+    let relative_imbalance = partition.relative_imbalance();
+    let mut aspect_ratios = partition
+        .parts()
+        .map(|p| p.aspect_ratio())
+        .collect::<Vec<_>>();
     aspect_ratios
         .as_mut_slice()
         .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
@@ -58,7 +58,8 @@ fn main() {
     println!("   > ordered aspect ratios: {:?}", aspect_ratios);
 
     if !matches.is_present("quiet") {
-        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        let ids = partition.into_ids();
+        let part = points.into_iter().zip(ids).collect::<Vec<_>>();
 
         examples::plot_partition(part)
     }

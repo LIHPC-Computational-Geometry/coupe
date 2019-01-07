@@ -31,7 +31,7 @@ fn main() {
         .collect::<Vec<_>>();
 
     let now = std::time::Instant::now();
-    let partition = rcb.partition(&points, &weights);
+    let partition = rcb.partition(&points, &weights).into_ids();
     let end = now.elapsed();
     println!("time spent: {:?}", end);
 

@@ -27,7 +27,7 @@ fn main() {
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 2., 8.);
 
-    let partition = rib.partition(&points, &weights);
+    let partition = rib.partition(&points, &weights).into_ids();
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

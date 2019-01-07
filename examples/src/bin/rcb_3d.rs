@@ -33,7 +33,7 @@ fn main() {
     .into_iter()
     .collect::<Vec<_>>();
 
-    let partition = rcb.partition(&points, &weights);
+    let partition = rcb.partition(&points, &weights).into_ids();
 
     if !matches.is_present("quiet") {
         let _part = points.into_iter().zip(partition).collect::<Vec<_>>();

@@ -22,7 +22,7 @@ fn main() {
     let weights = vec![1.; NUM_POINTS];
     let points = examples::generator::rectangle_uniform(NUM_POINTS, Point2D::new(0., 0.), 4., 2.);
 
-    let partition = algo.partition(&points, &weights);
+    let partition = algo.partition(&points, &weights).into_ids();
 
     let part = points.into_iter().zip(partition).collect::<Vec<_>>();
 
