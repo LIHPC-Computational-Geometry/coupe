@@ -1,8 +1,8 @@
 use clap::load_yaml;
 use clap::App;
 
-use coupe::algorithms::z_curve::*;
 use coupe::geometry::Point2D;
+use coupe::Partitioner;
 
 fn main() {
     let yaml = load_yaml!("../../hilbert_curve.yml");
@@ -31,16 +31,21 @@ fn main() {
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
     // let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
+    let z_curve = coupe::ZCurve {
+        num_partitions,
+        order,
+    };
+
     let now = std::time::Instant::now();
-    let partition = z_curve_partition(&points, num_partitions, order);
+    let partition = z_curve.partition(&points, &weights);
     let end = now.elapsed();
     println!("elapsed in hilbert_curve_partition: {:?}", end);
 
-    let max_imbalance = coupe::analysis::imbalance_max_diff(&weights, &partition);
-    let relative_imbalance = coupe::analysis::imbalance_relative_diff(&weights, &partition);
-    let mut aspect_ratios = coupe::analysis::aspect_ratios(&partition, &points)
-        .into_iter()
-        .map(|(_id, r)| r)
+    let max_imbalance = partition.max_imbalance();
+    let relative_imbalance = partition.relative_imbalance();
+    let mut aspect_ratios = partition
+        .parts()
+        .map(|part| part.aspect_ratio())
         .collect::<Vec<_>>();;
     aspect_ratios
         .as_mut_slice()
@@ -52,7 +57,8 @@ fn main() {
     println!("   > ordered aspect ratios: {:?}", aspect_ratios);
 
     if !matches.is_present("quiet") {
-        let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+        let ids = partition.into_ids();
+        let part = points.into_iter().zip(ids).collect::<Vec<_>>();
 
         examples::plot_partition(part)
     }

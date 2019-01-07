@@ -354,7 +354,12 @@ where
         if self.indices.len() <= 2 {
             panic!("Cannot compute the aspect ratio of a part of less than 2 points");
         }
-        Mbr::from_points(self.partition.points()).aspect_ratio()
+        let points = self
+            .indices
+            .iter()
+            .map(|idx| self.partition.points()[*idx].clone())
+            .collect::<Vec<_>>();
+        Mbr::from_points(&points).aspect_ratio()
     }
 }
 

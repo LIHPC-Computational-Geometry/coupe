@@ -25,7 +25,6 @@ use std::sync::atomic::{self, AtomicPtr};
 ///
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
-
 pub fn rcb<D>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId>
 where
     D: DimName,
