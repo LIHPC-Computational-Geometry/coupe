@@ -32,6 +32,7 @@
 pub mod algorithms;
 pub mod geometry;
 pub mod partition;
+pub mod topology;
 
 #[cfg(test)]
 mod tests;
@@ -51,8 +52,44 @@ use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
+use std::marker;
 
 use crate::partition::*;
+
+// Trait that allows conversions from/to different kinds of
+// points views representation as partitioner inputs
+// e.g. &[f64], &[PointND<D>], slice from ndarray, ...
+pub trait PointsView<'a, Dim> {
+    fn to_points_nd(self) -> &'a [PointND<Dim>]
+    where
+        Dim: DimName,
+        DefaultAllocator: Allocator<f64, Dim>;
+}
+
+impl<'a, D> PointsView<'a, D> for &'a [f64] {
+    fn to_points_nd(self) -> &'a [PointND<D>]
+    where
+        D: DimName,
+        DefaultAllocator: Allocator<f64, D>,
+    {
+        let dim = D::dim();
+        if self.len() % dim != 0 {
+            panic!("error: tried to convert a &[f64] to a &[PointND<D>] with D = {}, but input slice has len {}", dim, self.len());
+        }
+        unsafe { std::slice::from_raw_parts(self.as_ptr() as *const PointND<D>, self.len() / dim) }
+    }
+}
+
+impl<'a, D> PointsView<'a, D> for &'a [PointND<D>]
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn to_points_nd(self) -> &'a [PointND<D>] {
+        // nothing to do
+        self
+    }
+}
 
 /// # A geometric partitioning algorithm.
 ///
@@ -70,7 +107,7 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64>;
 }
@@ -131,11 +168,21 @@ where
 ///     }
 /// }
 /// ```
-pub struct Rcb {
+pub struct Rcb<D> {
     pub num_iter: usize,
+    _marker: marker::PhantomData<D>,
 }
 
-impl<D> Partitioner<D> for Rcb
+impl<D> Rcb<D> {
+    pub fn new(num_iter: usize) -> Self {
+        Self {
+            num_iter,
+            _marker: marker::PhantomData::<D>,
+        }
+    }
+}
+
+impl<D> Partitioner<D> for Rcb<D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -143,9 +190,10 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
+        let points = points.to_points_nd();
         let ids = crate::algorithms::recursive_bisection::rcb(points, weights, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
@@ -209,9 +257,10 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
+        let points = points.to_points_nd();
         let ids = crate::algorithms::recursive_bisection::rib(points, weights, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
@@ -283,9 +332,10 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
+        let points = points.to_points_nd();
         let ids = crate::algorithms::multi_jagged::multi_jagged(
             points,
             weights,
@@ -353,9 +403,10 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
+        let points = points.to_points_nd();
         let ids =
             crate::algorithms::z_curve::z_curve_partition(points, self.num_partitions, self.order);
         Partition::from_ids(points, weights, ids)
@@ -414,9 +465,10 @@ use nalgebra::base::U2;
 impl Partitioner<U2> for HilbertCurve {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<U2>],
+        points: impl PointsView<'a, U2>,
         _weights: &'a [f64],
     ) -> Partition<'a, PointND<U2>, f64> {
+        let points = points.to_points_nd();
         let ids = crate::algorithms::hilbert_curve::hilbert_curve_partition(
             points,
             _weights,
@@ -568,9 +620,10 @@ where
 {
     fn partition<'a>(
         &self,
-        points: &'a [PointND<D>],
+        points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
+        let points = points.to_points_nd();
         let partition = self.first.partition(points, weights);
         self.second.improve_partition(partition)
     }

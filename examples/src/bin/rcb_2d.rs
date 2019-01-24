@@ -1,6 +1,7 @@
 use clap::load_yaml;
 use clap::App;
 
+use coupe::dimension::U2;
 use coupe::geometry::Point2D;
 use coupe::Partitioner;
 use coupe::Rcb;
@@ -21,7 +22,7 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let rcb = Rcb { num_iter };
+    let rcb = Rcb::<U2>::new(num_iter);
 
     let weights = vec![1.; num_points];
 
@@ -30,8 +31,11 @@ fn main() {
         // .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
+    let points_slice_f64 =
+        unsafe { std::slice::from_raw_parts(points.as_ptr() as *const f64, points.len() * 2) };
+
     let now = std::time::Instant::now();
-    let partition = rcb.partition(&points, &weights).into_ids();
+    let partition = rcb.partition(points_slice_f64, &weights).into_ids();
     let end = now.elapsed();
     println!("time spent: {:?}", end);
 
