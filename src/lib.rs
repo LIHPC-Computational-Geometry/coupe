@@ -52,6 +52,10 @@ use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
+
+use ndarray::ArrayView1;
+use ndarray::ArrayView2;
+
 use std::marker::PhantomData;
 
 use crate::partition::*;
@@ -59,11 +63,11 @@ use crate::partition::*;
 // Trait that allows conversions from/to different kinds of
 // points views representation as partitioner inputs
 // e.g. &[f64], &[PointND<D>], slice from ndarray, ...
-pub trait PointsView<'a, Dim> {
-    fn to_points_nd(self) -> &'a [PointND<Dim>]
+pub trait PointsView<'a, D> {
+    fn to_points_nd(self) -> &'a [PointND<D>]
     where
-        Dim: DimName,
-        DefaultAllocator: Allocator<f64, Dim>;
+        D: DimName,
+        DefaultAllocator: Allocator<f64, D>;
 }
 
 impl<'a, D> PointsView<'a, D> for &'a [f64] {
@@ -77,6 +81,32 @@ impl<'a, D> PointsView<'a, D> for &'a [f64] {
             panic!("error: tried to convert a &[f64] to a &[PointND<D>] with D = {}, but input slice has len {}", dim, self.len());
         }
         unsafe { std::slice::from_raw_parts(self.as_ptr() as *const PointND<D>, self.len() / dim) }
+    }
+}
+
+impl<'a, D> PointsView<'a, D> for ArrayView1<'a, f64> {
+    fn to_points_nd(self) -> &'a [PointND<D>]
+    where
+        D: DimName,
+        DefaultAllocator: Allocator<f64, D>,
+    {
+        let slice = self.into_slice().expect(
+            "Cannot convert an ArrayView1 with dicontiguous storage repr to a slice. Try cloning the data into a contiguous array first"
+        );
+        slice.to_points_nd()
+    }
+}
+
+impl<'a, D> PointsView<'a, D> for ArrayView2<'a, f64> {
+    fn to_points_nd(self) -> &'a [PointND<D>]
+    where
+        D: DimName,
+        DefaultAllocator: Allocator<f64, D>,
+    {
+        let slice = self.into_slice().expect(
+            "Cannot convert an ArrayView2 with dicontiguous storage repr to a slice. Try cloning the data into a contiguous array first"
+        );
+        slice.to_points_nd()
     }
 }
 

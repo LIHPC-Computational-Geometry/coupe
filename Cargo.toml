@@ -25,6 +25,7 @@ members = [
 approx = "0.3.0"
 itertools = "0.7.8"
 nalgebra = "0.16.8"
+ndarray = "0.12.1"
 num = "0.2.0"
 rayon = "1.0.3"
 snowflake = "1.3"
