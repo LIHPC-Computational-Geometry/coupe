@@ -21,7 +21,7 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let rib = Rib { num_iter };
+    let rib = Rib::new(num_iter);
 
     let weights = vec![1.; num_points];
 
@@ -39,7 +39,7 @@ fn main() {
         *p = transform(*p);
     }
 
-    let partition = rib.partition(&points, &weights);
+    let partition = rib.partition(points.as_slice(), &weights);
 
     let aspect_ratios = partition
         .parts()

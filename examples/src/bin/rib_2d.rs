@@ -21,13 +21,13 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let rib = Rib { num_iter };
+    let rib = Rib::new(num_iter);
 
     let weights = vec![1.; num_points];
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 2., 8.);
 
-    let partition = rib.partition(&points, &weights).into_ids();
+    let partition = rib.partition(points.as_slice(), &weights).into_ids();
 
     if !matches.is_present("quiet") {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();

@@ -21,7 +21,7 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let rcb = Rcb { num_iter };
+    let rcb = Rcb::new(num_iter);
 
     let weights = vec![1.; num_points];
 
@@ -33,7 +33,7 @@ fn main() {
     .into_iter()
     .collect::<Vec<_>>();
 
-    let partition = rcb.partition(&points, &weights).into_ids();
+    let partition = rcb.partition(points.as_slice(), &weights).into_ids();
 
     if !matches.is_present("quiet") {
         let _part = points.into_iter().zip(partition).collect::<Vec<_>>();

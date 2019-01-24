@@ -52,7 +52,7 @@ use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
-use std::marker;
+use std::marker::PhantomData;
 
 use crate::partition::*;
 
@@ -170,14 +170,14 @@ where
 /// ```
 pub struct Rcb<D> {
     pub num_iter: usize,
-    _marker: marker::PhantomData<D>,
+    _marker: PhantomData<D>,
 }
 
 impl<D> Rcb<D> {
     pub fn new(num_iter: usize) -> Self {
         Self {
             num_iter,
-            _marker: marker::PhantomData::<D>,
+            _marker: PhantomData::<D>,
         }
     }
 }
@@ -239,12 +239,22 @@ where
 /// // there are two different partition
 /// assert_ne!(ids[1], ids[2]);
 /// ```
-pub struct Rib {
+pub struct Rib<D> {
     /// The number of iterations of the algorithm. This will yield a partition of `2^num_iter` parts.
     pub num_iter: usize,
+    _marker: PhantomData<D>,
 }
 
-impl<D> Partitioner<D> for Rib
+impl<D> Rib<D> {
+    pub fn new(num_iter: usize) -> Self {
+        Self {
+            num_iter,
+            _marker: PhantomData::<D>,
+        }
+    }
+}
+
+impl<D> Partitioner<D> for Rib<D>
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -319,12 +329,23 @@ where
 ///     }
 /// }
 /// ```
-pub struct MultiJagged {
+pub struct MultiJagged<D> {
     pub num_partitions: usize,
     pub max_iter: usize,
+    _marker: PhantomData<D>,
 }
 
-impl<D> Partitioner<D> for MultiJagged
+impl<D> MultiJagged<D> {
+    pub fn new(num_partitions: usize, max_iter: usize) -> Self {
+        Self {
+            num_partitions,
+            max_iter,
+            _marker: PhantomData::<D>,
+        }
+    }
+}
+
+impl<D> Partitioner<D> for MultiJagged<D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -385,12 +406,23 @@ where
 /// assert_eq!(ids[4], ids[5]);
 /// assert_eq!(ids[6], ids[7]);
 /// ```  
-pub struct ZCurve {
+pub struct ZCurve<D> {
     pub num_partitions: usize,
     pub order: u32,
+    _marker: PhantomData<D>,
 }
 
-impl<D> Partitioner<D> for ZCurve
+impl<D> ZCurve<D> {
+    pub fn new(num_partitions: usize, order: u32) -> Self {
+        Self {
+            num_partitions,
+            order,
+            _marker: PhantomData::<D>,
+        }
+    }
+}
+
+impl<D> Partitioner<D> for ZCurve<D>
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -454,15 +486,26 @@ where
 /// assert_eq!(ids[4], ids[5]);
 /// assert_eq!(ids[6], ids[7]);
 /// ```
-pub struct HilbertCurve {
+pub struct HilbertCurve<D> {
     pub num_partitions: usize,
     pub order: u32,
+    _marker: PhantomData<D>,
+}
+
+impl<D> HilbertCurve<D> {
+    pub fn new(num_partitions: usize, order: u32) -> Self {
+        Self {
+            num_partitions,
+            order,
+            _marker: PhantomData::<D>,
+        }
+    }
 }
 
 use nalgebra::base::U2;
 
 // hilbert curve is only implemented in 2d for now
-impl Partitioner<U2> for HilbertCurve {
+impl Partitioner<U2> for HilbertCurve<U2> {
     fn partition<'a>(
         &self,
         points: impl PointsView<'a, U2>,
@@ -606,12 +649,23 @@ where
 ///
 /// This structure is created by calling the [`compose`](trait.Compose.html#tymethod.compose)
 /// of the [`Compose`](trait.Compose.html) trait.
-pub struct Composition<T, U> {
+pub struct Composition<T, U, D> {
     first: T,
     second: U,
+    _marker: PhantomData<D>,
 }
 
-impl<D, T, U> Partitioner<D> for Composition<T, U>
+impl<T, U, D> Composition<T, U, D> {
+    pub fn new(first: T, second: U) -> Self {
+        Self {
+            first,
+            second,
+            _marker: PhantomData::<D>,
+        }
+    }
+}
+
+impl<D, T, U> Partitioner<D> for Composition<T, U, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -629,7 +683,7 @@ where
     }
 }
 
-impl<D, T, U> PartitionImprover<D> for Composition<T, U>
+impl<D, T, U> PartitionImprover<D> for Composition<T, U, D>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -669,20 +723,17 @@ where
 /// );
 ///
 /// ```
-pub trait Compose<T> {
+pub trait Compose<T, D> {
     type Composed;
-    fn compose<D>(self, other: T) -> Self::Composed
+    fn compose(self, other: T) -> Self::Composed
     where
         D: DimName,
         DefaultAllocator: Allocator<f64, D>;
 }
 
-impl<T, U> Compose<T> for U {
-    type Composed = Composition<Self, T>;
-    fn compose<D>(self, other: T) -> Self::Composed {
-        Composition {
-            first: self,
-            second: other,
-        }
+impl<T, U, D> Compose<T, D> for U {
+    type Composed = Composition<Self, T, D>;
+    fn compose(self, other: T) -> Self::Composed {
+        Composition::new(self, other)
     }
 }

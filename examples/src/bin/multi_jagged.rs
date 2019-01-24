@@ -27,10 +27,7 @@ fn main() {
         .parse()
         .expect("wrong value for max_iter");
 
-    let mj = MultiJagged {
-        num_partitions,
-        max_iter,
-    };
+    let mj = MultiJagged::new(num_partitions, max_iter);
 
     let weights = vec![1.; num_points];
     // let weights = (1..=num_points).map(|i| i as f64).collect::<Vec<f64>>();
@@ -39,7 +36,7 @@ fn main() {
     let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
     let now = std::time::Instant::now();
-    let partition = mj.partition(&points, &weights);
+    let partition = mj.partition(points.as_slice(), &weights);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

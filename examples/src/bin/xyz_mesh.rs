@@ -46,11 +46,11 @@ fn rcb<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let rcb = coupe::Rcb { num_iter };
+    let rcb = coupe::Rcb::new(num_iter);
 
     println!("info: entering RCB algorithm");
     let now = std::time::Instant::now();
-    let partition = rcb.partition(&points, &weights).into_ids();
+    let partition = rcb.partition(points.as_slice(), &weights).into_ids();
     let end = now.elapsed();
     println!("info: left RCB algorithm. {:?} elapsed.", end);
 
@@ -81,10 +81,10 @@ fn rib<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let rib = coupe::Rib { num_iter };
+    let rib = coupe::Rib::new(num_iter);
 
     println!("info: entering RIB algorithm");
-    let partition = rib.partition(&points, &weights).into_ids();
+    let partition = rib.partition(points.as_slice(), &weights).into_ids();
     println!("info: left RIB algorithm");
 
     if !matches.is_present("quiet") {
@@ -120,14 +120,11 @@ fn multi_jagged<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let mj = coupe::MultiJagged {
-        num_partitions,
-        max_iter,
-    };
+    let mj = coupe::MultiJagged::new(num_partitions, max_iter);
 
     println!("info: entering Multi-Jagged algorithm");
     let now = std::time::Instant::now();
-    let partition = mj.partition(&points, &weights).into_ids();
+    let partition = mj.partition(points.as_slice(), &weights).into_ids();
     let end = now.elapsed();
     println!("info: left Multi-Jagged algorithm. elapsed = {:?}", end);
 
@@ -223,22 +220,19 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let erode = matches.is_present("erode");
 
-    let k_means = coupe::MultiJagged {
-        num_partitions,
-        max_iter: 2,
-    } // fast multijagged for initial partition
-    .compose::<coupe::dimension::U2>(coupe::KMeans {
-        num_partitions,
-        imbalance_tol,
-        max_iter,
-        max_balance_iter,
-        delta_threshold: delta_max,
-        erode,
-        ..Default::default()
-    });
+    let k_means = coupe::MultiJagged::new(num_partitions, 2) // fast multijagged for initial partition
+        .compose(coupe::KMeans {
+            num_partitions,
+            imbalance_tol,
+            max_iter,
+            max_balance_iter,
+            delta_threshold: delta_max,
+            erode,
+            ..Default::default()
+        });
 
     println!("info: entering balanced_k_means algorithm");
-    let partition = k_means.partition(&points, &weights).into_ids();
+    let partition = k_means.partition(points.as_slice(), &weights).into_ids();
     println!("info: left balanced_k_means algorithm");
 
     if !matches.is_present("quiet") {

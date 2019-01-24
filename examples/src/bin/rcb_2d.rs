@@ -31,11 +31,8 @@ fn main() {
         // .map(|p| p * p.y)
         .collect::<Vec<_>>();
 
-    let points_slice_f64 =
-        unsafe { std::slice::from_raw_parts(points.as_ptr() as *const f64, points.len() * 2) };
-
     let now = std::time::Instant::now();
-    let partition = rcb.partition(points_slice_f64, &weights).into_ids();
+    let partition = rcb.partition(points.as_slice(), &weights).into_ids();
     let end = now.elapsed();
     println!("time spent: {:?}", end);
 

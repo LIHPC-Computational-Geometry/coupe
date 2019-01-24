@@ -46,11 +46,7 @@ fn main() {
 
     let erode = matches.is_present("erode");
 
-    let k_means = HilbertCurve {
-        num_partitions,
-        order: 14,
-    }
-    .compose::<coupe::dimension::U2>(KMeans {
+    let k_means = HilbertCurve::new(num_partitions, 14).compose(KMeans {
         num_partitions,
         imbalance_tol,
         max_iter,
@@ -69,7 +65,7 @@ fn main() {
         .collect::<Vec<_>>();
 
     let now = std::time::Instant::now();
-    let partition = k_means.partition(&points, &weights);
+    let partition = k_means.partition(points.as_slice(), &weights);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

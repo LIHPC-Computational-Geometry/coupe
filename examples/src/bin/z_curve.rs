@@ -31,13 +31,10 @@ fn main() {
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
     // let points = examples::generator::circle_uniform(num_points, Point2D::new(0., 0.), 1.);
 
-    let z_curve = coupe::ZCurve {
-        num_partitions,
-        order,
-    };
+    let z_curve = coupe::ZCurve::new(num_partitions, order);
 
     let now = std::time::Instant::now();
-    let partition = z_curve.partition(&points, &weights);
+    let partition = z_curve.partition(points.as_slice(), &weights);
     let end = now.elapsed();
     println!("elapsed in hilbert_curve_partition: {:?}", end);
 
