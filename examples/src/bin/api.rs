@@ -9,11 +9,10 @@ fn main() {
     // algorithm composition:
     //    - initial partitioner: Multi-Jagged
     //    - then improve with k-means
-    let algo = coupe::MultiJagged::new(7, 3).compose(coupe::KMeans {
-        num_partitions: 7,
-        delta_threshold: 0.,
-        ..Default::default()
-    });
+    let mut k_means = coupe::KMeans::default();
+    k_means.num_partitions = 7;
+    k_means.delta_threshold = 0.;
+    let algo = coupe::MultiJagged::new(7, 3).compose(k_means);
 
     let weights = vec![1.; NUM_POINTS];
     let points = examples::generator::rectangle_uniform(NUM_POINTS, Point2D::new(0., 0.), 4., 2.);

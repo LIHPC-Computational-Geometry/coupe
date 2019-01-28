@@ -46,15 +46,15 @@ fn main() {
 
     let erode = matches.is_present("erode");
 
-    let k_means = HilbertCurve::new(num_partitions, 14).compose(KMeans {
-        num_partitions,
-        imbalance_tol,
-        max_iter,
-        max_balance_iter,
-        delta_threshold: delta_max,
-        erode,
-        ..Default::default()
-    });
+    let mut k_means = KMeans::default();
+    k_means.num_partitions = num_partitions;
+    k_means.imbalance_tol = imbalance_tol;
+    k_means.max_iter = max_iter;
+    k_means.max_balance_iter = max_balance_iter;
+    k_means.delta_threshold = delta_max;
+    k_means.erode = erode;
+
+    let algo = HilbertCurve::new(num_partitions, 14).compose(k_means);
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 
@@ -65,7 +65,7 @@ fn main() {
         .collect::<Vec<_>>();
 
     let now = std::time::Instant::now();
-    let partition = k_means.partition(points.as_slice(), &weights);
+    let partition = algo.partition(points.as_slice(), &weights);
     let end = now.elapsed();
     println!("elapsed in multi-jagged: {:?}", end);
 

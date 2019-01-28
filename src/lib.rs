@@ -185,8 +185,8 @@ where
 /// let weights = vec![1., 1., 1., 1.];
 ///
 /// // generate a partition of 4 parts
-/// let rcb = coupe::Rcb { num_iter: 2 };
-/// let partition = rcb.partition(&points, &weights);
+/// let rcb = coupe::Rcb::new(2);
+/// let partition = rcb.partition(points.as_slice(), &weights);
 ///
 /// let ids = partition.ids();
 /// for i in 0..4 {
@@ -255,8 +255,8 @@ where
 /// let weights = vec![1., 1., 1., 1.];
 ///
 /// // generate a partition of 2 parts (1 split)
-/// let rib = coupe::Rib { num_iter: 1 };
-/// let partition = rib.partition(&points, &weights);
+/// let rib = coupe::Rib::new(1);
+/// let partition = rib.partition(points.as_slice(), &weights);
 ///
 /// let ids = partition.ids();
 ///
@@ -340,13 +340,13 @@ where
 ///
 /// let weights = vec![1.; 9];
 ///
-/// // generate a partition of 4 parts
-/// let multi_jagged = coupe::MultiJagged {
-///     num_partitions: 9,
-///     max_iter: 4,
-/// };
+/// let num_partitions = 9;
+/// let max_iter = 4;
 ///
-/// let partition = multi_jagged.partition(&points, &weights);
+/// // generate a partition of 4 parts
+/// let multi_jagged = coupe::MultiJagged::new(num_partitions, max_iter);
+///
+/// let partition = multi_jagged.partition(points.as_slice(), &weights);
 ///
 /// let ids = partition.ids();
 ///
@@ -422,13 +422,13 @@ where
 ///
 /// let weights = vec![1.; 8];
 ///
-/// // generate a partition of 4 parts
-/// let z_curve = coupe::ZCurve {
-///     num_partitions: 4,
-///     order: 5,
-/// };
+/// let num_partitions = 4;
+/// let order = 5;
 ///
-/// let partition = z_curve.partition(&points, &weights);
+/// // generate a partition of 4 parts
+/// let z_curve = coupe::ZCurve::new(num_partitions, order);
+///
+/// let partition = z_curve.partition(points.as_slice(), &weights);
 /// let ids = partition.ids();
 ///
 /// assert_eq!(ids[0], ids[1]);
@@ -502,13 +502,13 @@ where
 ///
 /// let weights = vec![1.; 8];
 ///
-/// // generate a partition of 4 parts
-/// let hilbert = coupe::HilbertCurve {
-///     num_partitions: 4,
-///     order: 5,
-/// };
+/// let num_partitions = 4;
+/// let order = 5;
 ///
-/// let partition = hilbert.partition(&points, &weights);
+/// // generate a partition of 4 parts
+/// let hilbert = coupe::HilbertCurve::new(num_partitions, order);
+///
+/// let partition = hilbert.partition(points.as_slice(), &weights);
 /// let ids = partition.ids();
 ///
 /// assert_eq!(ids[0], ids[1]);
@@ -597,11 +597,9 @@ impl Partitioner<U2> for HilbertCurve<U2> {
 /// let ids = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
 /// let partition = Partition::from_ids(&points, &weights, ids);
 ///
-/// let k_means = coupe::KMeans {
-///     num_partitions: 3,
-///     delta_threshold: 0.,
-///     ..Default::default()
-/// };
+/// let mut k_means = coupe::KMeans::default();
+/// k_means.num_partitions = 3;
+/// k_means.delta_threshold = 0.;
 ///
 /// let partition = k_means.improve_partition(partition);
 /// let ids = partition.ids();
@@ -616,7 +614,7 @@ impl Partitioner<U2> for HilbertCurve<U2> {
 /// assert_eq!(ids[6], ids[8]);
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct KMeans {
+pub struct KMeans<D> {
     pub num_partitions: usize,
     pub imbalance_tol: f64,
     pub delta_threshold: f64,
@@ -625,9 +623,35 @@ pub struct KMeans {
     pub erode: bool,
     pub hilbert: bool,
     pub mbr_early_break: bool,
+    _marker: PhantomData<D>,
 }
 
-impl Default for KMeans {
+impl<D> KMeans<D> {
+    pub fn new(
+        num_partitions: usize,
+        imbalance_tol: f64,
+        delta_threshold: f64,
+        max_iter: usize,
+        max_balance_iter: usize,
+        erode: bool,
+        hilbert: bool,
+        mbr_early_break: bool,
+    ) -> Self {
+        Self {
+            num_partitions,
+            imbalance_tol,
+            delta_threshold,
+            max_iter,
+            max_balance_iter,
+            erode,
+            hilbert,
+            mbr_early_break,
+            _marker: PhantomData::<D>,
+        }
+    }
+}
+
+impl<D> Default for KMeans<D> {
     fn default() -> Self {
         Self {
             num_partitions: 7,
@@ -638,11 +662,12 @@ impl Default for KMeans {
             erode: false,         // for now, `erode` yields` enabled yields wrong results
             hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
+            _marker: PhantomData::<D>,
         }
     }
 }
 
-impl<D> PartitionImprover<D> for KMeans
+impl<D> PartitionImprover<D> for KMeans<D>
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -679,23 +704,18 @@ where
 ///
 /// This structure is created by calling the [`compose`](trait.Compose.html#tymethod.compose)
 /// of the [`Compose`](trait.Compose.html) trait.
-pub struct Composition<T, U, D> {
+pub struct Composition<T, U> {
     first: T,
     second: U,
-    _marker: PhantomData<D>,
 }
 
-impl<T, U, D> Composition<T, U, D> {
+impl<T, U> Composition<T, U> {
     pub fn new(first: T, second: U) -> Self {
-        Self {
-            first,
-            second,
-            _marker: PhantomData::<D>,
-        }
+        Self { first, second }
     }
 }
 
-impl<D, T, U> Partitioner<D> for Composition<T, U, D>
+impl<D, T, U> Partitioner<D> for Composition<T, U>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -713,7 +733,7 @@ where
     }
 }
 
-impl<D, T, U> PartitionImprover<D> for Composition<T, U, D>
+impl<D, T, U> PartitionImprover<D> for Composition<T, U>
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -742,27 +762,24 @@ where
 /// use coupe::{Compose, Partitioner, PartitionImprover};
 /// use coupe::dimension::U3;
 ///
-/// let multi_jagged_then_k_means = coupe::MultiJagged {
-///     num_partitions: 7,
-///     max_iter: 3,
-/// }.compose::<U3>( // dimension is required
-///     coupe::KMeans {
-///         num_partitions: 7,
-///         ..Default::default()
-///     }
-/// );
+/// let num_partitions = 7;
+/// let max_iter = 3;
+///
+/// let mut k_means = coupe::KMeans::<U3>::default();
+/// k_means.num_partitions = 7;
+/// let multi_jagged_then_k_means = coupe::MultiJagged::<U3>::new(
+///     num_partitions,
+///     max_iter
+/// ).compose(k_means);
 ///
 /// ```
-pub trait Compose<T, D> {
+pub trait Compose<T> {
     type Composed;
-    fn compose(self, other: T) -> Self::Composed
-    where
-        D: DimName,
-        DefaultAllocator: Allocator<f64, D>;
+    fn compose(self, other: T) -> Self::Composed;
 }
 
-impl<T, U, D> Compose<T, D> for U {
-    type Composed = Composition<Self, T, D>;
+impl<T, U> Compose<T> for U {
+    type Composed = Composition<Self, T>;
     fn compose(self, other: T) -> Self::Composed {
         Composition::new(self, other)
     }

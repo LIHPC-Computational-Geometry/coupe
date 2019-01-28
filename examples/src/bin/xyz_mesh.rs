@@ -220,16 +220,17 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
     let erode = matches.is_present("erode");
 
-    let k_means = coupe::MultiJagged::new(num_partitions, 2) // fast multijagged for initial partition
-        .compose(coupe::KMeans {
-            num_partitions,
-            imbalance_tol,
-            max_iter,
-            max_balance_iter,
-            delta_threshold: delta_max,
-            erode,
-            ..Default::default()
-        });
+    let k_means = coupe::KMeans::new(
+        num_partitions,
+        imbalance_tol,
+        delta_max,
+        max_iter,
+        max_balance_iter,
+        erode,
+        true,
+        false,
+    );
+    let k_means = coupe::MultiJagged::new(num_partitions, 2).compose(k_means);
 
     println!("info: entering balanced_k_means algorithm");
     let partition = k_means.partition(points.as_slice(), &weights).into_ids();
