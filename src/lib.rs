@@ -29,10 +29,11 @@
 //! [`Multi jagged`]: struct.MultiJagged.html
 //! [`KMeans`]: struct.KMeans.html
 
+#![allow(clippy::too_many_arguments)]
+
 pub mod algorithms;
 pub mod geometry;
 pub mod partition;
-pub mod topology;
 
 #[cfg(test)]
 mod tests;

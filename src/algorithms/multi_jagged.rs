@@ -251,7 +251,7 @@ pub(crate) fn compute_split_positions(
 ) -> Vec<usize> {
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
 
-    let mut modifiers = modifiers.into_iter();
+    let mut modifiers = modifiers.iter();
     let mut consumed_weight = total_weight * *modifiers.next().unwrap();
     let mut weight_thresholds = Vec::with_capacity(num_splits);
 

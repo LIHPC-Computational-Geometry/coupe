@@ -18,5 +18,6 @@ itertools = "0.7.8"
 rayon = "1.0.3"
 rand = "0.5.5"
 snowflake = "1.2"
+sprs = "0.6.3"
 
 mesh_io = { path = "../../mesh_io" }
