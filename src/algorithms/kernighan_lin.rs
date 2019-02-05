@@ -24,6 +24,7 @@ pub fn kernighan_lin<D>(
     // check there are only 2 parts in the partition
     assert_eq!(num_unique_elements(initial_partition), 2);
     let initial_cut = cut_size(adjacency.clone(), initial_partition);
+    dbg!(initial_cut);
 
     for _ in 0..num_iter {
         // compute gain associated to each node of the graph
@@ -80,26 +81,55 @@ pub fn kernighan_lin<D>(
                 // then the computation is wrong because the gain associated with
                 // the edge linking the two nodes of best gain will be counted twice
                 // whereas it should be null
-                let g1 = if let Some(w) = adjacency.get(max_pos, *i1) {
-                    // check if partition is different
-                    if initial_partition[max_pos] != initial_partition[*i1] {
+                // let g1 = if let Some(w) = adjacency.get(max_pos, *i1) {
+                //     // check if partition is different
+                //     if initial_partition[max_pos] != initial_partition[*i1] {
+                //         *g1 - 2. * *w
+                //     } else {
+                //         std::f64::MIN
+                //     }
+                // } else {
+                //     if initial_partition[max_pos] != initial_partition[*i1] {
+                //         *g1
+                //     } else {
+                //         std::f64::MIN
+                //     }
+                // };
+
+                let g1 = if initial_partition[max_pos] == initial_partition[*i1] {
+                    std::f64::MIN
+                } else {
+                    if let Some(w) = adjacency.get(max_pos, *i1) {
                         *g1 - 2. * *w
                     } else {
-                        *g1 + 2. * *w
+                        *g1
                     }
-                } else {
-                    *g1
                 };
-                let g2 = if let Some(w) = adjacency.get(max_pos, *i2) {
-                    // check if partition is different
-                    if initial_partition[max_pos] != initial_partition[*i2] {
+
+                let g2 = if initial_partition[max_pos] == initial_partition[*i2] {
+                    std::f64::MIN
+                } else {
+                    if let Some(w) = adjacency.get(max_pos, *i2) {
                         *g2 - 2. * *w
                     } else {
-                        *g2 + 2. * *w
+                        *g2
                     }
-                } else {
-                    *g2
                 };
+
+                // let g2 = if let Some(w) = adjacency.get(max_pos, *i2) {
+                //     // check if partition is different
+                //     if initial_partition[max_pos] != initial_partition[*i2] {
+                //         *g2 - 2. * *w
+                //     } else {
+                //         std::f64::MIN
+                //     }
+                // } else {
+                //     if initial_partition[max_pos] != initial_partition[*i2] {
+                //         *g2
+                //     } else {
+                //         std::f64::MIN
+                //     }
+                // };
                 g1.partial_cmp(&g2).unwrap()
             })
             .unwrap();
@@ -109,6 +139,10 @@ pub fn kernighan_lin<D>(
         if max_gain <= 0. {
             break;
         }
+        println!("swap {} with {}", max_pos, max_pos_2);
+        println!("pos {}, coords {:?}", max_pos, points[max_pos]);
+        println!("pos {}, coords {:?}", max_pos_2, points[max_pos_2]);
+        dbg!(max_gain);
 
         // check they are in different partitions
         assert_ne!(initial_partition[max_pos], initial_partition[max_pos_2]);

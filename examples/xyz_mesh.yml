@@ -106,3 +106,10 @@ subcommands:
         long: quiet
         short: q
         help: Disables the GUI output
+ - kernighan_lin:
+    about: "Kernighan-Lin algorithm"
+    args:
+     - quiet:
+        long: quiet
+        short: q
+        help: Disables the GUI output

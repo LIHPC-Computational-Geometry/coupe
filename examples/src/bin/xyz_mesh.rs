@@ -4,22 +4,27 @@ use failure::{bail, Error};
 use rayon::prelude::*;
 
 use coupe::geometry::Point2D;
+use coupe::ProcessUniqueId;
 use coupe::{Compose, Partitioner};
+use mesh_io::medit::MeditMesh;
 use mesh_io::{mesh::Mesh, mesh::D3, xyz::XYZMesh};
+
+use std::path::Path;
 
 fn main() -> Result<(), Error> {
     let yaml = load_yaml!("../../xyz_mesh.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let file_name = matches.value_of("INPUT").unwrap();
 
-    let mesh = XYZMesh::from_file(file_name)?;
+    let mesh = XYZMesh::from_file(file_name);
 
     match matches.subcommand() {
-        ("rcb", Some(submatches)) => rcb(&mesh, submatches),
-        ("rib", Some(submatches)) => rib(&mesh, submatches),
-        ("multi_jagged", Some(submatches)) => multi_jagged(&mesh, submatches),
-        ("simplified_k_means", Some(submatches)) => simplified_k_means(&mesh, submatches),
-        ("balanced_k_means", Some(submatches)) => balanced_k_means(&mesh, submatches),
+        ("rcb", Some(submatches)) => rcb(&mesh?, submatches),
+        ("rib", Some(submatches)) => rib(&mesh?, submatches),
+        ("multi_jagged", Some(submatches)) => multi_jagged(&mesh?, submatches),
+        ("simplified_k_means", Some(submatches)) => simplified_k_means(&mesh?, submatches),
+        ("balanced_k_means", Some(submatches)) => balanced_k_means(&mesh?, submatches),
+        ("kernighan_lin", Some(submatches)) => kernighan_lin(file_name, submatches),
         _ => bail! {"no subcommand specified"},
     }
 
@@ -240,4 +245,76 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
         let part = points.into_iter().zip(partition).collect::<Vec<_>>();
         examples::plot_partition(part)
     }
+}
+
+fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
+    let mesh = MeditMesh::from_file(path).expect("Could not construct MeditMesh from file");
+    let adjacency = examples::generate_adjacency_medit(&mesh);
+
+    let coordinates = mesh.coordinates();
+
+    assert_eq!(mesh.dimension(), 3);
+
+    let coords: Vec<f64> = coordinates
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 3 != 2)
+        .map(|(_, val)| *val)
+        .collect::<Vec<_>>();
+    let points =
+        unsafe { std::slice::from_raw_parts(coords.as_ptr() as *const Point2D, coords.len() / 2) };
+
+    let views = mesh
+        .topology()
+        .iter()
+        .map(|mat| mat.view())
+        .collect::<Vec<_>>();
+    let stacked = sprs::vstack(&views);
+    let points = views[1] // <------ WTH is this? what's inside views[0]?
+        .outer_iterator()
+        .map(|conn| {
+            conn.iter().fold(Point2D::new(0., 0.), |acc, (j, _)| {
+                Point2D::new(acc.x + points[j].x / 3., acc.y + points[j].y / 3.)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // println!("centers = {:?}", points);
+
+    let num_points = points.len();
+
+    let weights = (0..num_points)
+        .into_par_iter()
+        .map(|_| 1.)
+        .collect::<Vec<_>>();
+
+    let mut k_means = coupe::KMeans::default();
+    k_means.num_partitions = 2;
+    k_means.imbalance_tol = 5.;
+    let algo = coupe::ZCurve::new(2, 4).compose(k_means);
+    let mut partition = algo
+        .partition(points.as_slice(), weights.as_slice())
+        .into_ids();
+
+    let part = points
+        .iter()
+        .cloned()
+        .zip(partition.iter().cloned())
+        .collect::<Vec<_>>();
+    examples::plot_partition(part);
+
+    coupe::algorithms::kernighan_lin::kernighan_lin(
+        points.as_slice(),
+        weights.as_slice(),
+        adjacency.view(),
+        &mut partition,
+        20,
+    );
+
+    let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+    examples::plot_partition(part);
+
+    // for rec in adjacency.iter() {
+    //     println!("{:?}", rec);
+    // }
 }
