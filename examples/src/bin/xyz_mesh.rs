@@ -249,7 +249,8 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
 
 fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
     let mesh = MeditMesh::from_file(path).expect("Could not construct MeditMesh from file");
-    let adjacency = examples::generate_adjacency_medit(&mesh);
+    let conn = examples::generate_connectivity_matrix_medit(&mesh);
+    let adjacency = coupe::topology::adjacency_matrix(conn.view(), 2);
 
     let coordinates = mesh.coordinates();
 
@@ -288,30 +289,30 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let mut k_means = coupe::KMeans::default();
-    k_means.num_partitions = 2;
-    k_means.imbalance_tol = 5.;
-    let algo = coupe::ZCurve::new(2, 4).compose(k_means);
-    let mut partition = algo
-        .partition(points.as_slice(), weights.as_slice())
-        .into_ids();
+    // let mut k_means = coupe::KMeans::default();
+    // k_means.num_partitions = 2;
+    // k_means.imbalance_tol = 5.;
+    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
+    let algo = coupe::HilbertCurve::new(2, 4);
+    let mut partition = algo.partition(points.as_slice(), weights.as_slice());
 
     let part = points
         .iter()
         .cloned()
-        .zip(partition.iter().cloned())
+        .zip(partition.ids().iter().cloned())
         .collect::<Vec<_>>();
     examples::plot_partition(part);
 
-    coupe::algorithms::kernighan_lin::kernighan_lin(
-        points.as_slice(),
-        weights.as_slice(),
-        adjacency.view(),
-        &mut partition,
-        20,
-    );
+    dbg!(coupe::topology::cut_size(adjacency.view(), partition.ids()));
+    coupe::algorithms::kernighan_lin::kernighan_lin(&mut partition, adjacency.view(), 1);
+    dbg!(coupe::topology::cut_size(adjacency.view(), partition.ids()));
 
-    let part = points.into_iter().zip(partition).collect::<Vec<_>>();
+    let part = points
+        .iter()
+        .cloned()
+        .zip(partition.ids().iter().cloned())
+        .collect::<Vec<_>>();
+    std::thread::sleep_ms(1000);
     examples::plot_partition(part);
 
     // for rec in adjacency.iter() {

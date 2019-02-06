@@ -1,4 +1,11 @@
+//! Implementation of the Kernighan-Lin algorithm for graph partitioning improvement.
+//!
+//! At each iteration, two nodes of different partition will be swapped, decreasing the overall cutsize
+//! of the partition. The swap is performed in such a way that the added partition imbalanced is controlled.
+
 use crate::geometry::PointND;
+use crate::partition::{Part, Partition};
+use crate::topology;
 use crate::ProcessUniqueId;
 use sprs::CsMatView;
 
@@ -11,56 +18,88 @@ use nalgebra::U1;
 use itertools::Itertools;
 use rayon::prelude::*;
 
-pub fn kernighan_lin<D>(
+pub fn kernighan_lin<'a, D>(
+    initial_partition: &mut Partition<'a, PointND<D>, f64>,
+    adjacency: CsMatView<f64>,
+    num_iter: usize,
+) where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    let adjacent_parts = initial_partition
+        .adjacent_parts(adjacency.view())
+        .into_iter()
+        .map(|(p, q)| (p.into_indices(), q.into_indices()))
+        .collect::<Vec<_>>();
+
+    dbg!(adjacent_parts.len());
+
+    let (points, weights, ids) = initial_partition.as_raw_mut();
+
+    for (p, q) in adjacent_parts {
+        kernighan_lin_2(points, weights, &p, &q, adjacency.view(), ids, num_iter);
+    }
+}
+
+// kernighan-lin with only a partition of two parts
+fn kernighan_lin_2<'a, D>(
     points: &[PointND<D>],
     weights: &[f64],
+    idx1: &[usize],
+    idx2: &[usize],
     adjacency: CsMatView<f64>,
     initial_partition: &mut [ProcessUniqueId],
     num_iter: usize,
 ) where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
 {
-    // check there are only 2 parts in the partition
-    assert_eq!(num_unique_elements(initial_partition), 2);
-    let initial_cut = cut_size(adjacency.clone(), initial_partition);
-    dbg!(initial_cut);
-
+    dbg!(idx1.len());
+    dbg!(idx2.len());
+    dbg!(initial_partition.len());
     for _ in 0..num_iter {
         // compute gain associated to each node of the graph
         // the gain is defined as the cut_size decrease if the node
         // is assigned to the other partition
-        let mut gains = points
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
+        let mut gains = idx1
+            .par_iter()
+            .map(|i| {
                 // the gain makes sense only if there exists an edge between
                 // the current node and an other one.
                 // if no such edge exists, then flipping the node won't affect
                 // the cutsize; the gain is thus 0
                 adjacency
-                    .outer_view(i)
+                    .outer_view(*i)
                     .and_then(|row| {
-                        Some(row.iter().fold(0., |acc, (j, w)| {
-                            if initial_partition[i] != initial_partition[j] {
-                                // here an edge linking two nodes of different partitions
-                                // will then link two nodes of same partitions
-                                // hence the gain increase
-                                acc + w
-                            } else {
-                                // here an edge linking two nodes of same partitions
-                                // will then link two nodes of different partitions
-                                // hence the gain increase
-                                acc - w
-                            }
-                        }))
+                        Some(
+                            idx2.iter()
+                                .filter_map(|j| {
+                                    row.nnz_index(*j)
+                                        .and_then(|nnz_idx| Some((j, row[nnz_idx])))
+                                })
+                                .fold(0., |acc, (j, w)| {
+                                    if initial_partition[*i] != initial_partition[*j] {
+                                        // here an edge linking two nodes of different partitions
+                                        // will then link two nodes of same partitions
+                                        // hence the gain increase
+                                        acc + w
+                                    } else {
+                                        // here an edge linking two nodes of same partitions
+                                        // will then link two nodes of different partitions
+                                        // hence the gain increase
+                                        acc - w
+                                    }
+                                }),
+                        )
                     })
                     .unwrap_or(0.)
             })
             .collect::<Vec<_>>();
 
         let (max_pos, max_gain) = gains
-            .iter()
+            .par_iter()
             .cloned()
             .enumerate()
             .max_by(|(_, g1), (_, g2)| g1.partial_cmp(&g2).unwrap())
@@ -73,7 +112,7 @@ pub fn kernighan_lin<D>(
 
         //get second max gain
         let (max_pos_2, _max_gain_2) = gains
-            .iter()
+            .par_iter()
             .cloned()
             .enumerate()
             .max_by(|(i1, g1), (i2, g2)| {
@@ -81,21 +120,6 @@ pub fn kernighan_lin<D>(
                 // then the computation is wrong because the gain associated with
                 // the edge linking the two nodes of best gain will be counted twice
                 // whereas it should be null
-                // let g1 = if let Some(w) = adjacency.get(max_pos, *i1) {
-                //     // check if partition is different
-                //     if initial_partition[max_pos] != initial_partition[*i1] {
-                //         *g1 - 2. * *w
-                //     } else {
-                //         std::f64::MIN
-                //     }
-                // } else {
-                //     if initial_partition[max_pos] != initial_partition[*i1] {
-                //         *g1
-                //     } else {
-                //         std::f64::MIN
-                //     }
-                // };
-
                 let g1 = if initial_partition[max_pos] == initial_partition[*i1] {
                     std::f64::MIN
                 } else {
@@ -116,20 +140,6 @@ pub fn kernighan_lin<D>(
                     }
                 };
 
-                // let g2 = if let Some(w) = adjacency.get(max_pos, *i2) {
-                //     // check if partition is different
-                //     if initial_partition[max_pos] != initial_partition[*i2] {
-                //         *g2 - 2. * *w
-                //     } else {
-                //         std::f64::MIN
-                //     }
-                // } else {
-                //     if initial_partition[max_pos] != initial_partition[*i2] {
-                //         *g2
-                //     } else {
-                //         std::f64::MIN
-                //     }
-                // };
                 g1.partial_cmp(&g2).unwrap()
             })
             .unwrap();
@@ -148,30 +158,4 @@ pub fn kernighan_lin<D>(
         assert_ne!(initial_partition[max_pos], initial_partition[max_pos_2]);
         initial_partition.swap(max_pos, max_pos_2);
     }
-    let final_cut = cut_size(adjacency.clone(), initial_partition);
-    println!("final cut = {}", final_cut);
-    println!("overall gain: {}", initial_cut - final_cut);
-}
-
-fn cut_size(adjacency: CsMatView<f64>, partition: &[ProcessUniqueId]) -> f64 {
-    let mut cut_size = 0.;
-    for (i, row) in adjacency.outer_iterator().enumerate() {
-        for (j, w) in row.iter() {
-            // graph edge are present twice in the matrix be cause of symetry
-            if j >= i {
-                continue;
-            }
-            if partition[i] != partition[j] {
-                cut_size += w;
-            }
-        }
-    }
-    cut_size
-}
-
-fn num_unique_elements<T>(slice: &[T]) -> usize
-where
-    T: std::hash::Hash + std::cmp::Eq,
-{
-    slice.iter().unique().count()
 }

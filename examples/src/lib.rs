@@ -9,27 +9,14 @@ use coupe::geometry::Point2D;
 use mesh_io::medit::MeditMesh;
 
 // generate adjacency matrix from Medit mesh
-pub fn generate_adjacency_medit(mesh: &MeditMesh) -> CsMat<f64> {
+pub fn generate_connectivity_matrix_medit(mesh: &MeditMesh) -> CsMat<u32> {
     let views = mesh
         .topology()
         .iter()
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
     // let stacked = sprs::vstack(&views);
-    let stacked = views[1].clone();
-
-    let graph = &stacked * &stacked.transpose_view();
-    let mut ret = CsMat::zero(graph.shape());
-    let nnz = graph.iter().filter(|(n, _)| **n == 2).count();
-    ret.reserve_nnz(nnz);
-
-    for (val, (i, j)) in graph.iter() {
-        if *val == 2 {
-            ret.insert(i, j, 1.);
-        }
-    }
-
-    ret
+    views[1].to_owned()
 }
 
 pub fn plot_partition(points: Vec<(Point2D, ProcessUniqueId)>) {

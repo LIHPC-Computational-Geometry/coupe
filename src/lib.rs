@@ -34,6 +34,7 @@
 pub mod algorithms;
 pub mod geometry;
 pub mod partition;
+pub mod topology;
 
 #[cfg(test)]
 mod tests;

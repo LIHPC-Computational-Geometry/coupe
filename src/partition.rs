@@ -7,6 +7,8 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
 
+use sprs::CsMatView;
+
 use num::{Num, Signed};
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
@@ -139,6 +141,14 @@ impl<'a, P, W> Partition<'a, P, W> {
         (self.points, self.weights, self.ids)
     }
 
+    pub fn as_raw(&self) -> (&'a [P], &'a [W], &[ProcessUniqueId]) {
+        (self.points, self.weights, &self.ids)
+    }
+
+    pub fn as_raw_mut(&mut self) -> (&'a [P], &'a [W], &mut [ProcessUniqueId]) {
+        (self.points, self.weights, &mut self.ids)
+    }
+
     /// Returns a slice of the IDs used to represent the partition.
     pub fn ids(&self) -> &[ProcessUniqueId] {
         &self.ids
@@ -265,6 +275,46 @@ impl<'a, P, W> Partition<'a, P, W> {
 
         f64::from(max_imbalance) / f64::from(total_weights.into_iter().sum())
     }
+
+    /// Merge two parts of the partition (identified by unique id).
+    ///
+    /// If either `id1` or `id2` is not contained in the partition, does nothing.
+    pub fn merge_parts(&mut self, id1: ProcessUniqueId, id2: ProcessUniqueId) {
+        for id in self.ids.iter_mut() {
+            if *id == id2 {
+                *id = id1;
+            }
+        }
+    }
+
+    pub fn adjacent_parts(
+        &'a self,
+        adjacency: CsMatView<f64>,
+    ) -> Vec<(Part<'a, P, W>, Part<'a, P, W>)> {
+        // build parts adjacency graph
+        let parts = self.parts().collect::<Vec<_>>();
+
+        let mut adjacent_parts = Vec::new();
+
+        for (i, p) in parts.iter().enumerate() {
+            for (j, q) in parts.iter().enumerate() {
+                if j < i
+                    && adjacency
+                        .iter()
+                        .find(|(_, (i, j))| p.indices().contains(i) && q.indices().contains(j))
+                        .is_some()
+                {
+                    adjacent_parts.push((p.clone(), q.clone()))
+                }
+            }
+        }
+
+        adjacent_parts
+    }
+
+    pub fn swap(&mut self, idx1: usize, idx2: usize) {
+        self.ids.swap(idx1, idx2);
+    }
 }
 
 /// Represent a part of a partition.
@@ -274,6 +324,16 @@ impl<'a, P, W> Partition<'a, P, W> {
 pub struct Part<'a, P, W> {
     partition: &'a Partition<'a, P, W>,
     indices: Vec<usize>,
+}
+
+// Custom Clone impl since we juste clone the indices and not the partition itself
+impl<'a, P, W> Clone for Part<'a, P, W> {
+    fn clone(&self) -> Self {
+        Self {
+            partition: self.partition,
+            indices: self.indices.clone(),
+        }
+    }
 }
 
 impl<'a, P, W> Part<'a, P, W> {
@@ -287,6 +347,22 @@ impl<'a, P, W> Part<'a, P, W> {
             .map(|idx| &self.partition.weights[*idx])
             .cloned()
             .sum()
+    }
+
+    pub fn indices(&self) -> &[usize] {
+        &self.indices
+    }
+
+    pub fn into_indices(self) -> Vec<usize> {
+        self.indices
+    }
+
+    pub fn points(&self) -> &'a [P] {
+        self.partition.points()
+    }
+
+    pub fn weights(&self) -> &'a [W] {
+        self.partition.weights()
     }
 
     /// Iterate over the points and weights of the part.
