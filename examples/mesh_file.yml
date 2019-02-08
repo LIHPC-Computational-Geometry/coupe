@@ -1,10 +1,15 @@
-name: "xyz_mesh"
-about: "Partitions a mesh from a xyz file"
+name: "mesh_file"
+about: "Partitions a mesh from a mesh file"
 args:
  - INPUT:
     help: Sets the input file to use.
     required: true
     index: 1
+ - format:
+    help: Specify the file format (currently supports xyz and medit)
+    long: format
+    takes_value: true
+    default_value: xyz
 subcommands:
  - rcb:
     about: "Recursive Coordinate Bisection partitioning algorithm"
@@ -109,6 +114,10 @@ subcommands:
  - kernighan_lin:
     about: "Kernighan-Lin algorithm"
     args:
+     - num_iter:
+        long: num_iter
+        default_value: "10"
+        help: Sets the number of iterations of the algorithm
      - quiet:
         long: quiet
         short: q

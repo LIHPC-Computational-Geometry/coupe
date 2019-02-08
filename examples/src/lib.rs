@@ -2,7 +2,6 @@ use gnuplot::{Color, Figure};
 use itertools::Itertools;
 use rand::Rng;
 use snowflake::ProcessUniqueId;
-use sprs::prod;
 use sprs::CsMat;
 
 use coupe::geometry::Point2D;

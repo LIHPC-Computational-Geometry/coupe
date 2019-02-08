@@ -287,6 +287,10 @@ impl<'a, P, W> Partition<'a, P, W> {
         }
     }
 
+    /// Construct pairs of adjacent parts.
+    /// Two parts are adjacent if there exist one element in the first
+    /// part and one element in the second part that are linked together
+    /// in the adjacency graph.
     pub fn adjacent_parts(
         &'a self,
         adjacency: CsMatView<f64>,
@@ -301,8 +305,7 @@ impl<'a, P, W> Partition<'a, P, W> {
                 if j < i
                     && adjacency
                         .iter()
-                        .find(|(_, (i, j))| p.indices().contains(i) && q.indices().contains(j))
-                        .is_some()
+                        .any(|(_, (i, j))| p.indices().contains(&i) && q.indices().contains(&j))
                 {
                     adjacent_parts.push((p.clone(), q.clone()))
                 }
@@ -312,6 +315,9 @@ impl<'a, P, W> Partition<'a, P, W> {
         adjacent_parts
     }
 
+    /// Swaps the parts of two elements
+    ///
+    /// Panics if `idx1` or `idx2` is out of range
     pub fn swap(&mut self, idx1: usize, idx2: usize) {
         self.ids.swap(idx1, idx2);
     }

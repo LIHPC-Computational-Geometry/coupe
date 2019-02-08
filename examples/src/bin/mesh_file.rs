@@ -4,28 +4,40 @@ use failure::{bail, Error};
 use rayon::prelude::*;
 
 use coupe::geometry::Point2D;
-use coupe::ProcessUniqueId;
 use coupe::{Compose, Partitioner};
 use mesh_io::medit::MeditMesh;
 use mesh_io::{mesh::Mesh, mesh::D3, xyz::XYZMesh};
 
-use std::path::Path;
-
 fn main() -> Result<(), Error> {
-    let yaml = load_yaml!("../../xyz_mesh.yml");
+    let yaml = load_yaml!("../../mesh_file.yml");
     let matches = App::from_yaml(yaml).get_matches();
     let file_name = matches.value_of("INPUT").unwrap();
 
-    let mesh = XYZMesh::from_file(file_name);
-
-    match matches.subcommand() {
-        ("rcb", Some(submatches)) => rcb(&mesh?, submatches),
-        ("rib", Some(submatches)) => rib(&mesh?, submatches),
-        ("multi_jagged", Some(submatches)) => multi_jagged(&mesh?, submatches),
-        ("simplified_k_means", Some(submatches)) => simplified_k_means(&mesh?, submatches),
-        ("balanced_k_means", Some(submatches)) => balanced_k_means(&mesh?, submatches),
-        ("kernighan_lin", Some(submatches)) => kernighan_lin(file_name, submatches),
-        _ => bail! {"no subcommand specified"},
+    match matches.value_of("format").unwrap_or_default() {
+        "xyz" => {
+            let mesh = XYZMesh::from_file(file_name)?;
+            match matches.subcommand() {
+                ("rcb", Some(submatches)) => rcb(&mesh, submatches),
+                ("rib", Some(submatches)) => rib(&mesh, submatches),
+                ("multi_jagged", Some(submatches)) => multi_jagged(&mesh, submatches),
+                ("simplified_k_means", Some(submatches)) => simplified_k_means(&mesh, submatches),
+                ("balanced_k_means", Some(submatches)) => balanced_k_means(&mesh, submatches),
+                ("kernighan_lin", Some(_submatches)) => {
+                    bail! { "kernighan_lin is not supported with the XYZ mesh format" }
+                }
+                _ => bail! {"no subcommand specified"},
+            }
+        }
+        "medit" => {
+            let mesh = MeditMesh::from_file(file_name)?;
+            match matches.subcommand() {
+                ("kernighan_lin", Some(submatches)) => kernighan_lin(&mesh, submatches),
+                _ => {
+                    bail! { "unsupported mesh format for this algorithm or wrong command specified" }
+                }
+            }
+        }
+        _ => bail! { "Unknown file format" },
     }
 
     Ok(())
@@ -247,8 +259,7 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     }
 }
 
-fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
-    let mesh = MeditMesh::from_file(path).expect("Could not construct MeditMesh from file");
+fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     let conn = examples::generate_connectivity_matrix_medit(&mesh);
     let adjacency = coupe::topology::adjacency_matrix(conn.view(), 2);
 
@@ -256,6 +267,7 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
 
     assert_eq!(mesh.dimension(), 3);
 
+    // Mesh is in 3D, discard the z-coordinate
     let coords: Vec<f64> = coordinates
         .iter()
         .enumerate()
@@ -265,12 +277,15 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
     let points =
         unsafe { std::slice::from_raw_parts(coords.as_ptr() as *const Point2D, coords.len() / 2) };
 
+    // We are partitioning mesh elements, and we position them
+    // via their centers. We need to construct the array of
+    // elements centers from the nodes
     let views = mesh
         .topology()
         .iter()
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
-    let stacked = sprs::vstack(&views);
+    // let stacked = sprs::vstack(&views);
     let points = views[1] // <------ WTH is this? what's inside views[0]?
         .outer_iterator()
         .map(|conn| {
@@ -279,8 +294,6 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
             })
         })
         .collect::<Vec<_>>();
-
-    // println!("centers = {:?}", points);
 
     let num_points = points.len();
 
@@ -293,7 +306,7 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
     // k_means.num_partitions = 2;
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(2, 4);
+    let algo = coupe::HilbertCurve::new(3, 4);
     let mut partition = algo.partition(points.as_slice(), weights.as_slice());
 
     let part = points
@@ -303,19 +316,28 @@ fn kernighan_lin<'a>(path: impl AsRef<Path>, matches: &ArgMatches<'a>) {
         .collect::<Vec<_>>();
     examples::plot_partition(part);
 
-    dbg!(coupe::topology::cut_size(adjacency.view(), partition.ids()));
-    coupe::algorithms::kernighan_lin::kernighan_lin(&mut partition, adjacency.view(), 1);
-    dbg!(coupe::topology::cut_size(adjacency.view(), partition.ids()));
+    let num_iter = matches
+        .value_of("num_iter")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for num_iter");
 
+    println!(
+        "initial cut size: {}",
+        coupe::topology::cut_size(adjacency.view(), partition.ids())
+    );
+    coupe::algorithms::kernighan_lin::kernighan_lin(&mut partition, adjacency.view(), num_iter);
+    println!(
+        "final cut size: {}",
+        coupe::topology::cut_size(adjacency.view(), partition.ids())
+    );
+
+    // plot partition
     let part = points
         .iter()
         .cloned()
         .zip(partition.ids().iter().cloned())
         .collect::<Vec<_>>();
-    std::thread::sleep_ms(1000);
-    examples::plot_partition(part);
 
-    // for rec in adjacency.iter() {
-    //     println!("{:?}", rec);
-    // }
+    examples::plot_partition(part);
 }

@@ -2,7 +2,6 @@
 
 use crate::ProcessUniqueId;
 
-use rayon::prelude::*;
 use sprs::{CsMat, CsMatView};
 
 /// Computes the cutsize of a partition.
