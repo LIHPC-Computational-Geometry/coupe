@@ -1,7 +1,7 @@
-use coupe::algorithms::kernighan_lin::kernighan_lin;
 use coupe::geometry::Point2D;
 use coupe::partition::Partition;
 use coupe::ProcessUniqueId;
+use coupe::TopologicPartitionImprover;
 use sprs::CsMat;
 
 fn main() {
@@ -52,9 +52,9 @@ fn main() {
 
     println!("adjacency = {:#?}", adjacency);
 
-    let mut partition = Partition::from_ids(&points, &weights, ids);
+    let partition = Partition::from_ids(&points, &weights, ids);
 
-    kernighan_lin(&mut partition, adjacency.view(), 1);
+    let partition = coupe::KernighanLin::new(1, 2.).improve_partition(partition, adjacency.view());
     let ids = partition.into_ids();
     println!("new partition = {:#?}", ids);
 

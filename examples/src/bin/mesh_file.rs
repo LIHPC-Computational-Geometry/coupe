@@ -4,7 +4,7 @@ use failure::{bail, Error};
 use rayon::prelude::*;
 
 use coupe::geometry::Point2D;
-use coupe::{Compose, Partitioner};
+use coupe::{Compose, Partitioner, TopologicPartitioner};
 use mesh_io::medit::MeditMesh;
 use mesh_io::{mesh::Mesh, mesh::D3, xyz::XYZMesh};
 
@@ -302,42 +302,25 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    // let mut k_means = coupe::KMeans::default();
-    // k_means.num_partitions = 2;
-    // k_means.imbalance_tol = 5.;
-    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(3, 4);
-    let mut partition = algo.partition(points.as_slice(), weights.as_slice());
-
-    let part = points
-        .iter()
-        .cloned()
-        .zip(partition.ids().iter().cloned())
-        .collect::<Vec<_>>();
-    examples::plot_partition(part);
-
     let num_iter = matches
         .value_of("num_iter")
         .unwrap_or_default()
         .parse()
         .expect("wrong value for num_iter");
 
-    println!(
-        "initial cut size: {}",
-        coupe::topology::cut_size(adjacency.view(), partition.ids())
-    );
-    coupe::algorithms::kernighan_lin::kernighan_lin(&mut partition, adjacency.view(), num_iter);
-    println!(
-        "final cut size: {}",
-        coupe::topology::cut_size(adjacency.view(), partition.ids())
-    );
+    // let mut k_means = coupe::KMeans::default();
+    // k_means.num_partitions = 2;
+    // k_means.imbalance_tol = 5.;
+    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
+    let algo = coupe::HilbertCurve::new(3, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
+    let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 
-    // plot partition
-    let part = points
-        .iter()
-        .cloned()
-        .zip(partition.ids().iter().cloned())
-        .collect::<Vec<_>>();
-
-    examples::plot_partition(part);
+    if !matches.is_present("quiet") {
+        let part = points
+            .iter()
+            .cloned()
+            .zip(partition.ids().iter().cloned())
+            .collect::<Vec<_>>();
+        examples::plot_partition(part);
+    }
 }

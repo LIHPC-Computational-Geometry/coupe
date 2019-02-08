@@ -57,6 +57,7 @@ use nalgebra::U1;
 
 use ndarray::ArrayView1;
 use ndarray::ArrayView2;
+use sprs::CsMatView;
 
 use std::marker::PhantomData;
 
@@ -158,6 +159,31 @@ where
     fn improve_partition<'a>(
         &self,
         partition: Partition<'a, PointND<D>, f64>,
+    ) -> Partition<'a, PointND<D>, f64>;
+}
+
+pub trait TopologicPartitioner<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+        adjacency: CsMatView<f64>,
+    ) -> Partition<'a, PointND<D>, f64>;
+}
+
+pub trait TopologicPartitionImprover<D>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn improve_partition<'a>(
+        &self,
+        partition: Partition<'a, PointND<D>, f64>,
+        adjacency: CsMatView<f64>,
     ) -> Partition<'a, PointND<D>, f64>;
 }
 
@@ -628,6 +654,74 @@ pub struct KMeans<D> {
     _marker: PhantomData<D>,
 }
 
+// KMeans builder pattern
+// to reduce construction boilerplate
+// e.g.
+// ```rust
+// let k_means = KMeansBuilder::default()
+//    .imbalance_tol(5.)
+//    .max_balance_iter(12)
+//    .build();
+// ```
+#[derive(Debug, Clone, Copy)]
+pub struct KMeansBuilder<D> {
+    inner: KMeans<D>,
+}
+
+impl<D> Default for KMeansBuilder<D> {
+    fn default() -> Self {
+        Self {
+            inner: KMeans::default(),
+        }
+    }
+}
+
+impl<D> KMeansBuilder<D> {
+    pub fn build(self) -> KMeans<D> {
+        self.inner
+    }
+
+    pub fn num_partitions(mut self, num_partitions: usize) -> Self {
+        self.inner.num_partitions = num_partitions;
+        self
+    }
+
+    pub fn imbalance_tol(mut self, imbalance_tol: f64) -> Self {
+        self.inner.imbalance_tol = imbalance_tol;
+        self
+    }
+
+    pub fn delta_threshold(mut self, delta_threshold: f64) -> Self {
+        self.inner.delta_threshold = delta_threshold;
+        self
+    }
+
+    pub fn max_iter(mut self, max_iter: usize) -> Self {
+        self.inner.max_iter = max_iter;
+        self
+    }
+
+    pub fn max_balance_iter(mut self, max_balance_iter: usize) -> Self {
+        self.inner.max_balance_iter = max_balance_iter;
+        self
+    }
+
+    pub fn erode(mut self, erode: bool) -> Self {
+        self.inner.erode = erode;
+        self
+    }
+
+    pub fn hilbert(mut self, hilbert: bool) -> Self {
+        self.inner.hilbert = hilbert;
+        self
+    }
+
+    pub fn mbr_early_break(mut self, mbr_early_break: bool) -> Self {
+        self.inner.mbr_early_break = mbr_early_break;
+        self
+    }
+}
+
 impl<D> KMeans<D> {
     pub fn new(
         num_partitions: usize,
@@ -702,6 +796,42 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct KernighanLin {
+    num_iter: usize,
+    max_imbalance_per_iter: f64,
+}
+
+impl KernighanLin {
+    pub fn new(num_iter: usize, max_imbalance_per_iter: f64) -> Self {
+        Self {
+            num_iter,
+            max_imbalance_per_iter,
+        }
+    }
+}
+
+impl<D> TopologicPartitionImprover<D> for KernighanLin
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    fn improve_partition<'a>(
+        &self,
+        mut partition: Partition<'a, PointND<D>, f64>,
+        adjacency: CsMatView<f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        crate::algorithms::kernighan_lin::kernighan_lin(
+            &mut partition,
+            adjacency,
+            self.num_iter,
+            self.max_imbalance_per_iter,
+        );
+        partition
+    }
+}
+
 /// # Represents the composition algorithm.
 ///
 /// This structure is created by calling the [`compose`](trait.Compose.html#tymethod.compose)
@@ -748,6 +878,24 @@ where
     ) -> Partition<'a, PointND<D>, f64> {
         self.second
             .improve_partition(self.first.improve_partition(partition))
+    }
+}
+
+impl<D, T, U> TopologicPartitioner<D> for Composition<T, U>
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    T: Partitioner<D>,
+    U: TopologicPartitionImprover<D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+        adjacency: CsMatView<f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        let partition = self.first.partition(points, weights);
+        self.second.improve_partition(partition, adjacency)
     }
 }
 

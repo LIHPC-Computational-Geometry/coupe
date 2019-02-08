@@ -14,10 +14,11 @@ use nalgebra::DimName;
 
 use rayon::prelude::*;
 
-pub fn kernighan_lin<'a, D>(
+pub(crate) fn kernighan_lin<'a, D>(
     initial_partition: &mut Partition<'a, PointND<D>, f64>,
     adjacency: CsMatView<f64>,
     num_iter: usize,
+    max_imbalance_per_iter: f64,
 ) where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -34,22 +35,30 @@ pub fn kernighan_lin<'a, D>(
         .map(|(p, q)| (p.into_indices(), q.into_indices()))
         .collect::<Vec<_>>();
 
-    let (points, weights, ids) = initial_partition.as_raw_mut();
+    let (_points, weights, ids) = initial_partition.as_raw_mut();
 
     for (p, q) in adjacent_parts {
-        kernighan_lin_2(points, weights, &p, &q, adjacency.view(), ids, num_iter);
+        kernighan_lin_2(
+            weights,
+            &p,
+            &q,
+            adjacency.view(),
+            ids,
+            num_iter,
+            max_imbalance_per_iter,
+        );
     }
 }
 
 // kernighan-lin with only a partition of two parts
 fn kernighan_lin_2<D>(
-    _points: &[PointND<D>],
-    _weights: &[f64],
+    weights: &[f64],
     idx1: &[usize], // indices of elements in first part
     idx2: &[usize], // indices of elements in second part
     adjacency: CsMatView<f64>,
     initial_partition: &mut [ProcessUniqueId],
     num_iter: usize,
+    max_imbalance_per_iter: f64,
 ) where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -73,6 +82,7 @@ fn kernighan_lin_2<D>(
                     .and_then(|row| {
                         Some(
                             idx2.iter()
+                                .chain(idx1.iter())
                                 .filter_map(|j| {
                                     row.nnz_index(*j)
                                         .and_then(|nnz_idx| Some((j, row[nnz_idx])))
@@ -109,6 +119,7 @@ fn kernighan_lin_2<D>(
                     .and_then(|row| {
                         Some(
                             idx1.iter()
+                                .chain(idx2.iter())
                                 .filter_map(|j| {
                                     row.nnz_index(*j)
                                         .and_then(|nnz_idx| Some((j, row[nnz_idx])))
@@ -177,6 +188,15 @@ fn kernighan_lin_2<D>(
         // if max_gain <= 0 then any partition modification will
         // increase the cut size
         if max_gain_1 <= 0. {
+            break;
+        }
+
+        let imbalance = (weights[max_pos_1] - weights[max_pos_2]).abs();
+
+        if imbalance > max_imbalance_per_iter {
+            // we should handle this differently
+            // e.g. by looking for other possible gains that would fit within
+            // the the imbalance limit
             break;
         }
 

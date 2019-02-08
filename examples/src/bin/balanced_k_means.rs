@@ -2,7 +2,7 @@ use clap::load_yaml;
 use clap::App;
 use coupe::geometry::Point2D;
 use coupe::{Compose, Partitioner};
-use coupe::{HilbertCurve, KMeans};
+use coupe::{HilbertCurve, KMeans, KMeansBuilder};
 
 fn main() {
     let yaml = load_yaml!("../../balanced_k_means.yml");
@@ -46,15 +46,16 @@ fn main() {
 
     let erode = matches.is_present("erode");
 
-    let mut k_means = KMeans::default();
-    k_means.num_partitions = num_partitions;
-    k_means.imbalance_tol = imbalance_tol;
-    k_means.max_iter = max_iter;
-    k_means.max_balance_iter = max_balance_iter;
-    k_means.delta_threshold = delta_max;
-    k_means.erode = erode;
-
-    let algo = HilbertCurve::new(num_partitions, 14).compose(k_means);
+    let algo = HilbertCurve::new(num_partitions, 14).compose(
+        KMeansBuilder::default()
+            .num_partitions(num_partitions)
+            .imbalance_tol(imbalance_tol)
+            .max_iter(max_iter)
+            .max_balance_iter(max_balance_iter)
+            .delta_threshold(delta_max)
+            .erode(erode)
+            .build(),
+    );
 
     let points = examples::generator::rectangle_uniform(num_points, Point2D::new(0., 0.), 4., 2.);
 

@@ -13,7 +13,7 @@ use sprs::{CsMat, CsMatView};
 /// # Example
 ///
 /// A partition with two parts (0 and 1)
-/// ```
+/// ```ignore
 ///          0
 ///    1*──┆─*────* 0          
 ///    ╱ ╲ ┆╱    ╱           
