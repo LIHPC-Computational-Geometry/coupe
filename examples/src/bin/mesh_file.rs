@@ -312,14 +312,26 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     // k_means.num_partitions = 2;
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(3, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
-    let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
+    // let algo = coupe::HilbertCurve::new(3, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
+    let algo = coupe::HilbertCurve::new(11, 4);
+
+    let mut partition = algo.partition(points.as_slice(), weights.as_slice());
+
+    coupe::algorithms::fiduccia_mattheyses::fiduccia_mattheyses(
+        &mut partition,
+        adjacency.view(),
+        num_iter,
+        1.,
+    );
+
+    let ids = partition.into_ids();
 
     if !matches.is_present("quiet") {
         let part = points
             .iter()
             .cloned()
-            .zip(partition.ids().iter().cloned())
+            // .zip(partition.ids().iter().cloned())
+            .zip(ids.iter().cloned())
             .collect::<Vec<_>>();
         examples::plot_partition(part);
     }
