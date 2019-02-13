@@ -25,6 +25,9 @@ fn main() -> Result<(), Error> {
                 ("kernighan_lin", Some(_submatches)) => {
                     bail! { "kernighan_lin is not supported with the XYZ mesh format" }
                 }
+                ("fiduccia_mattheyses", Some(_submatches)) => {
+                    bail! { "fiduccia_mattheyses is not supported with the XYZ mesh format" }
+                }
                 _ => bail! {"no subcommand specified"},
             }
         }
@@ -32,6 +35,7 @@ fn main() -> Result<(), Error> {
             let mesh = MeditMesh::from_file(file_name)?;
             match matches.subcommand() {
                 ("kernighan_lin", Some(submatches)) => kernighan_lin(&mesh, submatches),
+                ("fiduccia_mattheyses", Some(submatches)) => fiduccia_mattheyses(&mesh, submatches),
                 _ => {
                     bail! { "unsupported mesh format for this algorithm or wrong command specified" }
                 }
@@ -308,21 +312,97 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for num_iter");
 
+    let num_partitions = matches
+        .value_of("num_partitions")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for num_partitions");
+
     // let mut k_means = coupe::KMeans::default();
     // k_means.num_partitions = 2;
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    // let algo = coupe::HilbertCurve::new(3, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
-    let algo = coupe::HilbertCurve::new(11, 4);
+    let algo =
+        coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
 
-    let mut partition = algo.partition(points.as_slice(), weights.as_slice());
+    let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 
-    coupe::algorithms::fiduccia_mattheyses::fiduccia_mattheyses(
-        &mut partition,
-        adjacency.view(),
-        num_iter,
-        1.,
-    );
+    let ids = partition.into_ids();
+
+    if !matches.is_present("quiet") {
+        let part = points
+            .iter()
+            .cloned()
+            // .zip(partition.ids().iter().cloned())
+            .zip(ids.iter().cloned())
+            .collect::<Vec<_>>();
+        examples::plot_partition(part);
+    }
+}
+
+fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
+    let conn = examples::generate_connectivity_matrix_medit(&mesh);
+    let adjacency = coupe::topology::adjacency_matrix(conn.view(), 2);
+
+    let coordinates = mesh.coordinates();
+
+    assert_eq!(mesh.dimension(), 3);
+
+    // Mesh is in 3D, discard the z-coordinate
+    let coords: Vec<f64> = coordinates
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 3 != 2)
+        .map(|(_, val)| *val)
+        .collect::<Vec<_>>();
+    let points =
+        unsafe { std::slice::from_raw_parts(coords.as_ptr() as *const Point2D, coords.len() / 2) };
+
+    // We are partitioning mesh elements, and we position them
+    // via their centers. We need to construct the array of
+    // elements centers from the nodes
+    let views = mesh
+        .topology()
+        .iter()
+        .map(|mat| mat.view())
+        .collect::<Vec<_>>();
+    // let stacked = sprs::vstack(&views);
+    let points = views[1] // <------ WTH is this? what's inside views[0]?
+        .outer_iterator()
+        .map(|conn| {
+            conn.iter().fold(Point2D::new(0., 0.), |acc, (j, _)| {
+                Point2D::new(acc.x + points[j].x / 3., acc.y + points[j].y / 3.)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let num_points = points.len();
+
+    let weights = (0..num_points)
+        .into_par_iter()
+        .map(|_| 1.)
+        .collect::<Vec<_>>();
+
+    let num_iter = matches
+        .value_of("num_iter")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for num_iter");
+
+    let num_partitions = matches
+        .value_of("num_partitions")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for num_partitions");
+
+    // let mut k_means = coupe::KMeans::default();
+    // k_means.num_partitions = 2;
+    // k_means.imbalance_tol = 5.;
+    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
+    let algo = coupe::HilbertCurve::new(num_partitions, 4)
+        .compose(coupe::FiducciaMattheyses::new(num_iter, 2.));
+
+    let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 
     let ids = partition.into_ids();
 

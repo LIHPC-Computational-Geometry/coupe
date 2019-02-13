@@ -118,6 +118,25 @@ subcommands:
         long: num_iter
         default_value: "10"
         help: Sets the number of iterations of the algorithm
+     - num_partitions:
+        long: num_partitions
+        takes_value: true
+        default_value: "7"
+     - quiet:
+        long: quiet
+        short: q
+        help: Disables the GUI output
+ - fiduccia_mattheyses:
+    about: "Fiduccia-Mattheyses algorithm"
+    args:
+     - num_iter:
+        long: num_iter
+        default_value: "10"
+        help: Sets the number of iterations of the algorithm
+     - num_partitions:
+        long: num_partitions
+        takes_value: true
+        default_value: "7"
      - quiet:
         long: quiet
         short: q

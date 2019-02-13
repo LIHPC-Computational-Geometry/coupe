@@ -832,6 +832,42 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct FiducciaMattheyses {
+    num_iter: usize,
+    max_imbalance_per_iter: f64,
+}
+
+impl FiducciaMattheyses {
+    pub fn new(num_iter: usize, max_imbalance_per_iter: f64) -> Self {
+        Self {
+            num_iter,
+            max_imbalance_per_iter,
+        }
+    }
+}
+
+impl<D> TopologicPartitionImprover<D> for FiducciaMattheyses
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    fn improve_partition<'a>(
+        &self,
+        mut partition: Partition<'a, PointND<D>, f64>,
+        adjacency: CsMatView<f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        crate::algorithms::fiduccia_mattheyses::fiduccia_mattheyses(
+            &mut partition,
+            adjacency,
+            self.num_iter,
+            self.max_imbalance_per_iter,
+        );
+        partition
+    }
+}
+
 /// # Represents the composition algorithm.
 ///
 /// This structure is created by calling the [`compose`](trait.Compose.html#tymethod.compose)
