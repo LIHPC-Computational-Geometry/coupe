@@ -357,7 +357,7 @@ where
 /// let points = vec![
 ///     Point2D::new(0., 0.),
 ///     Point2D::new(1., 0.),
-///     Point2D::new(2., 0.),
+///     Point2D::new(2., 0.),   
 ///     Point2D::new(0., 1.),
 ///     Point2D::new(1., 1.),
 ///     Point2D::new(2., 1.),
@@ -796,6 +796,16 @@ where
     }
 }
 
+/// KernighanLin algorithm
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Point2D;
+/// use coupe::{TopologicPartitioner};
+///
+/// let points
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KernighanLin {
     num_iter: usize,
@@ -832,6 +842,69 @@ where
     }
 }
 
+/// FiducciaMattheyses
+///
+/// An implementation of the Fiduccia Mattheyses topologic algorithm
+/// for graph partitioning.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::TopologicPartitionImprover;
+/// use coupe::partition::Partition;
+/// use sprs::CsMat;
+///
+/// //    swap
+/// // 0  1  0  1
+/// // +--+--+--+
+/// // |  |  |  |
+/// // +--+--+--+
+/// // 0  0  1  1
+/// let points = vec![
+///      Point2D::new(0., 0.),
+///      Point2D::new(1., 0.),
+///      Point2D::new(2., 0.),
+///      Point2D::new(3., 0.),
+///      Point2D::new(0., 1.),
+///      Point2D::new(1., 1.),
+///      Point2D::new(2., 1.),
+///      Point2D::new(3., 1.),
+///  ];
+///  let id0 = ProcessUniqueId::new();
+///  let id1 = ProcessUniqueId::new();
+///
+///  let ids = vec![id0, id0, id1, id1, id0, id1, id0, id1];
+///  let weights = vec![1.; 8];
+///
+///  let mut partition = Partition::from_ids(&points, &weights, ids);
+///
+///  let mut adjacency = CsMat::empty(sprs::CSR, 8);
+///  adjacency.reserve_outer_dim(8);
+///  eprintln!("shape: {:?}", adjacency.shape());
+///  adjacency.insert(0, 1, 1.);
+///  adjacency.insert(1, 2, 1.);
+///  adjacency.insert(2, 3, 1.);
+///  adjacency.insert(4, 5, 1.);
+///  adjacency.insert(5, 6, 1.);
+///  adjacency.insert(6, 7, 1.);
+///  adjacency.insert(0, 4, 1.);
+///  adjacency.insert(1, 5, 1.);
+///  adjacency.insert(2, 6, 1.);
+///  adjacency.insert(3, 7, 1.);
+///  
+///  // symmetry
+///  adjacency = &adjacency + &adjacency.transpose_view();
+///
+/// // 1 iteration
+/// let algo = coupe::FiducciaMattheyses::new(1, 2.);
+///
+/// let partition = algo.improve_partition(partition, adjacency.view());
+///
+/// let new_ids = partition.into_ids();
+/// assert_eq!(new_ids[5], id0);
+/// assert_eq!(new_ids[6], id1);
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct FiducciaMattheyses {
     num_iter: usize,
