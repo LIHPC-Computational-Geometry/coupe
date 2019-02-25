@@ -39,7 +39,16 @@ fn main() {
     adjacency.insert(3, 7, 1.);
 
     // symmetry
-    adjacency = &adjacency + &adjacency.transpose_view();
+    adjacency.insert(1, 0, 1.);
+    adjacency.insert(2, 1, 1.);
+    adjacency.insert(3, 2, 1.);
+    adjacency.insert(5, 4, 1.);
+    adjacency.insert(6, 5, 1.);
+    adjacency.insert(7, 6, 1.);
+    adjacency.insert(4, 0, 1.);
+    adjacency.insert(5, 1, 1.);
+    adjacency.insert(6, 2, 1.);
+    adjacency.insert(7, 3, 1.);
 
     println!("adjacency = {:#?}", adjacency);
 
