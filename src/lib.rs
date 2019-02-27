@@ -907,15 +907,24 @@ where
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct FiducciaMattheyses {
-    num_iter: usize,
-    max_imbalance_per_iter: f64,
+    max_passes: Option<usize>,
+    max_flips_per_pass: Option<usize>,
+    max_imbalance_per_flip: Option<f64>,
+    max_bad_move_in_a_row: usize,
 }
 
 impl FiducciaMattheyses {
-    pub fn new(num_iter: usize, max_imbalance_per_iter: f64) -> Self {
+    pub fn new(
+        max_passes: impl Into<Option<usize>>,
+        max_flips_per_pass: impl Into<Option<usize>>,
+        max_imbalance_per_flip: impl Into<Option<f64>>,
+        max_bad_move_in_a_row: usize,
+    ) -> Self {
         Self {
-            num_iter,
-            max_imbalance_per_iter,
+            max_passes: max_passes.into(),
+            max_flips_per_pass: max_flips_per_pass.into(),
+            max_imbalance_per_flip: max_imbalance_per_flip.into(),
+            max_bad_move_in_a_row,
         }
     }
 }
@@ -934,8 +943,10 @@ where
         crate::algorithms::fiduccia_mattheyses::fiduccia_mattheyses(
             &mut partition,
             adjacency,
-            self.num_iter,
-            self.max_imbalance_per_iter,
+            self.max_passes,
+            self.max_flips_per_pass,
+            self.max_imbalance_per_flip,
+            self.max_bad_move_in_a_row,
         );
         partition
     }

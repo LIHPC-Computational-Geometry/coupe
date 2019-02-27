@@ -383,11 +383,11 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let num_iter = matches
-        .value_of("num_iter")
-        .unwrap_or_default()
-        .parse()
-        .expect("wrong value for num_iter");
+    // let num_iter = matches
+    //     .value_of("num_iter")
+    //     .unwrap_or_default()
+    //     .parse()
+    //     .expect("wrong value for num_iter");
 
     let num_partitions = matches
         .value_of("num_partitions")
@@ -395,12 +395,34 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for num_partitions");
 
+    let max_passes = matches
+        .value_of("max_passes")
+        .and_then(|s| s.parse::<usize>().ok());
+
+    let max_flips_per_pass = matches
+        .value_of("max_flips_per_pass")
+        .and_then(|s| s.parse::<usize>().ok());
+
+    let max_imbalance_per_flip = matches
+        .value_of("max_imbalance_per_flip")
+        .and_then(|s| s.parse::<f64>().ok());
+
+    let max_bad_move_in_a_row = matches
+        .value_of("max_bad_move_in_a_row")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for max_bad_move_in_a_row");
+
     // let mut k_means = coupe::KMeans::default();
     // k_means.num_partitions = 2;
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(num_partitions, 4)
-        .compose(coupe::FiducciaMattheyses::new(num_iter, 2.));
+    let algo = coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::FiducciaMattheyses::new(
+        max_passes,
+        max_flips_per_pass,
+        max_imbalance_per_flip,
+        max_bad_move_in_a_row,
+    ));
 
     let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 

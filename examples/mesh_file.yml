@@ -129,10 +129,22 @@ subcommands:
  - fiduccia_mattheyses:
     about: "Fiduccia-Mattheyses algorithm"
     args:
-     - num_iter:
-        long: num_iter
+     - max_passes:
+        long: max_passes
+        takes_value: true
+        help: Sets the maximum number of passes
+     - max_flips_per_pass:
+        long: max_flips_per_pass
+        takes_value: true
+        help: Sets the maximum number of flips per pass
+     - max_imbalance_per_flip:
+        long: max_imbalance_per_flip
+        takes_value: true
+        help: Sets the maximum imbalance introduced by each individual flip
+     - max_bad_move_in_a_row:
+        long: max_bad_move_in_a_row
         default_value: "10"
-        help: Sets the number of iterations of the algorithm
+        help: Sets the number of sequential flips that increase the cutsize for each pass
      - num_partitions:
         long: num_partitions
         takes_value: true
