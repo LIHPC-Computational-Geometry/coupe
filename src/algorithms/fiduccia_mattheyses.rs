@@ -37,6 +37,17 @@ pub fn fiduccia_mattheyses<'a, D>(
 
     let (_points, weights, ids) = initial_partition.as_raw_mut();
 
+    fmn(
+        weights,
+        adjacency.view(),
+        ids,
+        max_passes,
+        max_flips_per_pass,
+        max_imbalance_per_flip,
+        max_bad_move_in_a_row,
+    );
+    return;
+
     for (mut p, mut q) in adjacent_parts {
         fm2(
             weights,
@@ -334,6 +345,214 @@ fn gains(
                 .and_then(|row| {
                     Some(
                         idx.iter()
+                            .filter_map(|j| {
+                                row.nnz_index(*j)
+                                    .and_then(|nnz_idx| Some((j, row[nnz_idx])))
+                            })
+                            .fold(0., |acc, (j, w)| {
+                                if initial_partition[i] != initial_partition[*j] {
+                                    acc + w
+                                } else {
+                                    acc - w
+                                }
+                            }),
+                    )
+                })
+                .unwrap_or(0.)
+        })
+        .collect::<Vec<_>>()
+}
+
+pub fn fmn(
+    weights: &[f64],
+    adjacency: CsMatView<f64>,
+    initial_partition: &mut [ProcessUniqueId],
+    max_passes: Option<usize>,
+    max_flips_per_pass: Option<usize>,
+    max_imbalance_per_flip: Option<f64>,
+    max_bad_move_in_a_row: usize, // for each pass, the max number of subsequent moves that will decrease the gain
+) {
+    let unique_ids = initial_partition
+        .iter()
+        .cloned()
+        .unique()
+        .collect::<Vec<_>>();
+
+    let mut cut_size = crate::topology::cut_size(adjacency.view(), initial_partition);
+    println!("Initial cut size: {}", cut_size);
+    let mut new_cut_size = cut_size;
+
+    for iter in 0.. {
+        if let Some(max_passes) = max_passes {
+            if iter >= max_passes {
+                break;
+            }
+        }
+
+        cut_size = new_cut_size;
+
+        let mut num_bad_move = 0;
+        let mut saves = Vec::new();
+        let mut cut_saves = Vec::new();
+        let mut ids_before_flip = Vec::new();
+        let mut gains: Vec<Vec<(ProcessUniqueId, f64)>> = (0..initial_partition.len())
+            .map(|idx| {
+                unique_ids
+                    .iter()
+                    .cloned()
+                    .filter(|id2| initial_partition[idx] != *id2)
+                    .map(|id2| (id2, 0.))
+                    .collect()
+            })
+            .collect();
+        // pass loop
+        for _ in 0..initial_partition.len() {
+            // locks are per node and do not depend on target partition
+            let mut locks = vec![false; initial_partition.len()];
+
+            // construct gains
+            for (idx, other_ids) in gains.iter_mut().enumerate() {
+                for (id2, ref mut gain) in other_ids.iter_mut() {
+                    // compute gain
+                    *gain = adjacency
+                        .outer_view(idx)
+                        .and_then(|row| {
+                            Some(row.iter().fold(0., |acc, (j, w)| {
+                                if initial_partition[idx] == initial_partition[j] {
+                                    acc - w
+                                } else if initial_partition[j] == *id2 {
+                                    acc + w
+                                } else {
+                                    0.
+                                }
+                            }))
+                        })
+                        .unwrap_or(0.);
+                }
+            }
+
+            // find max gain and target part
+            let (max_pos, (target_part, max_gain)) = gains
+                .iter()
+                .zip(locks.iter())
+                .filter(|(_, locked)| !*locked)
+                .map(|(vec, _)| vec)
+                .map(|vec| {
+                    vec.iter()
+                        .max_by(|(_idx1, gain1), (_id2, gain2)| gain1.partial_cmp(&gain2).unwrap())
+                        .unwrap()
+                })
+                .cloned()
+                .enumerate()
+                .max_by(|(_, (_, gain1)), (_, (_, gain2))| gain1.partial_cmp(&gain2).unwrap())
+                .unwrap();
+
+            // dbg!(max_gain);
+            // dbg!(num_bad_move);
+            if max_gain <= 0. {
+                if num_bad_move >= max_bad_move_in_a_row {
+                    println!("reached max bad move in a row");
+                    break;
+                }
+
+                num_bad_move += 1;
+            } else {
+                num_bad_move = 0;
+            }
+
+            // lock node
+            locks[max_pos] = true;
+
+            // save flip
+            saves.push((max_pos, target_part, max_gain));
+
+            // update nighbors gain
+            // dbg!(gains.len());
+            // dbg!(max_pos);
+            let row = adjacency.outer_view(max_pos).unwrap();
+            for (j, w) in row.iter() {
+                // dbg!(j);
+                if j != max_pos {
+                    if let Some(pos) = gains[j].iter().position(|(id, _)| *id == target_part) {
+                        let (id2, ref mut gain) = gains[j][pos];
+                        if initial_partition[max_pos] == initial_partition[j] {
+                            *gain -= 2. * w;
+                        } else if initial_partition[j] == id2 {
+                            *gain += 2. * w;
+                        } // else gain does not change
+                    }
+                    // else {
+                    //     let pos = gains[j]
+                    //         .iter()
+                    //         .position(|(id, _)| *id == initial_partition[max_pos])
+                    //         .unwrap();
+                    //     let (id2, ref mut gain) = gains[j][pos];
+                    //     if initial_partition[max_pos] == initial_partition[j] {
+                    //         *gain -= 2. * w;
+                    //     } else if initial_partition[j] == id2 {
+                    //         *gain += 2. * w;
+                    //     } // else gain does not change
+                    // }
+                }
+            }
+
+            // flip node
+            ids_before_flip.push(initial_partition[max_pos]);
+            initial_partition[max_pos] = target_part;
+
+            // save cut_size
+            cut_saves.push(crate::topology::cut_size(
+                adjacency.view(),
+                initial_partition,
+            ));
+
+            // println!("gains: {:#?}", gains);
+        }
+
+        // lookup for best cutsize
+        let (best_pos, best_cut) = cut_saves
+            .iter()
+            .cloned()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
+            .unwrap();
+
+        // rewind flips
+        println!(
+            "rewinding flips from pos {} to pos {}",
+            best_pos + 1,
+            cut_saves.len()
+        );
+        for i in best_pos + 1..cut_saves.len() {
+            let idx = saves[i].0;
+            initial_partition[idx] = ids_before_flip[i];
+        }
+
+        new_cut_size = best_cut;
+
+        if new_cut_size >= cut_size {
+            break;
+        }
+    }
+
+    println!("final cut size: {}", new_cut_size);
+}
+
+fn gains2(
+    idx1: &[usize], // indices of elements in current part
+    idx2: &[usize], // indices of elements in other part
+    adjacency: CsMatView<f64>,
+    initial_partition: &mut [ProcessUniqueId],
+) -> Vec<f64> {
+    idx1.par_iter()
+        .cloned()
+        .map(|i| {
+            adjacency
+                .outer_view(i)
+                .and_then(|row| {
+                    Some(
+                        idx2.iter()
+                            .chain(idx1.iter())
                             .filter_map(|j| {
                                 row.nnz_index(*j)
                                     .and_then(|nnz_idx| Some((j, row[nnz_idx])))

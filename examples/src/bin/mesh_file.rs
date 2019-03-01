@@ -413,16 +413,18 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for max_bad_move_in_a_row");
 
-    // let mut k_means = coupe::KMeans::default();
-    // k_means.num_partitions = 2;
-    // k_means.imbalance_tol = 5.;
+    let mut k_means = coupe::KMeans::default();
+    k_means.num_partitions = num_partitions;
+    k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::FiducciaMattheyses::new(
-        max_passes,
-        max_flips_per_pass,
-        max_imbalance_per_flip,
-        max_bad_move_in_a_row,
-    ));
+    let algo = coupe::HilbertCurve::new(num_partitions, 4)
+        .compose(k_means)
+        .compose(coupe::FiducciaMattheyses::new(
+            max_passes,
+            max_flips_per_pass,
+            max_imbalance_per_flip,
+            max_bad_move_in_a_row,
+        ));
 
     let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 

@@ -205,3 +205,59 @@ fn kernighan_lin_2<D>(
         initial_partition.swap(idx1[max_pos_1], idx2[max_pos_2]);
     }
 }
+
+fn kl2<D>(
+    weights: &[f64],
+    idx1: &[usize], // indices of elements in first part
+    idx2: &[usize], // indices of elements in second part
+    adjacency: CsMatView<f64>,
+    initial_partition: &mut [ProcessUniqueId],
+    num_iter: usize,
+    max_imbalance_per_iter: f64,
+) where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    // utility function to easily swap nodes between two parts
+    let first_id = initial_partition[idx1[0]];
+    let second_id = initial_partition[idx2[0]];
+    let swap_id = move |id: ProcessUniqueId| {
+        if id == first_id {
+            second_id
+        } else {
+            first_id
+        }
+    };
+}
+
+fn gains(
+    idx: &[usize],
+    adjacency: CsMatView<f64>,
+    initial_partition: &mut [ProcessUniqueId],
+) -> Vec<f64> {
+    idx.par_iter()
+        .cloned()
+        .map(|i| {
+            adjacency
+                .outer_view(i)
+                .and_then(|row| {
+                    Some(
+                        idx.iter()
+                            .filter_map(|j| {
+                                row.nnz_index(*j)
+                                    .and_then(|nnz_idx| Some((j, row[nnz_idx])))
+                            })
+                            .fold(0., |acc, (j, w)| {
+                                if initial_partition[i] != initial_partition[*j] {
+                                    acc + w
+                                } else {
+                                    acc - w
+                                }
+                            }),
+                    )
+                })
+                .unwrap_or(0.)
+        })
+        .collect::<Vec<_>>()
+}
