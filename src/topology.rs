@@ -2,7 +2,7 @@
 
 use crate::ProcessUniqueId;
 
-use sprs::{CsMat, CsMatView};
+use sprs::{CsMat, CsMatView, TriMat};
 
 /// Computes the cutsize of a partition.
 ///
@@ -25,7 +25,7 @@ use sprs::{CsMat, CsMatView};
 pub fn cut_size(adjacency: CsMatView<f64>, partition: &[ProcessUniqueId]) -> f64 {
     let mut cut_size = 0.;
     for (i, row) in adjacency.outer_iterator().enumerate() {
-        for (j, w) in row.iter() {
+        for (j, w) in row.iter() {      
             // graph edge are present twice in the matrix be cause of symetry
             if j >= i {
                 continue;
@@ -55,19 +55,29 @@ pub fn cut_size(adjacency: CsMatView<f64>, partition: &[ProcessUniqueId]) -> f64
 /// If the entry `(i, j)` is non-zero, then its value is the weight of the edge between `i`
 /// and `j` (default to `1.0`).
 pub fn adjacency_matrix(conn: CsMatView<u32>, num_common_nodes: u32) -> CsMat<f64> {
+    eprintln!("matmul");
     let graph = &conn * &conn.transpose_view();
-    let mut ret = CsMat::zero(graph.shape());
+    eprintln!("matmul done");
+
+    // let mut ret = CsMat::zero(graph.shape());
     let nnz = graph
         .iter()
         .filter(|(n, _)| **n == num_common_nodes)
         .count();
-    ret.reserve_nnz(nnz);
+    // ret.reserve_nnz(nnz);
+
+    let mut row_nnz = Vec::with_capacity(nnz);
+    let mut col_nnz = Vec::with_capacity(nnz);
+    let mut val_nnz = Vec::with_capacity(nnz);
 
     for (val, (i, j)) in graph.iter() {
         if *val == num_common_nodes {
-            ret.insert(i, j, 1.);
+            // ret.insert(i, j, 1.);
+            row_nnz.push(i);
+            col_nnz.push(j);
+            val_nnz.push(1.);
         }
     }
 
-    ret
+    TriMat::from_triplets(graph.shape(), row_nnz, col_nnz, val_nnz).to_csc()
 }

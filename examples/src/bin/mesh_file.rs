@@ -33,6 +33,7 @@ fn main() -> Result<(), Error> {
         }
         "medit" => {
             let mesh = MeditMesh::from_file(file_name)?;
+            println!("Medit mesh loaded");
             match matches.subcommand() {
                 ("kernighan_lin", Some(submatches)) => kernighan_lin(&mesh, submatches),
                 ("fiduccia_mattheyses", Some(submatches)) => fiduccia_mattheyses(&mesh, submatches),
@@ -341,7 +342,9 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
 }
 
 fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
+    eprintln!("0");
     let conn = examples::generate_connectivity_matrix_medit(&mesh);
+    eprintln!("1");
     let adjacency = coupe::topology::adjacency_matrix(conn.view(), 2);
 
     let coordinates = mesh.coordinates();
@@ -392,7 +395,7 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     let num_partitions = matches
         .value_of("num_partitions")
         .unwrap_or_default()
-        .parse()
+        .parse::<usize>()
         .expect("wrong value for num_partitions");
 
     let max_passes = matches
@@ -413,12 +416,18 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for max_bad_move_in_a_row");
 
+    // let rcb = coupe::Rib::new(3);
     let mut k_means = coupe::KMeans::default();
     k_means.num_partitions = num_partitions;
     k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo = coupe::HilbertCurve::new(num_partitions, 4)
+    // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
+    let algo = 
+        // multi_jagged
+        // rcb
+        coupe::HilbertCurve::new(num_partitions, 4)
         .compose(k_means)
+        // .compose(multi_jagged)
         .compose(coupe::FiducciaMattheyses::new(
             max_passes,
             max_flips_per_pass,

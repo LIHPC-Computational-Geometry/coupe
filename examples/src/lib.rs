@@ -15,6 +15,9 @@ pub fn generate_connectivity_matrix_medit(mesh: &MeditMesh) -> CsMat<u32> {
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
     // let stacked = sprs::vstack(&views);
+
+    // TODO: replace [0] with proper indexing to find matrix
+    // associated with triangle nodes indices
     views[1].to_owned()
 }
 

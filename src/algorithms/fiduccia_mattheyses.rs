@@ -378,6 +378,22 @@ pub fn fmn(
         .unique()
         .collect::<Vec<_>>();
 
+    let mut parts_weights: HashMap<ProcessUniqueId, f64> = unique_ids
+        .iter()
+        .cloned()
+        .map(|id| {
+            (
+                id,
+                weights
+                    .iter()
+                    .zip(initial_partition.iter().cloned())
+                    .filter(|(_w, other_id)| id == *other_id)
+                    .map(|(w, _)| *w)
+                    .sum::<f64>(),
+            )
+        })
+        .collect();
+
     let mut cut_size = crate::topology::cut_size(adjacency.view(), initial_partition);
     println!("Initial cut size: {}", cut_size);
     let mut new_cut_size = cut_size;
@@ -391,6 +407,7 @@ pub fn fmn(
 
         cut_size = new_cut_size;
 
+        let imbalance;
         let mut num_bad_move = 0;
         let mut saves = Vec::new();
         let mut cut_saves = Vec::new();
@@ -400,34 +417,35 @@ pub fn fmn(
                 unique_ids
                     .iter()
                     .cloned()
-                    .filter(|id2| initial_partition[idx] != *id2)
+                    // .filter(|id2| initial_partition[idx] != *id2)
                     .map(|id2| (id2, 0.))
                     .collect()
             })
             .collect();
+        let mut locks = vec![false; initial_partition.len()];
         // pass loop
-        for _ in 0..initial_partition.len() {
+        eprintln!("a");
+        for _ in 0..initial_partition
+            .len()
+            .min(max_flips_per_pass.unwrap_or(std::usize::MAX))
+        {
             // locks are per node and do not depend on target partition
-            let mut locks = vec![false; initial_partition.len()];
 
             // construct gains
             for (idx, other_ids) in gains.iter_mut().enumerate() {
                 for (id2, ref mut gain) in other_ids.iter_mut() {
-                    // compute gain
-                    *gain = adjacency
-                        .outer_view(idx)
-                        .and_then(|row| {
-                            Some(row.iter().fold(0., |acc, (j, w)| {
-                                if initial_partition[idx] == initial_partition[j] {
-                                    acc - w
-                                } else if initial_partition[j] == *id2 {
-                                    acc + w
-                                } else {
-                                    0.
-                                }
-                            }))
-                        })
-                        .unwrap_or(0.);
+                    if initial_partition[idx] == *id2 {
+                        // target part is current part, no gain
+                        *gain = 0.;
+                    } else {
+                        for (j, w) in adjacency.outer_view(idx).unwrap().iter() {
+                            if initial_partition[idx] == initial_partition[j] {
+                                *gain -= w;
+                            } else if initial_partition[j] == *id2 {
+                                *gain += w;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -435,15 +453,27 @@ pub fn fmn(
             let (max_pos, (target_part, max_gain)) = gains
                 .iter()
                 .zip(locks.iter())
-                .filter(|(_, locked)| !*locked)
-                .map(|(vec, _)| vec)
-                .map(|vec| {
-                    vec.iter()
-                        .max_by(|(_idx1, gain1), (_id2, gain2)| gain1.partial_cmp(&gain2).unwrap())
-                        .unwrap()
-                })
-                .cloned()
+                .zip(weights.iter())
                 .enumerate()
+                .filter(|(_, ((_, locked), weight))| {
+                    if let Some(max_imbalance_per_flip) = max_imbalance_per_flip {
+                        !*locked && **weight <= max_imbalance_per_flip
+                    } else {
+                        !*locked
+                    }
+                })
+                .map(|(idx, ((vec, _), _))| (idx, vec))
+                .map(|(idx, vec)| {
+                    (
+                        idx,
+                        *vec.iter()
+                            .max_by(|(_idx1, gain1), (_id2, gain2)| {
+                                gain1.partial_cmp(&gain2).unwrap()
+                            })
+                            .unwrap(),
+                    )
+                })
+                // .cloned()
                 .max_by(|(_, (_, gain1)), (_, (_, gain2))| gain1.partial_cmp(&gain2).unwrap())
                 .unwrap();
 
@@ -457,6 +487,7 @@ pub fn fmn(
 
                 num_bad_move += 1;
             } else {
+                // println!("good move");
                 num_bad_move = 0;
             }
 
@@ -466,39 +497,65 @@ pub fn fmn(
             // save flip
             saves.push((max_pos, target_part, max_gain));
 
+            // eprintln!(
+            //     "save: {:?}",
+            //     saves.iter().map(|(_, _, g)| g).collect::<Vec<_>>()
+            // );
+            // eprintln!(
+            //     "indices: {:?}",
+            //     saves.iter().map(|(pos, _, _)| pos).collect::<Vec<_>>()
+            // );
+
             // update nighbors gain
-            // dbg!(gains.len());
-            // dbg!(max_pos);
-            let row = adjacency.outer_view(max_pos).unwrap();
-            for (j, w) in row.iter() {
-                // dbg!(j);
-                if j != max_pos {
-                    if let Some(pos) = gains[j].iter().position(|(id, _)| *id == target_part) {
-                        let (id2, ref mut gain) = gains[j][pos];
-                        if initial_partition[max_pos] == initial_partition[j] {
-                            *gain -= 2. * w;
-                        } else if initial_partition[j] == id2 {
-                            *gain += 2. * w;
-                        } // else gain does not change
-                    }
-                    // else {
-                    //     let pos = gains[j]
-                    //         .iter()
-                    //         .position(|(id, _)| *id == initial_partition[max_pos])
-                    //         .unwrap();
-                    //     let (id2, ref mut gain) = gains[j][pos];
-                    //     if initial_partition[max_pos] == initial_partition[j] {
-                    //         *gain -= 2. * w;
-                    //     } else if initial_partition[j] == id2 {
-                    //         *gain += 2. * w;
-                    //     } // else gain does not change
-                    // }
-                }
-            }
+            // let row = adjacency.outer_view(max_pos).unwrap();
+            // for (j, w) in row.iter() {
+            //     // dbg!(j);
+            //     if j != max_pos {
+            //         if let Some(pos) = gains[j].iter().position(|(id, _)| *id == target_part) {
+            //             let (id2, ref mut gain) = gains[j][pos];
+            //             if initial_partition[max_pos] == initial_partition[j] {
+            //                 *gain -= 2. * w;
+            //             } else if initial_partition[j] == id2 {
+            //                 *gain += 2. * w;
+            //             } // else gain does not change
+            //         }
+            //         // else {
+            //         //     let pos = gains[j]
+            //         //         .iter()
+            //         //         .position(|(id, _)| *id == initial_partition[max_pos])
+            //         //         .unwrap();
+            //         //     let (id2, ref mut gain) = gains[j][pos];
+            //         //     if initial_partition[max_pos] == initial_partition[j] {
+            //         //         *gain -= 2. * w;
+            //         //     } else if initial_partition[j] == id2 {
+            //         //         *gain += 2. * w;
+            //         //     }
+            //         //     // else gain does not change
+            //         // }
+            //     }
+            // }
+
+            // update imbalance
+            *parts_weights.get_mut(&initial_partition[max_pos]).unwrap() -= weights[max_pos];
+            *parts_weights.get_mut(&target_part).unwrap() += weights[max_pos];
 
             // flip node
             ids_before_flip.push(initial_partition[max_pos]);
+            println!(
+                "cut before flip: {}",
+                crate::topology::cut_size(adjacency.view(), initial_partition,)
+            );
+            println!("flipping for gain: {}", max_gain);
+            println!("old id: {}", initial_partition[max_pos]);
+            println!("new id: {}", target_part);
+            for (j, w) in adjacency.outer_view(max_pos).unwrap().iter() {
+                println!("neigbor id: {}", initial_partition[j]);
+            }
             initial_partition[max_pos] = target_part;
+            println!(
+                "cut after flip: {}",
+                crate::topology::cut_size(adjacency.view(), initial_partition,)
+            );
 
             // save cut_size
             cut_saves.push(crate::topology::cut_size(
@@ -508,7 +565,16 @@ pub fn fmn(
 
             // println!("gains: {:#?}", gains);
         }
-
+        eprintln!("b");
+        println!(
+            "pos saves {:?}",
+            saves.iter().map(|(pos, _, _)| pos).collect::<Vec<_>>()
+        );
+        println!(
+            "gain saves {:?}",
+            saves.iter().map(|(_, _, g)| g).collect::<Vec<_>>()
+        );
+        println!("cut saves: {:?}", cut_saves);
         // lookup for best cutsize
         let (best_pos, best_cut) = cut_saves
             .iter()
@@ -526,6 +592,10 @@ pub fn fmn(
         for i in best_pos + 1..cut_saves.len() {
             let idx = saves[i].0;
             initial_partition[idx] = ids_before_flip[i];
+
+            // revert weight change
+            *parts_weights.get_mut(&ids_before_flip[i]).unwrap() += weights[idx];
+            *parts_weights.get_mut(&saves[i].1).unwrap() += weights[idx];
         }
 
         new_cut_size = best_cut;
@@ -533,6 +603,10 @@ pub fn fmn(
         if new_cut_size >= cut_size {
             break;
         }
+
+        let (min_w, max_w) = parts_weights.values().minmax().into_option().unwrap();
+        imbalance = max_w - min_w;
+        dbg!(imbalance);
     }
 
     println!("final cut size: {}", new_cut_size);
