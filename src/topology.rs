@@ -25,7 +25,7 @@ use sprs::{CsMat, CsMatView, TriMat};
 pub fn cut_size(adjacency: CsMatView<f64>, partition: &[ProcessUniqueId]) -> f64 {
     let mut cut_size = 0.;
     for (i, row) in adjacency.outer_iterator().enumerate() {
-        for (j, w) in row.iter() {      
+        for (j, w) in row.iter() {
             // graph edge are present twice in the matrix be cause of symetry
             if j >= i {
                 continue;

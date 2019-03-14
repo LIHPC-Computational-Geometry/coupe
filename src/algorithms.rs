@@ -1,4 +1,5 @@
 pub mod fiduccia_mattheyses;
+pub mod graph_growth;
 pub mod hilbert_curve;
 pub mod k_means;
 pub mod kernighan_lin;

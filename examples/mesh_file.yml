@@ -153,3 +153,14 @@ subcommands:
         long: quiet
         short: q
         help: Disables the GUI output
+ - graph_grow:
+    about: "graph_grow algorithm"
+    args:
+     - num_partitions:
+        long: num_partitions
+        takes_value: true
+        default_value: "7"
+     - quiet:
+        long: quiet
+        short: q
+        help: Disables the GUI output

@@ -51,7 +51,7 @@ pub fn plot_partition(points: Vec<(Point2D, ProcessUniqueId)>) {
 
 fn random_color_string() -> String {
     let mut rng = rand::thread_rng();
-    let hex = rng.gen_range::<u32>(0, 0xfff_fff);
+    let hex = rng.gen_range(0, 0xfff_fff);
     format!("#{:x}", hex)
 }
 
@@ -68,8 +68,8 @@ pub mod generator {
         let mut ret = Vec::with_capacity(num_points);
         while num_points > 0 {
             let p = Point2D::new(
-                rng.gen_range::<f64>(bb_p_min.x, bb_p_max.x),
-                rng.gen_range::<f64>(bb_p_min.y, bb_p_max.y),
+                rng.gen_range(bb_p_min.x, bb_p_max.x),
+                rng.gen_range(bb_p_min.y, bb_p_max.y),
             );
             if (center - p).norm() < radius {
                 num_points -= 1;
@@ -92,8 +92,8 @@ pub mod generator {
         (0..num_points)
             .map(|_| {
                 Point2D::new(
-                    rng.gen_range::<f64>(p_min.x, p_max.x),
-                    rng.gen_range::<f64>(p_min.y, p_max.y),
+                    rng.gen_range(p_min.x, p_max.x),
+                    rng.gen_range(p_min.y, p_max.y),
                 )
             })
             .collect()
@@ -108,9 +108,9 @@ pub mod generator {
         (0..num_points)
             .map(|_| {
                 Point3D::new(
-                    rng.gen_range::<f64>(p_min.x, p_max.x),
-                    rng.gen_range::<f64>(p_min.y, p_max.y),
-                    rng.gen_range::<f64>(p_min.z, p_max.z),
+                    rng.gen_range(p_min.x, p_max.x),
+                    rng.gen_range(p_min.y, p_max.y),
+                    rng.gen_range(p_min.z, p_max.z),
                 )
             })
             .collect()
