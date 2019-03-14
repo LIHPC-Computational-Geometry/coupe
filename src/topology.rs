@@ -55,9 +55,8 @@ pub fn cut_size(adjacency: CsMatView<f64>, partition: &[ProcessUniqueId]) -> f64
 /// If the entry `(i, j)` is non-zero, then its value is the weight of the edge between `i`
 /// and `j` (default to `1.0`).
 pub fn adjacency_matrix(conn: CsMatView<u32>, num_common_nodes: u32) -> CsMat<f64> {
-    eprintln!("matmul");
+    // currently this matmul operation is very slow
     let graph = &conn * &conn.transpose_view();
-    eprintln!("matmul done");
 
     // let mut ret = CsMat::zero(graph.shape());
     let nnz = graph

@@ -33,7 +33,6 @@ fn main() -> Result<(), Error> {
         }
         "medit" => {
             let mesh = MeditMesh::from_file(file_name)?;
-            println!("Medit mesh loaded");
             match matches.subcommand() {
                 ("kernighan_lin", Some(submatches)) => kernighan_lin(&mesh, submatches),
                 ("fiduccia_mattheyses", Some(submatches)) => fiduccia_mattheyses(&mesh, submatches),
@@ -423,16 +422,16 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .expect("wrong value for max_bad_move_in_a_row");
 
     // let rcb = coupe::Rib::new(3);
-    let mut k_means = coupe::KMeans::default();
-    k_means.num_partitions = num_partitions;
-    k_means.imbalance_tol = 5.;
+    // let mut k_means = coupe::KMeans::default();
+    // k_means.num_partitions = num_partitions;
+    // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
     // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
     let algo = 
         // multi_jagged
         // rcb
         coupe::HilbertCurve::new(num_partitions, 4)
-        .compose(k_means)
+        // .compose(k_means)
         // .compose(multi_jagged)
         .compose(coupe::FiducciaMattheyses::new(
             max_passes,
