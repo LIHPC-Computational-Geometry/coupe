@@ -11,14 +11,15 @@ use itertools::Itertools;
 use nalgebra::allocator::Allocator;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
-use rayon::prelude::*;
 use sprs::CsMatView;
 
 pub(crate) fn kernighan_lin<'a, D>(
     initial_partition: &mut Partition<'a, PointND<D>, f64>,
     adjacency: CsMatView<f64>,
-    num_iter: usize,
-    max_imbalance_per_iter: f64,
+    max_passes: impl Into<Option<usize>>,
+    max_flips_per_pass: impl Into<Option<usize>>,
+    max_imbalance_per_flip: impl Into<Option<f64>>,
+    max_bad_move_in_a_row: usize,
 ) where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -29,9 +30,19 @@ pub(crate) fn kernighan_lin<'a, D>(
     // are adjacent if there exists an element in one part that is linked to
     // an element in the other part).
 
+    let max_passes = max_passes.into();
+    let max_flips_per_pass = max_flips_per_pass.into();
+    let max_imbalance_per_flip = max_imbalance_per_flip.into();
     let (_points, weights, ids) = initial_partition.as_raw_mut();
 
-    kernighan_lin_2_impl(weights, adjacency.view(), ids, None, Some(30), 15);
+    kernighan_lin_2_impl(
+        weights,
+        adjacency.view(),
+        ids,
+        max_passes,
+        max_flips_per_pass,
+        max_bad_move_in_a_row,
+    );
 }
 
 fn kernighan_lin_2_impl<D>(

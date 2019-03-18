@@ -312,24 +312,40 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    let num_iter = matches
-        .value_of("num_iter")
-        .unwrap_or_default()
-        .parse()
-        .expect("wrong value for num_iter");
-
     let num_partitions = matches
         .value_of("num_partitions")
         .unwrap_or_default()
-        .parse()
+        .parse::<usize>()
         .expect("wrong value for num_partitions");
+
+    let max_passes = matches
+        .value_of("max_passes")
+        .and_then(|s| s.parse::<usize>().ok());
+
+    let max_flips_per_pass = matches
+        .value_of("max_flips_per_pass")
+        .and_then(|s| s.parse::<usize>().ok());
+
+    let max_imbalance_per_flip = matches
+        .value_of("max_imbalance_per_flip")
+        .and_then(|s| s.parse::<f64>().ok());
+
+    let max_bad_move_in_a_row = matches
+        .value_of("max_bad_move_in_a_row")
+        .unwrap_or_default()
+        .parse()
+        .expect("wrong value for max_bad_move_in_a_row");
 
     // let mut k_means = coupe::KMeans::default();
     // k_means.num_partitions = 2;
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    let algo =
-        coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::KernighanLin::new(num_iter, 2.));
+    let algo = coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::KernighanLin::new(
+        max_passes,
+        max_flips_per_pass,
+        max_imbalance_per_flip,
+        max_bad_move_in_a_row,
+    ));
 
     let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 
@@ -347,9 +363,7 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
 }
 
 fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
-    eprintln!("0");
     let conn = examples::generate_connectivity_matrix_medit(&mesh);
-    eprintln!("1");
     let adjacency = coupe::topology::adjacency_matrix(conn.view(), 2);
 
     let coordinates = mesh.coordinates();
@@ -391,12 +405,6 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    // let num_iter = matches
-    //     .value_of("num_iter")
-    //     .unwrap_or_default()
-    //     .parse()
-    //     .expect("wrong value for num_iter");
-
     let num_partitions = matches
         .value_of("num_partitions")
         .unwrap_or_default()
@@ -427,10 +435,7 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     // k_means.imbalance_tol = 5.;
     // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
     // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
-    let algo = 
-        // multi_jagged
-        // rcb
-        coupe::HilbertCurve::new(num_partitions, 4)
+    let algo = coupe::HilbertCurve::new(num_partitions, 4)
         // .compose(k_means)
         // .compose(multi_jagged)
         .compose(coupe::FiducciaMattheyses::new(
@@ -454,7 +459,6 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         examples::plot_partition(part);
     }
 }
-
 
 fn graph_grow<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     eprintln!("0");
@@ -519,7 +523,7 @@ fn graph_grow<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     // k_means.imbalance_tol = 5.;
     // // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
     // // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
-    // let algo = 
+    // let algo =
     //     // multi_jagged
     //     // rcb
     //     coupe::HilbertCurve::new(num_partitions, 4)
@@ -532,7 +536,11 @@ fn graph_grow<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
     //         max_bad_move_in_a_row,
     //     ));
 
-    let ids = coupe::algorithms::graph_growth::graph_growth(weights.as_slice(), adjacency.view(), num_partitions);
+    let ids = coupe::algorithms::graph_growth::graph_growth(
+        weights.as_slice(),
+        adjacency.view(),
+        num_partitions,
+    );
 
     let partition = coupe::partition::Partition::from_ids(&points, &weights, ids);
     println!("imbalance: {}", partition.max_imbalance());

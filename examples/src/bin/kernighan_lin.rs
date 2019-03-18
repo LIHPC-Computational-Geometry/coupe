@@ -54,7 +54,8 @@ fn main() {
 
     let partition = Partition::from_ids(&points, &weights, ids);
 
-    let partition = coupe::KernighanLin::new(1, 2.).improve_partition(partition, adjacency.view());
+    let partition =
+        coupe::KernighanLin::new(1, 1, None, 1).improve_partition(partition, adjacency.view());
     let ids = partition.into_ids();
     println!("new partition = {:#?}", ids);
 

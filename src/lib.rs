@@ -801,22 +801,90 @@ where
 /// # Example
 ///
 /// ```rust
-/// use coupe::Point2D;
-/// use coupe::{TopologicPartitioner};
+/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::TopologicPartitionImprover;
+/// use coupe::partition::Partition;
+/// use sprs::CsMat;
 ///
-/// let points
+/// //    swap
+/// // 0  1  0  1
+/// // +--+--+--+
+/// // |  |  |  |
+/// // +--+--+--+
+/// // 0  0  1  1
+/// let points = vec![
+///      Point2D::new(0., 0.),
+///      Point2D::new(1., 0.),
+///      Point2D::new(2., 0.),
+///      Point2D::new(3., 0.),
+///      Point2D::new(0., 1.),
+///      Point2D::new(1., 1.),
+///      Point2D::new(2., 1.),
+///      Point2D::new(3., 1.),
+///  ];
+///  let id0 = ProcessUniqueId::new();
+///  let id1 = ProcessUniqueId::new();
+///
+///  let ids = vec![id0, id0, id1, id1, id0, id1, id0, id1];
+///  let weights = vec![1.; 8];
+///
+///  let mut partition = Partition::from_ids(&points, &weights, ids);
+///
+///  let mut adjacency = CsMat::empty(sprs::CSR, 8);
+///  adjacency.reserve_outer_dim(8);
+///  eprintln!("shape: {:?}", adjacency.shape());
+///  adjacency.insert(0, 1, 1.);
+///  adjacency.insert(1, 2, 1.);
+///  adjacency.insert(2, 3, 1.);
+///  adjacency.insert(4, 5, 1.);
+///  adjacency.insert(5, 6, 1.);
+///  adjacency.insert(6, 7, 1.);
+///  adjacency.insert(0, 4, 1.);
+///  adjacency.insert(1, 5, 1.);
+///  adjacency.insert(2, 6, 1.);
+///  adjacency.insert(3, 7, 1.);
+///  
+///  // symmetry
+///  adjacency.insert(1, 0, 1.);
+///  adjacency.insert(2, 1, 1.);
+///  adjacency.insert(3, 2, 1.);
+///  adjacency.insert(5, 4, 1.);
+///  adjacency.insert(6, 5, 1.);
+///  adjacency.insert(7, 6, 1.);
+///  adjacency.insert(4, 0, 1.);
+///  adjacency.insert(5, 1, 1.);
+///  adjacency.insert(6, 2, 1.);
+///  adjacency.insert(7, 3, 1.);
+///
+/// // 1 iteration
+/// let algo = coupe::KernighanLin::new(1, 1, None, 1);
+///
+/// let partition = algo.improve_partition(partition, adjacency.view());
+///
+/// let new_ids = partition.into_ids();
+/// assert_eq!(new_ids[5], id0);
+/// assert_eq!(new_ids[6], id1);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KernighanLin {
-    num_iter: usize,
-    max_imbalance_per_iter: f64,
+    max_passes: Option<usize>,
+    max_flips_per_pass: Option<usize>,
+    max_imbalance_per_flip: Option<f64>,
+    max_bad_move_in_a_row: usize,
 }
 
 impl KernighanLin {
-    pub fn new(num_iter: usize, max_imbalance_per_iter: f64) -> Self {
+    pub fn new(
+        max_passes: impl Into<Option<usize>>,
+        max_flips_per_pass: impl Into<Option<usize>>,
+        max_imbalance_per_flip: impl Into<Option<f64>>,
+        max_bad_move_in_a_row: usize,
+    ) -> Self {
         Self {
-            num_iter,
-            max_imbalance_per_iter,
+            max_passes: max_passes.into(),
+            max_flips_per_pass: max_flips_per_pass.into(),
+            max_imbalance_per_flip: max_imbalance_per_flip.into(),
+            max_bad_move_in_a_row,
         }
     }
 }
@@ -835,8 +903,10 @@ where
         crate::algorithms::kernighan_lin::kernighan_lin(
             &mut partition,
             adjacency,
-            self.num_iter,
-            self.max_imbalance_per_iter,
+            self.max_passes,
+            self.max_flips_per_pass,
+            self.max_imbalance_per_flip,
+            self.max_bad_move_in_a_row,
         );
         partition
     }
@@ -894,10 +964,19 @@ where
 ///  adjacency.insert(3, 7, 1.);
 ///  
 ///  // symmetry
-///  adjacency = &adjacency + &adjacency.transpose_view();
+///  adjacency.insert(1, 0, 1.);
+///  adjacency.insert(2, 1, 1.);
+///  adjacency.insert(3, 2, 1.);
+///  adjacency.insert(5, 4, 1.);
+///  adjacency.insert(6, 5, 1.);
+///  adjacency.insert(7, 6, 1.);
+///  adjacency.insert(4, 0, 1.);
+///  adjacency.insert(5, 1, 1.);
+///  adjacency.insert(6, 2, 1.);
+///  adjacency.insert(7, 3, 1.);
 ///
 /// // 1 iteration
-/// let algo = coupe::FiducciaMattheyses::new(1, 2.);
+/// let algo = coupe::FiducciaMattheyses::new(None, None, None, 1);
 ///
 /// let partition = algo.improve_partition(partition, adjacency.view());
 ///

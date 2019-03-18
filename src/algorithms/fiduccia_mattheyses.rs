@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use nalgebra::{allocator::Allocator, DefaultAllocator, DimName};
-use rayon::prelude::*;
 use sprs::CsMatView;
 
 use crate::partition::Partition;
