@@ -48,18 +48,16 @@ pub fn graph_growth(
             let id = initial_ids[i];
             if assigned[i] {
                 for (j, _w) in row.iter() {
-                    if !assigned[j] {
-                        if initial_ids[j] != id {
-                            let idx = unique_ids.iter().position(|el| *el == id).unwrap();
-                            if num_expansion[idx] > max_expansion_per_pass {
-                                break;
-                            }
-                            num_expansion[idx] += 1;
-                            initial_ids[j] = id;
-                            assigned[j] = true;
-                            remaining_nodes -= 1;
+                    if !assigned[j] && initial_ids[j] != id {
+                        let idx = unique_ids.iter().position(|el| *el == id).unwrap();
+                        if num_expansion[idx] > max_expansion_per_pass {
                             break;
                         }
+                        num_expansion[idx] += 1;
+                        initial_ids[j] = id;
+                        assigned[j] = true;
+                        remaining_nodes -= 1;
+                        break;
                     }
                 }
             }

@@ -32,7 +32,7 @@ pub(crate) fn kernighan_lin<'a, D>(
 
     let max_passes = max_passes.into();
     let max_flips_per_pass = max_flips_per_pass.into();
-    let max_imbalance_per_flip = max_imbalance_per_flip.into();
+    let _max_imbalance_per_flip = max_imbalance_per_flip.into();
     let (_points, weights, ids) = initial_partition.as_raw_mut();
 
     kernighan_lin_2_impl(
@@ -81,7 +81,7 @@ fn kernighan_lin_2_impl<D>(
         cut_size = new_cut_size;
 
         // let imbalance;
-        let mut num_bad_move = 0;
+        let num_bad_move = 0;
 
         let mut saves = Vec::new(); // flip save
         let mut cut_saves = Vec::new(); // cut size save
@@ -112,7 +112,7 @@ fn kernighan_lin_2_impl<D>(
                 .zip(locks.iter())
                 .zip(weights.iter())
                 .enumerate()
-                .filter(|(idx, ((_, locked), weight))| {
+                .filter(|(idx, ((_, locked), _weight))| {
                     initial_partition[*idx] == unique_ids[0] && !**locked
                 })
                 .map(|(idx, ((gain, _), _))| (idx, *gain))
@@ -134,7 +134,7 @@ fn kernighan_lin_2_impl<D>(
                 .zip(locks.iter())
                 .zip(weights.iter())
                 .enumerate()
-                .filter(|(idx, ((_, locked), weight))| {
+                .filter(|(idx, ((_, locked), _weight))| {
                     initial_partition[*idx] == unique_ids[1] && !**locked
                 })
                 .map(|(idx, ((gain, _), _))| (idx, *gain))
@@ -143,11 +143,9 @@ fn kernighan_lin_2_impl<D>(
 
             let total_gain = max_gain_1 + max_gain_2;
 
-            if total_gain <= 0. {
-                if num_bad_move >= max_bad_move_in_a_row {
-                    println!("readched max bad move in a row");
-                    break;
-                }
+            if total_gain <= 0. && num_bad_move >= max_bad_move_in_a_row {
+                println!("readched max bad move in a row");
+                break;
             }
 
             locks[max_pos_1] = true;
@@ -174,7 +172,7 @@ fn kernighan_lin_2_impl<D>(
             .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
             .unwrap();
 
-        dbg!(best_cut);
+        // dbg!(best_cut);
 
         // rewind swaps
         println!(
