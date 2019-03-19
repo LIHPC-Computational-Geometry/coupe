@@ -32,7 +32,7 @@ pub(crate) fn kernighan_lin<'a, D>(
 
     let max_passes = max_passes.into();
     let max_flips_per_pass = max_flips_per_pass.into();
-    let _max_imbalance_per_flip = max_imbalance_per_flip.into();
+    let max_imbalance_per_flip = max_imbalance_per_flip.into();
     let (_points, weights, ids) = initial_partition.as_raw_mut();
 
     kernighan_lin_2_impl(
@@ -41,6 +41,7 @@ pub(crate) fn kernighan_lin<'a, D>(
         ids,
         max_passes,
         max_flips_per_pass,
+        max_imbalance_per_flip,
         max_bad_move_in_a_row,
     );
 }
@@ -51,6 +52,7 @@ fn kernighan_lin_2_impl<D>(
     initial_partition: &mut [ProcessUniqueId],
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
+    _max_imbalance_per_flip: Option<f64>,
     max_bad_move_in_a_row: usize,
 ) where
     D: DimName,
@@ -91,9 +93,7 @@ fn kernighan_lin_2_impl<D>(
         let mut locks = vec![false; initial_partition.len()];
 
         // pass loop
-        for _ in 0..initial_partition
-            .len()
-            .min(max_flips_per_pass.unwrap_or(std::usize::MAX))
+        for _ in 0..(initial_partition.len() / 2).min(max_flips_per_pass.unwrap_or(std::usize::MAX))
         {
             // construct gains
             for (idx, gain) in gains.iter_mut().enumerate() {
@@ -172,21 +172,16 @@ fn kernighan_lin_2_impl<D>(
             .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
             .unwrap();
 
-        // dbg!(best_cut);
-
         // rewind swaps
         println!(
             "rewinding flips from pos {} to pos {}",
             best_pos + 1,
             cut_saves.len()
         );
-        for i in best_pos + 1..cut_saves.len() {
-            let ((idx_1, _), (idx_2, _)) = saves[i];
-            initial_partition.swap(idx_1, idx_2);
 
-            // revert weight change
-            // *parts_weights.get_mut(&ids_before_flip[i]).unwrap() += weights[idx];
-            // *parts_weights.get_mut(&saves[i].1).unwrap() += weights[idx];
+        for save in saves[best_pos + 1..cut_saves.len()].iter() {
+            let ((idx_1, _), (idx_2, _)) = *save;
+            initial_partition.swap(idx_1, idx_2);
         }
 
         new_cut_size = best_cut;
