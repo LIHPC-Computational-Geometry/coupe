@@ -798,6 +798,15 @@ where
 
 /// KernighanLin algorithm
 ///
+/// An implementation of the Kernighan Lin topologic algorithm
+/// for graph partitioning. The current implementation currently only handles
+/// partitioning a graph into two parts, as described in the original algorithm in
+/// "An efficient heuristic procedure for partitioning graphs" by W. Kernighan and S. Lin.
+///
+/// The algorithms repeats an iterative pass during which several pairs of nodes have
+/// their part assignment swapped in order to reduce the cutsize of the partition.
+/// If all the nodes are equally weighted, the algorithm preserves the partition balance.
+///
 /// # Example
 ///
 /// ```rust
@@ -915,7 +924,17 @@ where
 /// FiducciaMattheyses
 ///
 /// An implementation of the Fiduccia Mattheyses topologic algorithm
-/// for graph partitioning.
+/// for graph partitioning. This implementation is an extension of the
+/// original algorithm to handle partitioning into more than two parts.
+///
+/// This algorithm repeats an iterative pass during which a set of graph nodes are assigned to
+/// a new part, reducing the overall cutsize of the partition. As opposed to the
+/// Kernighan-Lin algorithm, during each pass iteration, only one node is flipped at a time.
+/// The algorithm thus does not preserve partition weights balance and may produce an unbalanced
+/// partition.
+///
+/// Original algorithm from "A Linear-Time Heuristic for Improving Network Partitions"
+/// by C.M. Fiduccia and R.M. Mattheyses.
 ///
 /// # Example
 ///

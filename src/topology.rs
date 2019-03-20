@@ -15,8 +15,8 @@ use sprs::{CsMat, CsMatView, TriMat};
 /// A partition with two parts (0 and 1)
 /// ```ignore
 ///          0
-///    1*──┆─*────* 0          
-///    ╱ ╲ ┆╱    ╱           
+///    1*──┆─*────* 0
+///    ╱ ╲ ┆╱    ╱     
 ///  1*  1*┆ <┈┈╱┈┈┈ Dotted line passes through edged that contribute to cutsize.         
 ///    ╲ ╱ ┆   ╱     If all edges have a weight of 1 then cutsize = 3         
 ///    1*  ┆╲ ╱            
@@ -58,12 +58,10 @@ pub fn adjacency_matrix(conn: CsMatView<u32>, num_common_nodes: u32) -> CsMat<f6
     // currently this matmul operation is very slow
     let graph = &conn * &conn.transpose_view();
 
-    // let mut ret = CsMat::zero(graph.shape());
     let nnz = graph
         .iter()
         .filter(|(n, _)| **n == num_common_nodes)
         .count();
-    // ret.reserve_nnz(nnz);
 
     let mut row_nnz = Vec::with_capacity(nnz);
     let mut col_nnz = Vec::with_capacity(nnz);
