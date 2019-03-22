@@ -58,6 +58,7 @@ use crate::PointND;
 ///     assert_ulps_eq!(part.total_weight(), 3.)
 /// }
 /// ```
+#[derive(Clone)]
 pub struct Partition<'a, P, W> {
     points: &'a [P],
     weights: &'a [W],
