@@ -1050,6 +1050,99 @@ where
     }
 }
 
+/// Graph Growth algorithm
+///
+/// A topologic algorithm that generates a partition from a topologic mesh.
+/// Given a number k of parts, the algorithm selects k nodes randomly and assigns them to a different part.
+/// Then, at each iteration, each part is expanded to neighbor nodes that are not yet assigned to a part
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::TopologicPartitioner;
+/// use coupe::partition::Partition;
+/// use sprs::CsMat;
+///
+/// // +--+--+--+
+/// // |  |  |  |
+/// // +--+--+--+
+///
+/// let points = vec![
+///      Point2D::new(0., 0.),
+///      Point2D::new(1., 0.),
+///      Point2D::new(2., 0.),
+///      Point2D::new(3., 0.),
+///      Point2D::new(0., 1.),
+///      Point2D::new(1., 1.),
+///      Point2D::new(2., 1.),
+///      Point2D::new(3., 1.),
+///  ];
+///
+///  let weights = vec![1.; 8];
+///
+///  let mut adjacency = CsMat::empty(sprs::CSR, 8);
+///  adjacency.reserve_outer_dim(8);
+///  eprintln!("shape: {:?}", adjacency.shape());
+///  adjacency.insert(0, 1, 1.);
+///  adjacency.insert(1, 2, 1.);
+///  adjacency.insert(2, 3, 1.);
+///  adjacency.insert(4, 5, 1.);
+///  adjacency.insert(5, 6, 1.);
+///  adjacency.insert(6, 7, 1.);
+///  adjacency.insert(0, 4, 1.);
+///  adjacency.insert(1, 5, 1.);
+///  adjacency.insert(2, 6, 1.);
+///  adjacency.insert(3, 7, 1.);
+///  
+///  // symmetry
+///  adjacency.insert(1, 0, 1.);
+///  adjacency.insert(2, 1, 1.);
+///  adjacency.insert(3, 2, 1.);
+///  adjacency.insert(5, 4, 1.);
+///  adjacency.insert(6, 5, 1.);
+///  adjacency.insert(7, 6, 1.);
+///  adjacency.insert(4, 0, 1.);
+///  adjacency.insert(5, 1, 1.);
+///  adjacency.insert(6, 2, 1.);
+///  adjacency.insert(7, 3, 1.);
+///
+/// let gg = coupe::GraphGrowth::new(2);
+///
+/// let _partition = gg.partition(points.as_slice(), &weights, adjacency.view());
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct GraphGrowth {
+    num_partitions: usize,
+}
+
+impl GraphGrowth {
+    pub fn new(num_partitions: usize) -> Self {
+        Self { num_partitions }
+    }
+}
+
+impl<D> TopologicPartitioner<D> for GraphGrowth
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+        adjacency: CsMatView<f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        let ids = crate::algorithms::graph_growth::graph_growth(
+            weights,
+            adjacency.view(),
+            self.num_partitions,
+        );
+        Partition::from_ids(points.to_points_nd(), weights, ids)
+    }
+}
+
 /// # Represents the composition algorithm.
 ///
 /// This structure is created by calling the [`compose`](trait.Compose.html#tymethod.compose)

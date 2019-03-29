@@ -295,8 +295,8 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .iter()
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
-    // let stacked = sprs::vstack(&views);
-    let points = views[1] // <------ WTH is this? what's inside views[0]?
+
+    let points = views[1]
         .outer_iterator()
         .map(|conn| {
             conn.iter().fold(Point2D::new(0., 0.), |acc, (j, _)| {
@@ -336,10 +336,6 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for max_bad_move_in_a_row");
 
-    // let mut k_means = coupe::KMeans::default();
-    // k_means.num_partitions = 2;
-    // k_means.imbalance_tol = 5.;
-    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
     let algo = coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::KernighanLin::new(
         max_passes,
         max_flips_per_pass,
@@ -355,7 +351,6 @@ fn kernighan_lin<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         let part = points
             .iter()
             .cloned()
-            // .zip(partition.ids().iter().cloned())
             .zip(ids.iter().cloned())
             .collect::<Vec<_>>();
         examples::plot_partition(part);
@@ -388,8 +383,8 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .iter()
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
-    // let stacked = sprs::vstack(&views);
-    let points = views[1] // <------ WTH is this? what's inside views[0]?
+
+    let points = views[1]
         .outer_iterator()
         .map(|conn| {
             conn.iter().fold(Point2D::new(0., 0.), |acc, (j, _)| {
@@ -429,21 +424,12 @@ fn fiduccia_mattheyses<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .parse()
         .expect("wrong value for max_bad_move_in_a_row");
 
-    // let rcb = coupe::Rib::new(3);
-    // let mut k_means = coupe::KMeans::default();
-    // k_means.num_partitions = num_partitions;
-    // k_means.imbalance_tol = 5.;
-    // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
-    let algo = coupe::HilbertCurve::new(num_partitions, 4)
-        // .compose(k_means)
-        // .compose(multi_jagged)
-        .compose(coupe::FiducciaMattheyses::new(
-            max_passes,
-            max_flips_per_pass,
-            max_imbalance_per_flip,
-            max_bad_move_in_a_row,
-        ));
+    let algo = coupe::HilbertCurve::new(num_partitions, 4).compose(coupe::FiducciaMattheyses::new(
+        max_passes,
+        max_flips_per_pass,
+        max_imbalance_per_flip,
+        max_bad_move_in_a_row,
+    ));
 
     let partition = algo.partition(points.as_slice(), weights.as_slice(), adjacency.view());
 
@@ -488,8 +474,8 @@ fn graph_grow<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .iter()
         .map(|mat| mat.view())
         .collect::<Vec<_>>();
-    // let stacked = sprs::vstack(&views);
-    let points = views[1] // <------ WTH is this? what's inside views[0]?
+
+    let points = views[1]
         .outer_iterator()
         .map(|conn| {
             conn.iter().fold(Point2D::new(0., 0.), |acc, (j, _)| {
@@ -505,44 +491,16 @@ fn graph_grow<'a>(mesh: &MeditMesh, matches: &ArgMatches<'a>) {
         .map(|_| 1.)
         .collect::<Vec<_>>();
 
-    // let num_iter = matches
-    //     .value_of("num_iter")
-    //     .unwrap_or_default()
-    //     .parse()
-    //     .expect("wrong value for num_iter");
-
     let num_partitions = matches
         .value_of("num_partitions")
         .unwrap_or_default()
         .parse::<usize>()
         .expect("wrong value for num_partitions");
 
-    // let rcb = coupe::Rib::new(3);
-    // let mut k_means = coupe::KMeans::default();
-    // k_means.num_partitions = num_partitions;
-    // k_means.imbalance_tol = 5.;
-    // // let algo = coupe::HilbertCurve::new(2, 4).compose(k_means);
-    // // let multi_jagged = coupe::MultiJagged::new(num_partitions, 3);
-    // let algo =
-    //     // multi_jagged
-    //     // rcb
-    //     coupe::HilbertCurve::new(num_partitions, 4)
-    //     .compose(k_means)
-    //     // .compose(multi_jagged)
-    //     .compose(coupe::FiducciaMattheyses::new(
-    //         max_passes,
-    //         max_flips_per_pass,
-    //         max_imbalance_per_flip,
-    //         max_bad_move_in_a_row,
-    //     ));
+    let gg = coupe::GraphGrowth::new(num_partitions);
 
-    let ids = coupe::algorithms::graph_growth::graph_growth(
-        weights.as_slice(),
-        adjacency.view(),
-        num_partitions,
-    );
+    let partition = gg.partition(points.as_slice(), &weights, adjacency.view());
 
-    let partition = coupe::partition::Partition::from_ids(&points, &weights, ids);
     println!("imbalance: {}", partition.max_imbalance());
     let ids = partition.into_ids();
 
