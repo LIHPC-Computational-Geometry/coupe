@@ -68,7 +68,7 @@ fn main() {
     let now = std::time::Instant::now();
     let partition = algo.partition(points.as_slice(), &weights);
     let end = now.elapsed();
-    println!("elapsed in multi-jagged: {:?}", end);
+    println!("elapsed in balanced_k_means: {:?}", end);
 
     let max_imbalance = partition.max_imbalance();
     let relative_imbalance = partition.relative_imbalance();
