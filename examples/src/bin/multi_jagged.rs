@@ -45,7 +45,7 @@ fn main() {
     let mut aspect_ratios = partition
         .parts()
         .map(|part| part.aspect_ratio())
-        .collect::<Vec<_>>();;
+        .collect::<Vec<_>>();
     aspect_ratios
         .as_mut_slice()
         .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
