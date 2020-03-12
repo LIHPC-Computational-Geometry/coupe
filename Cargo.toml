@@ -24,13 +24,13 @@ members = [
 [dependencies]
 approx = "0.3.0"
 itertools = "0.7.8"
-nalgebra = "0.16.8"
+nalgebra = "0.20"
 ndarray = "0.12.1"
 num = "0.2.0"
 rayon = "1.0.3"
 rand = "0.6.5"
 snowflake = "1.3"
-sprs = "0.6"
+sprs = "0.7"
 
 [dev-dependencies]
 criterion = "0.2.5"
