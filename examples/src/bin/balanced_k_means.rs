@@ -2,7 +2,7 @@ use clap::load_yaml;
 use clap::App;
 use coupe::geometry::Point2D;
 use coupe::{Compose, Partitioner};
-use coupe::{HilbertCurve, KMeans, KMeansBuilder};
+use coupe::{HilbertCurve, KMeansBuilder};
 
 fn main() {
     let yaml = load_yaml!("../../balanced_k_means.yml");

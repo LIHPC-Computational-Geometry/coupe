@@ -6,7 +6,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
 
-use rayon;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 

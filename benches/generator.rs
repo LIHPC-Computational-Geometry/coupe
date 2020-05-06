@@ -36,4 +36,5 @@ pub fn already_x_sorted_rectangle(
             p1.x.partial_cmp(&p2.x)
                 .unwrap_or(::std::cmp::Ordering::Equal)
         })
+        .collect()
 }

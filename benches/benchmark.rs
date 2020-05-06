@@ -23,7 +23,7 @@ fn bench_axis_sort_random(c: &mut Criterion) {
 
             b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -39,7 +39,7 @@ fn bench_raw_pdqsort_random(c: &mut Criterion) {
                 });
             })
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -55,7 +55,7 @@ fn bench_parallel_raw_pdqsort_random(c: &mut Criterion) {
                 });
             })
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -74,7 +74,7 @@ fn bench_raw_pdqsort_sorted(c: &mut Criterion) {
                 });
             })
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -93,7 +93,7 @@ fn bench_parallel_raw_pdqsort_sorted(c: &mut Criterion) {
                 });
             })
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -109,7 +109,7 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
             let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
             b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -125,7 +125,7 @@ fn bench_rcb_random(c: &mut Criterion) {
             let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
             b.iter(|| rcb(&sample_points, &weights, NUM_ITER))
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 
@@ -151,7 +151,7 @@ fn bench_simplified_k_means(c: &mut Criterion) {
                 )
             })
         })
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u32)),
+        .throughput(Throughput::Elements(SAMPLE_SIZE as u64)),
     );
 }
 

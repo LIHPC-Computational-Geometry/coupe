@@ -93,7 +93,7 @@ impl<'a, D> PointsView<'a, D> for ArrayView1<'a, f64> {
         D: DimName,
         DefaultAllocator: Allocator<f64, D>,
     {
-        let slice = self.into_slice().expect(
+        let slice = self.to_slice().expect(
             "Cannot convert an ArrayView1 with dicontiguous storage repr to a slice. Try cloning the data into a contiguous array first"
         );
         slice.to_points_nd()
@@ -106,7 +106,7 @@ impl<'a, D> PointsView<'a, D> for ArrayView2<'a, f64> {
         D: DimName,
         DefaultAllocator: Allocator<f64, D>,
     {
-        let slice = self.into_slice().expect(
+        let slice = self.to_slice().expect(
             "Cannot convert an ArrayView2 with dicontiguous storage repr to a slice. Try cloning the data into a contiguous array first"
         );
         slice.to_points_nd()
