@@ -16,11 +16,6 @@ geometric and topologic algorithms.
 keywords = ["mesh", "partitioning"]
 autobenches = false
 
-[workspace]
-members = [
-    "examples"
-]
-
 [dependencies]
 approx = "0.3"
 itertools = "0.9"
