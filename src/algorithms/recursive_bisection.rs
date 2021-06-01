@@ -31,11 +31,9 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
 {
     let len = weights.len();
-    let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
+    let mut permutation = (0..len).into_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
-    let mut initial_partition = rayon::iter::repeat(initial_id)
-        .take(len)
-        .collect::<Vec<_>>();
+    let mut initial_partition = vec![initial_id; len];
 
     rcb_recurse(
         &points,

@@ -10,7 +10,6 @@ use nalgebra::U1;
 use sprs::CsMatView;
 
 use num::{Num, Signed};
-use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp::PartialOrd;
@@ -81,10 +80,7 @@ impl<'a, P, W> Partition<'a, P, W> {
 
         // allocate a new vector
         let dummy_id = ProcessUniqueId::new();
-        let ids = (0..points.len())
-            .into_par_iter()
-            .map(|_| dummy_id)
-            .collect();
+        let ids = vec![dummy_id; points.len()];
 
         Self {
             points,
@@ -457,9 +453,9 @@ pub struct PartIter<'a, P, W> {
 impl<'a, P, W> Iterator for PartIter<'a, P, W> {
     type Item = (&'a P, &'a W);
     fn next(&mut self) -> Option<Self::Item> {
-        self.indices.get(0).and_then(|idx| {
+        self.indices.get(0).map(|idx| {
             self.indices = &self.indices[1..];
-            Some((&self.partition.points[*idx], &self.partition.weights[*idx]))
+            (&self.partition.points[*idx], &self.partition.weights[*idx])
         })
     }
 }
