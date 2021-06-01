@@ -40,10 +40,7 @@ pub fn hilbert_curve_partition(
     let modifiers = vec![1. / num_partitions as f64; num_partitions];
 
     let initial_id = ProcessUniqueId::new();
-    let mut partition = permutation
-        .par_iter()
-        .map(|_| initial_id)
-        .collect::<Vec<_>>();
+    let mut partition = vec![initial_id; points.len()];
 
     let split_positions = super::multi_jagged::compute_split_positions(
         weights,
