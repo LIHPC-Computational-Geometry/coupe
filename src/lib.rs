@@ -32,6 +32,7 @@
 pub mod algorithms;
 pub mod geometry;
 pub mod partition;
+mod real;
 pub mod topology;
 
 #[cfg(test)]
@@ -41,6 +42,7 @@ mod tests;
 
 // SUBMODULES REEXPORT
 pub use crate::geometry::{Point2D, Point3D, PointND};
+pub use crate::real::Real;
 pub use snowflake::ProcessUniqueId;
 
 pub mod dimension {
