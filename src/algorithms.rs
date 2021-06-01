@@ -1,8 +1,12 @@
+pub mod ckk;
 pub mod fiduccia_mattheyses;
 pub mod graph_growth;
+pub mod greedy;
 pub mod hilbert_curve;
 pub mod k_means;
 pub mod kernighan_lin;
+pub mod kk;
 pub mod multi_jagged;
 pub mod recursive_bisection;
+pub mod vn;
 pub mod z_curve;
