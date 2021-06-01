@@ -55,7 +55,8 @@ where
     let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
         order <= max_order,
-        format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
+        "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
+        max_order,
     );
 
     // Mbr used to construct Point hashes
@@ -162,7 +163,8 @@ where
     let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
     assert!(
         order <= max_order,
-        format!("Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity", max_order)
+        "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
+        max_order,
     );
 
     let mut permu: Vec<_> = (0..points.len()).into_par_iter().collect();

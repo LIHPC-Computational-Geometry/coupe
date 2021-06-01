@@ -125,19 +125,15 @@ fn encode(x: u32, y: u32, order: usize) -> u32 {
     );
     assert!(
         x < 2u32.pow(order as u32),
-        format!(
-            "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
-            (x, y),
-            order
-        )
+        "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
+        (x, y),
+        order,
     );
     assert!(
         y < 2u32.pow(order as u32),
-        format!(
-            "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
-            (x, y),
-            order
-        )
+        "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
+        (x, y),
+        order,
     );
 
     let mask = (1 << order) - 1;
@@ -186,19 +182,15 @@ fn interleave_bits(odd: u32, even: u32) -> u32 {
 fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn(f64) -> f64 {
     assert!(
         a_min <= a_max,
-        format!(
-            "Cannot construct a segment to segment mapping because a_max < a_min. a_min = {}, a_max = {}.",
-            a_min,
-            a_max
-        )
+        "Cannot construct a segment to segment mapping because a_max < a_min. a_min = {}, a_max = {}.",
+        a_min,
+        a_max,
     );
     assert!(
         b_min <= b_max,
-        format!(
-            "Cannot construct a segment to segment mapping because b_max < b_min. b_min = {}, b_max = {}.",
-            b_min,
-            b_max
-        )
+        "Cannot construct a segment to segment mapping because b_max < b_min. b_min = {}, b_max = {}.",
+        b_min,
+        b_max,
     );
 
     let da = a_min - a_max;
@@ -209,10 +201,12 @@ fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn
     move |x| {
         assert!(
             a_min <= x && x <= a_max,
-            format!(
-                "Called a mapping from [{}, {}] to [{}, {}] with the invalid value {}.",
-                a_min, a_max, b_min, b_max, x
-            )
+            "Called a mapping from [{}, {}] to [{}, {}] with the invalid value {}.",
+            a_min,
+            a_max,
+            b_min,
+            b_max,
+            x,
         );
         alpha * x + beta
     }
