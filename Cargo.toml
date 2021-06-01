@@ -30,6 +30,7 @@ sprs = "0.7"
 [dev-dependencies]
 criterion = "0.3"
 gnuplot = "0.0.35"
+proptest = { version = "1.0.0", default-features = false, features = ["std", "timeout"] }
 
 [[bench]]
 name = "benchmark"

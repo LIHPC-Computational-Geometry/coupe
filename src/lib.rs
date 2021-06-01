@@ -4,33 +4,32 @@
 //!
 //! Coupe exposes each algorithm with a struct that implements a trait. There are currently two traits available:
 //!
-//! - [`Partitioner`] represents an algorithm that will generate a partition given a set of geometric points and weights.
-//! - [`PartitionImprover`] represents an algorithm that will improve an existing partition (previously generated with a [`Partitioner`]).
+//! - A [`Partitioner`] represents an algorithm that will generate a partition given a set of geometric points and weights.
+//! - A [`PartitionImprover`] represents an algorithm that will improve an existing partition (previously generated with a [`Partitioner`]).
 //!
 //! # Available algorithms
 //!
 //! ## Partitioner algorithms
+//!
 //! - Space filling curves:
-//!   + [`Z-curve`]
-//!   + [`Hilbert curve`]
-//! - [`Rcb`]: Recursive Coordinate Bisection
-//! - [`Rib`]: Recursive Inertial Bisection
-//! - [`Multi jagged`]
+//!   + [Z-curve][ZCurve]
+//!   + [Hilbert curve][HilbertCurve]
+//! - [Recursive Coordinate Bisection][Rcb]
+//! - [Recursive Inertial Bisection][Rib]
+//! - [Multi jagged][MultiJagged]
+//! - Number partitioning:
+//!   + [Greedy][Greedy]
+//!   + [Karmarkar-Karp][KarmarkarKarp] and its [complete][CompleteKarmarkarKarp] version
 //!
 //! ## Partition improving algorithms
-//! - [`KMeans`]
 //!
-//! [`Partitioner`]: trait.Partitioner.html
-//! [`PartitionImprover`]: trait.PartitionImprover.html
-//! [`Z-curve`]: struct.ZCurve.html
-//! [`Hilbert curve`]: struct.HilbertCurve.html
-//! [`Rcb`]: struct.Rcb.html
-//! [`Rib`]: struct.Rib.html
-//! [`Multi jagged`]: struct.MultiJagged.html
-//! [`KMeans`]: struct.KMeans.html
+//! - [K-means][KMeans]
+//! - Number partitioning:
+//!   + [VN-Best][VnBest]
 
 pub mod algorithms;
 pub mod geometry;
+pub mod imbalance;
 pub mod partition;
 mod real;
 mod run_info;
@@ -563,6 +562,272 @@ impl Partitioner<U2> for HilbertCurve {
         );
 
         Partition::from_ids(points, _weights, ids)
+    }
+}
+
+use std::cell::RefCell;
+
+/// Map mesh elements to partitions randomly.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partitioner;
+/// use coupe::Point2D;
+/// use coupe::Random;
+/// use rand;
+///
+/// let num_parts = 3;
+/// let points: &[Point2D] = &[Point2D::new(1., 0.), Point2D::new(0., 1.)];
+///
+/// let r = Random::new(rand::thread_rng(), num_parts);
+/// r.partition(points, &[1., 1.]);
+/// ```
+pub struct Random<R> {
+    rng: RefCell<R>,
+    num_parts: usize,
+}
+
+impl<R> Random<R> {
+    pub fn new(rng: R, num_parts: usize) -> Random<R> {
+        Random {
+            rng: RefCell::new(rng),
+            num_parts,
+        }
+    }
+}
+
+impl<D, R> Partitioner<D> for Random<R>
+where
+    R: rand::Rng,
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let mut rng = self.rng.borrow_mut();
+        let part_ids: Vec<_> = (0..self.num_parts)
+            .map(|_| ProcessUniqueId::new())
+            .collect();
+        let ids = (0..weights.len())
+            .map(|_| {
+                let i = rng.gen_range(0, self.num_parts);
+                part_ids[i]
+            })
+            .collect();
+        Partition::from_ids(points.to_points_nd(), weights, ids)
+    }
+}
+
+/// Greedily assign weights to each part.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partitioner;
+/// use coupe::Point2D;
+/// use coupe::Greedy;
+///
+/// let num_parts = 3;
+/// let points: &[Point2D] = &[Point2D::new(1., 0.), Point2D::new(0., 1.)];
+///
+/// let g = Greedy::new(num_parts);
+/// g.partition(points, &[1., 1.]);
+/// ```
+pub struct Greedy {
+    num_parts: usize,
+}
+
+impl Greedy {
+    pub fn new(num_parts: usize) -> Greedy {
+        Greedy { num_parts }
+    }
+}
+
+impl<D> Partitioner<D> for Greedy
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let mut partition = vec![0; weights.len()];
+        {
+            let weights = weights.iter().map(Real::from);
+            algorithms::greedy::greedy(&mut partition, weights, self.num_parts);
+        }
+        let part_ids: Vec<_> = (0..self.num_parts)
+            .map(|_| ProcessUniqueId::new())
+            .collect();
+        let ids = partition
+            .into_iter()
+            .map(|part_id| part_ids[part_id])
+            .collect();
+        Partition::from_ids(points.to_points_nd(), weights, ids)
+    }
+}
+
+/// The Karmarkar-Karp algorithm, also called the Largest Differencing Method.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partitioner;
+/// use coupe::Point2D;
+/// use coupe::KarmarkarKarp;
+///
+/// let num_parts = 3;
+/// let points: &[Point2D] = &[Point2D::new(1., 0.), Point2D::new(0., 1.)];
+///
+/// let kk = KarmarkarKarp::new(num_parts);
+/// kk.partition(points, &[1., 1.]);
+/// ```
+pub struct KarmarkarKarp {
+    num_parts: usize,
+}
+
+impl KarmarkarKarp {
+    pub fn new(num_parts: usize) -> KarmarkarKarp {
+        KarmarkarKarp { num_parts }
+    }
+}
+
+impl<D> Partitioner<D> for KarmarkarKarp
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let mut partition = vec![0; weights.len()];
+        {
+            let weights = weights.iter().map(Real::from);
+            algorithms::kk::kk(&mut partition, weights, 2);
+        }
+        let part_ids: Vec<_> = (0..self.num_parts)
+            .map(|_| ProcessUniqueId::new())
+            .collect();
+        let ids = partition
+            .into_iter()
+            .map(|part_id| part_ids[part_id])
+            .collect();
+        Partition::from_ids(points.to_points_nd(), weights, ids)
+    }
+}
+
+/// The exact variant of the [Karmarkar-Karp][KarmarkarKarp] algorithm.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partitioner;
+/// use coupe::Point2D;
+/// use coupe::CompleteKarmarkarKarp;
+///
+/// let tolerance = 0.1;
+/// let points: &[Point2D] = &[Point2D::new(1., 0.), Point2D::new(0., 1.)];
+///
+/// let ckk = CompleteKarmarkarKarp::new(tolerance);
+/// ckk.partition(points, &[1., 1.]);
+/// ```
+pub struct CompleteKarmarkarKarp {
+    tolerance: f64,
+}
+
+impl CompleteKarmarkarKarp {
+    pub fn new(tolerance: f64) -> CompleteKarmarkarKarp {
+        CompleteKarmarkarKarp { tolerance }
+    }
+}
+
+impl<D> Partitioner<D> for CompleteKarmarkarKarp
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn partition<'a>(
+        &self,
+        points: impl PointsView<'a, D>,
+        weights: &'a [f64],
+    ) -> Partition<'a, PointND<D>, f64> {
+        let mut partition = vec![0; weights.len()];
+        {
+            let weights = weights.iter().map(Real::from);
+            algorithms::ckk::ckk_bipart(&mut partition, weights, self.tolerance);
+        }
+        let first_part = ProcessUniqueId::new();
+        let second_part = ProcessUniqueId::new();
+        let ids = partition
+            .into_iter()
+            .map(|part| if part == 0 { first_part } else { second_part })
+            .collect();
+        Partition::from_ids(points.to_points_nd(), weights, ids)
+    }
+}
+
+/// Greedy Vector-of-Numbers algorithms.
+///
+/// This algorithm greedily moves weights from parts to parts in such a way that
+/// the imbalance gain is maximized on each step.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partitioner;
+/// use coupe::PartitionImprover;
+/// use coupe::Point2D;
+/// use coupe::Random;
+/// use coupe::VnBest;
+/// use rand;
+///
+/// let num_parts = 3;
+/// let points: &[Point2D] = &[Point2D::new(1., 0.), Point2D::new(0., 1.)];
+///
+/// let r = Random::new(rand::thread_rng(), num_parts);
+/// let partition = r.partition(points, &[1., 1.]);
+/// let vn = VnBest::new(num_parts);
+/// vn.improve_partition(partition);
+/// ```
+pub struct VnBest {
+    num_parts: usize,
+}
+
+impl VnBest {
+    pub fn new(num_parts: usize) -> VnBest {
+        VnBest { num_parts }
+    }
+}
+
+impl<D> PartitionImprover<D> for VnBest
+where
+    D: DimName,
+    DefaultAllocator: Allocator<f64, D>,
+{
+    fn improve_partition<'a>(
+        &self,
+        partition: Partition<'a, PointND<D>, f64>,
+    ) -> Partition<'a, PointND<D>, f64> {
+        let (points, weights, ids) = partition.into_raw();
+        let mut used_ids = ids.clone();
+        used_ids.sort_unstable();
+        used_ids.dedup();
+        let mut ids: Vec<usize> = ids
+            .into_iter()
+            .map(|id| used_ids.iter().position(|uid| uid == &id).unwrap())
+            .collect();
+        let weights_real: Vec<Real> = weights.iter().map(|w| Real::from(*w)).collect();
+        algorithms::vn::best::vn_best_mono(&mut ids, &weights_real, self.num_parts);
+        let ids = ids.into_iter().map(|part_id| used_ids[part_id]).collect();
+        Partition::from_ids(points, weights, ids)
     }
 }
 
