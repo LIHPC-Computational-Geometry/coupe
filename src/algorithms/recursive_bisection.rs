@@ -1,4 +1,5 @@
-use crate::geometry::*;
+use crate::geometry::Mbr;
+use crate::geometry::PointND;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
@@ -10,112 +11,124 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
-use std::sync::atomic::{self, AtomicPtr};
 
-/// # Recursive Coordinate Bisection algorithm
-/// Partitions a mesh based on the nodes coordinates and coresponding weights.
-/// ## Inputs
-/// - `ids`: global identifiers of the objects to partition
-/// - `weights`: weights corsponding to a cost relative to the objects
-/// - `coordinates`: the N-D coordinates of the objects to partition
-///
-/// ## Output
-/// A Vec of couples `(usize, ProcessUniqueId)`
-///
-/// the first component of each couple is the id of an object and
-/// the second component is the id of the partition to which that object was assigned
+fn rcb_recurse<const D: usize>(
+    points: &[PointND<D>],
+    weights: &[f64],
+    n_iter: usize,
+    partition: &mut Vec<ProcessUniqueId>,
+    current_part: ProcessUniqueId,
+    current_coord: usize,
+    tolerance: f64,
+) {
+    if n_iter == 0 {
+        return;
+    }
+
+    let sum: f64 = weights
+        .par_iter()
+        .zip(partition.as_slice())
+        .filter(|(_weight, weight_part)| **weight_part == current_part)
+        .map(|(weight, _weight_part)| *weight)
+        .sum();
+
+    let max_imbalance = tolerance * sum;
+
+    let (min, max) = points
+        .par_iter()
+        .zip(partition.as_slice())
+        .filter(|(_point, point_part)| **point_part == current_part)
+        .map(|(point, _point_part)| point[current_coord])
+        .fold(
+            || (f64::INFINITY, f64::NEG_INFINITY),
+            |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
+        )
+        .reduce(
+            || (f64::INFINITY, f64::NEG_INFINITY),
+            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
+        );
+
+    let mut split_min = min;
+    let mut split_max = max;
+    let mut split_target = (split_max + split_min) / 2.0;
+
+    while max_imbalance < split_max - split_min {
+        let (weight_left, weight_right) = weights
+            .par_iter()
+            .zip(points)
+            .enumerate()
+            // TODO zip
+            .filter(|(weight_id, (_, _))| partition[*weight_id] == current_part)
+            .map(|(_id, (weight, point))| {
+                let point = point[current_coord];
+                if point < split_target {
+                    (*weight, 0.0)
+                } else {
+                    (0.0, *weight)
+                }
+            })
+            .reduce(
+                || (0.0, 0.0),
+                |(weight_left0, weight_right0), (weight_left1, weight_right1)| {
+                    (weight_left0 + weight_left1, weight_right0 + weight_right1)
+                },
+            );
+
+        let imbalance = f64::abs(weight_left - weight_right);
+        if imbalance < max_imbalance {
+            break;
+        }
+
+        if weight_left < weight_right {
+            split_min = split_target;
+        } else {
+            split_max = split_target;
+        }
+        split_target = (split_max + split_min) / 2.0;
+    }
+
+    let new_part = ProcessUniqueId::new();
+    partition
+        .par_iter_mut()
+        .zip(points)
+        .filter(|(point_part, point)| {
+            **point_part == current_part && point[current_coord] < split_target
+        })
+        .for_each(|(point_part, _point)| *point_part = new_part);
+
+    let next_coord = (current_coord + 1) % D::dim();
+    rcb_recurse(
+        points,
+        weights,
+        n_iter - 1,
+        partition,
+        current_part,
+        next_coord,
+        tolerance,
+    );
+    rcb_recurse(
+        points,
+        weights,
+        n_iter - 1,
+        partition,
+        new_part,
+        next_coord,
+        tolerance,
+    );
+}
+
 pub fn rcb<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
     let len = weights.len();
-    let mut permutation = (0..len).into_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
-    let mut initial_partition = vec![initial_id; len];
+    let mut partition = vec![initial_id; len];
 
-    rcb_recurse(
-        points,
-        weights,
-        &mut permutation,
-        &AtomicPtr::new(initial_partition.as_mut_ptr()),
-        n_iter,
-        0,
-    );
-    initial_partition
-}
+    rcb_recurse(points, weights, n_iter, &mut partition, initial_id, 0, 0.05);
 
-pub fn rcb_recurse<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    permutation: &mut [usize],
-    partition: &AtomicPtr<ProcessUniqueId>,
-    n_iter: usize,
-    current_coord: usize,
-) {
-    if n_iter == 0 {
-        // No iteration left. The current
-        // ids become a part of the final partition.
-        // Generate a partition id and return.
-        let part_id = ProcessUniqueId::new();
-        permutation.par_iter().for_each(|idx| {
-            let ptr = partition.load(atomic::Ordering::Relaxed);
-
-            // Unsafe usage explanation:
-            //
-            // In this implementation, the partition is represented as
-            // a contiguous array of ids. It is allocated once, and modified in place.
-            // Neither the array nor a slice of it is ever copied. When recursing, a pointer to
-            // the array is passed to children functions, which both have mutable access to the
-            // partition array from different threads (That's why the pointer is wrapped in a
-            // Arc<AtomicPtr<T>>). It is not possible to have shared mutable access to memory
-            // across (one/several) threads in safe code. However, the raw pointer is indexed
-            // through the permutation array which contains valid indices and is not shared across
-            // children calls/threads. This ensures that ptr.add(*idx) is valid memory and every
-            // element of the partition array will be written on exactly once.
-            unsafe { std::ptr::write(ptr.add(*idx), part_id) }
-        });
-    } else {
-        // We split the objects in two parts of equal weights
-        // The split is perfomed alongside the x or y axis,
-        // alternating at each iteration.
-
-        // We first need to sort the objects w.r.t. x or y position
-        axis_sort(points, permutation, current_coord);
-
-        // We then seek the split position
-        let split_pos = half_weight_pos_permu(weights, permutation);
-        let (left_permu, right_permu) = permutation.split_at_mut(split_pos);
-
-        // Once the split is performed
-        // we recursively iterate by calling
-        // the algorithm on the two generated parts.
-        // In the next iteration, the split aixs will
-        // be orthogonal to the current one
-
-        rayon::join(
-            || {
-                rcb_recurse(
-                    points,
-                    weights,
-                    left_permu,
-                    partition,
-                    n_iter - 1,
-                    (current_coord + 1) % D,
-                )
-            },
-            || {
-                rcb_recurse(
-                    points,
-                    weights,
-                    right_permu,
-                    partition,
-                    n_iter - 1,
-                    (current_coord + 1) % D,
-                )
-            },
-        );
-    }
+    partition
 }
 
 // pub because it is also useful for multijagged and required for benchmarks
@@ -131,50 +144,6 @@ pub fn axis_sort<const D: usize>(
             Ordering::Greater
         }
     })
-}
-
-// Computes a slice index which splits
-// the slice in two parts of equal weights
-// i.e. sorted_weights[..idx].sum() == sorted_weights[idx..].sum
-fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
-    let half_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>() / 2.;
-
-    let mut current_weight_idx;
-    let mut current_weight_sum = 0.;
-
-    let mut scan = permutation
-        .par_iter()
-        .enumerate()
-        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
-            if idx < low {
-                (idx, acc + weights[*val])
-            } else {
-                (low, acc + weights[*val])
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_iter();
-
-    // above this, the code was parallel
-    // what follows is sequential
-
-    loop {
-        let current = scan.next().unwrap();
-        if current_weight_sum + current.1 > half_weight {
-            current_weight_idx = current.0;
-            break;
-        }
-
-        current_weight_sum += current.1;
-    }
-
-    // seek from current_weight_idx
-    while current_weight_sum < half_weight {
-        current_weight_idx += 1;
-        current_weight_sum += weights[permutation[current_weight_idx]];
-    }
-
-    current_weight_idx
 }
 
 /// # Recursive Inertia Bisection algorithm
@@ -219,6 +188,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Point2D;
 
     fn gen_point_sample() -> Vec<Point2D> {
         vec![
@@ -250,5 +220,26 @@ mod tests {
         axis_sort(&points, &mut permutation, 1);
 
         assert_eq!(permutation, vec![3, 6, 5, 1, 0, 2, 4]);
+    }
+
+    #[test]
+    fn test_rcb() {
+        use std::collections::HashMap;
+
+        let points: Vec<Point2D> = (0..40)
+            .map(|_| Point2D::new(rand::random(), rand::random()))
+            .collect();
+        let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
+        let partition = rcb(&points, &weights, 2);
+        let mut loads: HashMap<ProcessUniqueId, f64> = HashMap::new();
+        let mut sizes: HashMap<ProcessUniqueId, usize> = HashMap::new();
+        for (weight_id, part) in partition.iter().enumerate() {
+            let weight = weights[weight_id];
+            *loads.entry(*part).or_default() += weight;
+            *sizes.entry(*part).or_default() += 1;
+        }
+        for ((part, load), size) in loads.iter().zip(sizes.values()) {
+            println!("{:?} -> {}:{}", part, size, load);
+        }
     }
 }
