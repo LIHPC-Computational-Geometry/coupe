@@ -60,7 +60,7 @@ where
     );
 
     // Mbr used to construct Point hashes
-    let mbr = Mbr::from_points(&points);
+    let mbr = Mbr::from_points(points);
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
@@ -185,7 +185,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let mbr = Mbr::from_points(&points);
+    let mbr = Mbr::from_points(points);
     let hashes = permu
         .par_iter()
         .map(|idx| compute_hash(&points[*idx], order, &mbr))
@@ -206,7 +206,7 @@ where
     if order == 0 {
         HashType::from(current_hash)
     } else {
-        ((2 as HashType).pow(D::dim() as u32)).pow(order) * HashType::from(current_hash)
+        (2_u128.pow(D::dim() as u32)).pow(order) * HashType::from(current_hash)
             + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
 }

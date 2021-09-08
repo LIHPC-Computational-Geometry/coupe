@@ -36,8 +36,8 @@ where
     let mut initial_partition = vec![initial_id; len];
 
     rcb_recurse(
-        &points,
-        &weights,
+        points,
+        weights,
         &mut permutation,
         &AtomicPtr::new(initial_partition.as_mut_ptr()),
         n_iter,
@@ -212,7 +212,7 @@ where
     <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
     <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
 {
-    let mbr = Mbr::from_points(&points);
+    let mbr = Mbr::from_points(points);
 
     let points = points
         .par_iter()

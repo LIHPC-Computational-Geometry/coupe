@@ -158,12 +158,12 @@ impl<'a, P, W> Partition<'a, P, W> {
 
     /// Returns a slice of the points used for the partition.
     pub fn points(&self) -> &[P] {
-        &self.points
+        self.points
     }
 
     /// Returns a slice of the weights used for the partition.
     pub fn weights(&self) -> &[W] {
-        &self.weights
+        self.weights
     }
 
     /// Returns an iterator over each part of the partition.
@@ -178,7 +178,7 @@ impl<'a, P, W> Partition<'a, P, W> {
                 .cloned()
                 .collect::<Vec<_>>();
             Part::<'a, P, W> {
-                partition: &self,
+                partition: self,
                 indices,
             }
         })
@@ -222,7 +222,7 @@ impl<'a, P, W> Partition<'a, P, W> {
                     .iter()
                     .map(move |w2| (w1.clone() - w2.clone()).abs())
             })
-            .max_by(|a, b| a.partial_cmp(&b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
             // if the partition is empty, then there is the imbalance is null
             .unwrap_or_else(W::zero)
     }
@@ -267,7 +267,7 @@ impl<'a, P, W> Partition<'a, P, W> {
                     .iter()
                     .map(move |w2| (w1.clone() - w2.clone()).abs())
             })
-            .max_by(|a, b| a.partial_cmp(&b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap_or_else(W::zero);
 
         f64::from(max_imbalance) / f64::from(total_weights.into_iter().sum())

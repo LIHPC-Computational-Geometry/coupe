@@ -444,8 +444,8 @@ fn balanced_k_means_iter<D>(
     } = state;
 
     assign_and_balance(
-        &points,
-        &weights,
+        points,
+        weights,
         permutation,
         AlgorithmState {
             assignments,
@@ -455,7 +455,7 @@ fn balanced_k_means_iter<D>(
         },
         Clusters {
             centers: &centers,
-            center_ids: &center_ids,
+            center_ids,
         },
         settings,
     );
@@ -512,7 +512,7 @@ fn balanced_k_means_iter<D>(
     // if delta_max is below a given threshold, it means that the clusters no longer move a lot at each iteration
     // and the algorithm has become somewhat stable.
     if !(*delta_max < settings.delta_threshold || current_iter == 0) {
-        relax_bounds(lbs, ubs, &distances_moved, &influences);
+        relax_bounds(lbs, ubs, &distances_moved, influences);
         balanced_k_means_iter(
             Inputs { points, weights },
             Clusters {
@@ -567,7 +567,7 @@ fn assign_and_balance<D>(
     } = clusters;
     // compute the distances from each cluster center to the minimal
     // bounding rectangle of the set of points
-    let mbr = Mbr::from_points(&points);
+    let mbr = Mbr::from_points(points);
     let distances_to_mbr = centers
         .par_iter()
         .zip(influences.par_iter())
@@ -607,7 +607,7 @@ fn assign_and_balance<D>(
                         &centers,
                         &center_ids,
                         &distances_to_mbr,
-                        &influences,
+                        influences,
                         settings,
                     );
 
@@ -684,7 +684,7 @@ fn assign_and_balance<D>(
             .map(|(center, new_center)| (center - new_center).norm())
             .collect();
 
-        relax_bounds(lbs, ubs, &distances_to_old_centers, &influences);
+        relax_bounds(lbs, ubs, &distances_to_old_centers, influences);
     }
 }
 

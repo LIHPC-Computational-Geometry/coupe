@@ -178,13 +178,13 @@ fn fiduccia_mattheyses_impl(
                         idx,
                         *vec.iter()
                             .max_by(|(_idx1, gain1), (_id2, gain2)| {
-                                gain1.partial_cmp(&gain2).unwrap()
+                                gain1.partial_cmp(gain2).unwrap()
                             })
                             .unwrap(),
                     )
                 })
                 // get max gain of max gains computed for each node
-                .max_by(|(_, (_, gain1)), (_, (_, gain2))| gain1.partial_cmp(&gain2).unwrap())
+                .max_by(|(_, (_, gain1)), (_, (_, gain2))| gain1.partial_cmp(gain2).unwrap())
                 .unwrap();
 
             if max_gain <= 0. {
@@ -226,7 +226,7 @@ fn fiduccia_mattheyses_impl(
             .iter()
             .cloned()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .unwrap();
 
         // rewind flips

@@ -116,7 +116,7 @@ fn kernighan_lin_2_impl<D>(
                     initial_partition[*idx] == unique_ids[0] && !**locked
                 })
                 .map(|(idx, ((gain, _), _))| (idx, *gain))
-                .max_by(|(_, g1), (_, g2)| g1.partial_cmp(&g2).unwrap())
+                .max_by(|(_, g1), (_, g2)| g1.partial_cmp(g2).unwrap())
                 .unwrap();
 
             // update gain of neighbors
@@ -138,7 +138,7 @@ fn kernighan_lin_2_impl<D>(
                     initial_partition[*idx] == unique_ids[1] && !**locked
                 })
                 .map(|(idx, ((gain, _), _))| (idx, *gain))
-                .max_by(|(_, g1), (_, g2)| g1.partial_cmp(&g2).unwrap())
+                .max_by(|(_, g1), (_, g2)| g1.partial_cmp(g2).unwrap())
                 .unwrap();
 
             let total_gain = max_gain_1 + max_gain_2;
@@ -169,7 +169,7 @@ fn kernighan_lin_2_impl<D>(
             .iter()
             .cloned()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .unwrap();
 
         // rewind swaps
