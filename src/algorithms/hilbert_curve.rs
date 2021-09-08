@@ -94,7 +94,7 @@ pub(crate) fn hilbert_curve_reorder_permu(
 }
 
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
-    let mbr = Mbr::from_points(&points);
+    let mbr = Mbr::from_points(points);
 
     let (ax, ay) = {
         let aabb = mbr.aabb();

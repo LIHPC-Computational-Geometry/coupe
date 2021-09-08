@@ -194,7 +194,7 @@ where
                         (min - point).abs()
                     }
                 })
-                .max_by(|a, b| a.partial_cmp(&b).unwrap())
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
                 .unwrap()
         }
     }
