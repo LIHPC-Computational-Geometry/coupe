@@ -614,7 +614,7 @@ where
             .collect();
         let ids = (0..weights.len())
             .map(|_| {
-                let i = rng.gen_range(0, self.num_parts);
+                let i = rng.gen_range(0..self.num_parts);
                 part_ids[i]
             })
             .collect();
@@ -828,7 +828,7 @@ where
             .map(|id| used_ids.iter().position(|uid| uid == &id).unwrap())
             .collect();
         let weights_real: Vec<Real> = weights.iter().map(|w| Real::from(*w)).collect();
-        algorithms::vn::best::vn_best_mono(&mut ids, &weights_real, self.num_parts);
+        algorithms::vn::best::vn_best_mono::<Real>(&mut ids, &weights_real, self.num_parts);
         let ids = ids.into_iter().map(|part_id| used_ids[part_id]).collect();
         Partition::from_ids(points, weights, ids)
     }
