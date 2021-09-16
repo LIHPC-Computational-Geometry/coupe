@@ -29,8 +29,6 @@
 //! [`Multi jagged`]: struct.MultiJagged.html
 //! [`KMeans`]: struct.KMeans.html
 
-#![allow(clippy::too_many_arguments)]
-
 pub mod algorithms;
 pub mod geometry;
 pub mod partition;
@@ -723,6 +721,7 @@ impl<D> KMeansBuilder<D> {
 }
 
 impl<D> KMeans<D> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         num_partitions: usize,
         imbalance_tol: f64,
