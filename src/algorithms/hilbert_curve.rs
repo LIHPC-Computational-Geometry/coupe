@@ -15,7 +15,7 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 pub fn hilbert_curve_partition(
-    points: &[Point2D],
+    points: &[Point2D<f64>],
     weights: &[f64],
     num_partitions: usize,
     order: usize,
@@ -65,7 +65,7 @@ pub fn hilbert_curve_partition(
 }
 
 #[allow(unused)]
-pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usize> {
+pub(crate) fn hilbert_curve_reorder(points: &[Point2D<f64>], order: usize) -> Vec<usize> {
     let mut permutation: Vec<usize> = (0..points.len()).into_par_iter().collect();
     hilbert_curve_reorder_permu(points, &mut permutation, order);
     permutation
@@ -76,7 +76,7 @@ pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usi
 /// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
 /// Then the hilbert curve is computed from those local coordinates.
 pub(crate) fn hilbert_curve_reorder_permu(
-    points: &[Point2D],
+    points: &[Point2D<f64>],
     permutation: &mut [usize],
     order: usize,
 ) {
@@ -93,7 +93,7 @@ pub(crate) fn hilbert_curve_reorder_permu(
     });
 }
 
-fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
+fn hilbert_index_computer(points: &[Point2D<f64>], order: usize) -> impl Fn((f64, f64)) -> u32 {
     let mbr = Mbr::from_points(points);
 
     let (ax, ay) = {
@@ -104,7 +104,7 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64
         )
     };
 
-    let rotate = move |p: &Point2D| mbr.mbr_to_aabb(p);
+    let rotate = move |p: &Point2D<f64>| mbr.mbr_to_aabb(p);
 
     let x_mapping = segment_to_segment(ax.0, ax.1, 0., order as f64);
     let y_mapping = segment_to_segment(ay.0, ay.1, 0., order as f64);

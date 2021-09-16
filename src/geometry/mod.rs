@@ -2,140 +2,144 @@
 
 use approx::Ulps;
 use itertools::Itertools;
-use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
-use nalgebra::{SymmetricEigen, Vector2, Vector3, VectorN};
+use num::Signed;
 use rayon::prelude::*;
+use std::iter::Sum;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Sub;
+pub use storage::Matrix;
+pub use storage::Point2D;
+pub use storage::Point3D;
+pub use storage::PointND;
 
-pub type Point2D = Vector2<f64>;
-pub type Point3D = Vector3<f64>;
-pub type PointND<D> = VectorN<f64, D>;
+mod storage;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Aabb<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
-    p_min: PointND<D>,
-    p_max: PointND<D>,
+pub(crate) struct Aabb<T, const D: usize> {
+    p_min: PointND<T, D>,
+    p_max: PointND<T, D>,
 }
 
-impl<D> Aabb<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
-    pub fn p_min(&self) -> &PointND<D> {
+impl<T, const D: usize> Aabb<T, D> {
+    pub fn p_min(&self) -> &PointND<T, D> {
         &self.p_min
     }
 
-    pub fn p_max(&self) -> &PointND<D> {
+    pub fn p_max(&self) -> &PointND<T, D> {
         &self.p_max
     }
+}
 
-    pub fn from_points(points: &[PointND<D>]) -> Self
-    where
-        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    {
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: Clone + PartialOrd + Send + Sync,
+{
+    pub fn from_points(points: &[PointND<T, D>]) -> Self {
         if points.len() < 2 {
             panic!("Cannot create an Aabb from less than 2 points.");
         }
 
-        let (min, max) = points
+        let first = &points[0];
+        let (min, max) = &points[1..]
             .par_iter()
-            .fold_with(
-                (
-                    PointND::<D>::from_element(std::f64::MAX),
-                    PointND::<D>::from_element(std::f64::MIN),
-                ),
-                |(mut mins, mut maxs), vals| {
-                    for ((min, max), val) in mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter()) {
-                        if *val < *min {
-                            *min = *val;
-                        }
-                        if *max < *val {
-                            *max = *val;
-                        }
+            .fold_with((first, first), |(mut mins, mut maxs), vals| {
+                for ((min, max), val) in mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter()) {
+                    if *val < *min {
+                        *min = *val;
                     }
-                    (mins, maxs)
-                },
-            )
+                    if *max < *val {
+                        *max = *val;
+                    }
+                }
+                (mins, maxs)
+            })
             .reduce_with(|(mins_left, maxs_left), (mins_right, maxs_right)| {
                 (
-                    PointND::<D>::from_iterator(
-                        mins_left
-                            .into_iter()
-                            .zip(mins_right.into_iter())
-                            .map(|(left, right)| left.min(*right)),
-                    ),
-                    PointND::<D>::from_iterator(
-                        maxs_left
-                            .into_iter()
-                            .zip(maxs_right.into_iter())
-                            .map(|(left, right)| left.max(*right)),
-                    ),
+                    &mins_left
+                        .into_iter()
+                        .zip(mins_right.into_iter())
+                        .map(|(left, right)| if left < right { left } else { right })
+                        .collect::<PointND<T, D>>(),
+                    &maxs_left
+                        .into_iter()
+                        .zip(maxs_right.into_iter())
+                        .map(|(left, right)| if left < right { right } else { left })
+                        .collect::<PointND<T, D>>(),
                 )
             })
             .unwrap();
 
         Self {
-            p_min: min,
-            p_max: max,
+            p_min: **min,
+            p_max: **max,
         }
     }
+}
 
-    fn center(&self) -> PointND<D> {
-        PointND::from_iterator(
-            self.p_min
-                .iter()
-                .zip(self.p_max.iter())
-                .map(|(min, max)| 0.5 * (min + max)),
-        )
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: crate::Two + Div<Output = T>,
+    for<'e> &'e T: Add<Output = T>,
+{
+    fn center(&self) -> PointND<T, D> {
+        self.p_min
+            .iter()
+            .zip(self.p_max.iter())
+            .map(|(min, max)| (min + max) / T::two())
+            .collect()
     }
 
     // region = bdim...b2b1b0 where bi are bits (0 or 1)
     // if bi is set (i.e. bi == 1) then the matching region has a i-th coordinates from center[i] to p_max[i]
     // otherwise, the matching region has a i-th coordinates from p_min[i] to center[i]
     pub fn sub_aabb(&self, region: u32) -> Self {
-        let dim = D::dim();
         assert!(
-            region < 2u32.pow(dim as u32),
+            region < 2u32.pow(D as u32),
             "Wrong region. Region should be composed of dim bits."
         );
 
         let center = self.center();
 
-        let p_min =
-            PointND::<D>::from_iterator(self.p_min.iter().zip(center.iter()).enumerate().map(
-                |(i, (min, center))| {
-                    if (region >> i) & 1 == 0 {
-                        *min
-                    } else {
-                        *center
-                    }
-                },
-            ));
+        let p_min = self
+            .p_min
+            .iter()
+            .zip(center.iter())
+            .enumerate()
+            .map(|(i, (min, center))| {
+                if (region >> i) & 1 == 0 {
+                    *min
+                } else {
+                    *center
+                }
+            })
+            .collect();
 
-        let p_max =
-            PointND::<D>::from_iterator(center.iter().zip(self.p_max.iter()).enumerate().map(
-                |(i, (center, max))| {
-                    if (region >> i) & 1 == 0 {
-                        *center
-                    } else {
-                        *max
-                    }
-                },
-            ));
+        let p_max = center
+            .iter()
+            .zip(self.p_max.iter())
+            .enumerate()
+            .map(|(i, (center, max))| {
+                if (region >> i) & 1 == 0 {
+                    *center
+                } else {
+                    *max
+                }
+            })
+            .collect();
 
         Self { p_min, p_max }
     }
+}
 
-    pub fn aspect_ratio(&self) -> f64 {
-        use itertools::MinMaxResult::*;
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: PartialOrd + Signed,
+    for<'e> &'e T: Sub<Output = T>,
+{
+    pub fn aspect_ratio(&self) -> T {
+        use itertools::MinMaxResult;
 
         let (min, max) = match self
             .p_min()
@@ -144,40 +148,50 @@ where
             .map(|(min, max)| (max - min).abs())
             .minmax()
         {
-            MinMax(min, max) => (min, max),
+            MinMaxResult::MinMax(min, max) => (min, max),
             _ => unimplemented!(),
         };
 
         // TODO: What if min == 0.0 ?
         max / min
     }
+}
 
-    pub fn contains(&self, point: &PointND<D>) -> bool {
-        let eps = 10. * std::f64::EPSILON;
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: PartialOrd,
+{
+    pub fn contains(&self, point: &PointND<T, D>) -> bool {
         self.p_min
             .iter()
             .zip(self.p_max.iter())
             .zip(point.iter())
-            .all(|((min, max), point)| *point < *max + eps && *point > *min - eps)
+            .all(|((min, max), point)| min < point && point < max)
     }
+}
 
-    pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: crate::Two + crate::Sqrt + PartialOrd + Signed + Sum,
+    for<'e> &'e T: Add<Output = T> + Mul<Output = T> + Sub<Output = T>,
+{
+    pub fn distance_to_point(&self, point: &PointND<T, D>) -> T {
         if !self.contains(point) {
-            let clamped = PointND::<D>::from_iterator(
-                self.p_min
-                    .iter()
-                    .zip(self.p_max.iter())
-                    .zip(point.iter())
-                    .map(|((min, max), point)| {
-                        if point > max {
-                            *max
-                        } else if point < min {
-                            *min
-                        } else {
-                            *point
-                        }
-                    }),
-            );
+            let clamped: PointND<T, D> = self
+                .p_min
+                .iter()
+                .zip(self.p_max.iter())
+                .zip(point.iter())
+                .map(|((min, max), point)| {
+                    if point > max {
+                        *max
+                    } else if point < min {
+                        *min
+                    } else {
+                        *point
+                    }
+                })
+                .collect();
             clamped.norm()
         } else {
             let center = self.center();
@@ -188,7 +202,7 @@ where
                 .zip(point.iter())
                 .zip(center.into_iter())
                 .map(|(((min, max), point), center)| {
-                    if point > center {
+                    if &center < point {
                         (max - point).abs()
                     } else {
                         (min - point).abs()
@@ -198,8 +212,14 @@ where
                 .unwrap()
         }
     }
+}
 
-    pub fn region(&self, point: &PointND<D>) -> Option<u32> {
+impl<T, const D: usize> Aabb<T, D>
+where
+    T: PartialOrd + crate::Two + Div<Output = T>,
+    for<'e> &'e T: Add<Output = T>,
+{
+    pub fn region(&self, point: &PointND<T, D>) -> Option<u32> {
         if !self.contains(point) {
             return None;
         }
@@ -207,7 +227,7 @@ where
         let mut ret: u32 = 0;
         let center = self.center();
         for (i, (point, center)) in point.iter().zip(center.into_iter()).enumerate() {
-            if point > center {
+            if &center > point {
                 ret |= 1 << i;
             }
         }
@@ -215,43 +235,27 @@ where
     }
 }
 
-use nalgebra::MatrixN;
 #[derive(Debug, Clone)]
-pub(crate) struct Mbr<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-{
-    aabb: Aabb<D>,
-    aabb_to_mbr: MatrixN<f64, D>,
-    mbr_to_aabb: MatrixN<f64, D>,
+pub(crate) struct Mbr<const D: usize> {
+    aabb: Aabb<f64, D>,
+    aabb_to_mbr: Matrix<f64, D, D>,
+    mbr_to_aabb: Matrix<f64, D, D>,
 }
 
-impl<D> Mbr<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-{
-    pub fn aabb(&self) -> &Aabb<D> {
+impl<const D: usize> Mbr<D> {
+    pub fn aabb(&self) -> &Aabb<f64, D> {
         &self.aabb
     }
 
     // Transform a point with the transformation which maps the Mbr to the underlying Aabb
-    pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
+    pub fn mbr_to_aabb(&self, point: &PointND<f64, D>) -> PointND<f64, D> {
         &self.mbr_to_aabb * point
     }
 
     /// Constructs a new `Mbr` from a slice of `PointND`.
     ///
     /// The resulting `Mbr` is the smallest Aabb that contains every points of the slice.
-    pub fn from_points(points: &[PointND<D>]) -> Self
-    where
-        D: DimSub<U1>,
-        DefaultAllocator:
-            Allocator<f64, U1, D> + Allocator<f64, U1, D> + Allocator<f64, DimDiff<D, U1>>,
-        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-        <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-    {
+    pub fn from_points(points: &[PointND<f64, D>]) -> Self {
         let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
         let mat = inertia_matrix(&weights, points);
         let vec = inertia_vector(mat);
@@ -289,61 +293,56 @@ where
     }
 
     /// Computes the distance between a point and the current mbr.
-    pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
+    pub fn distance_to_point(&self, point: &PointND<f64, D>) -> f64 {
         self.aabb.distance_to_point(&(&self.mbr_to_aabb * point))
     }
 
     /// Computes the center of the Mbr
     #[allow(unused)]
-    pub fn center(&self) -> PointND<D> {
+    pub fn center(&self) -> PointND<f64, D> {
         &self.aabb_to_mbr * &self.aabb.center()
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
     #[allow(unused)]
-    pub fn contains(&self, point: &PointND<D>) -> bool {
+    pub fn contains(&self, point: &PointND<f64, D>) -> bool {
         self.aabb.contains(&(&self.mbr_to_aabb * point))
     }
 
     /// Returns the quadrant of the Aabb in which the specified point is.
     /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
     /// Returns `None` if the specified point is not contained in the Aabb.
-    pub fn region(&self, point: &PointND<D>) -> Option<u32> {
+    pub fn region(&self, point: &PointND<f64, D>) -> Option<u32> {
         self.aabb.region(&(&self.mbr_to_aabb * point))
     }
 
     /// Returns the rotated min and max points of the Aabb.
     #[allow(unused)]
-    pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
+    pub fn minmax(&self) -> (PointND<f64, D>, PointND<f64, D>) {
         let min = &self.aabb_to_mbr * &self.aabb.p_min;
         let max = &self.aabb_to_mbr * &self.aabb.p_max;
         (min, max)
     }
 }
 
-pub(crate) fn inertia_matrix<D>(weights: &[f64], points: &[PointND<D>]) -> MatrixN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+pub(crate) fn inertia_matrix<const D: usize>(
+    weights: &[f64],
+    points: &[PointND<f64, D>],
+) -> Matrix<f64, D, D> {
     let total_weight = weights.par_iter().sum::<f64>();
 
-    let centroid: PointND<D> = weights
+    let centroid: PointND<f64, D> = weights
         .par_iter()
         .zip(points)
-        .fold_with(PointND::<D>::from_element(0.), |acc, (w, p)| {
-            acc + p.map(|e| e * w)
-        })
+        .fold_with([0.0; D], |acc, (w, p)| acc + p.map(|e| e * w))
         .reduce_with(|a, b| a + b)
         .unwrap()
         / total_weight;
 
-    let ret: MatrixN<f64, D> = weights
+    let ret: Matrix<f64, D, D> = weights
         .par_iter()
         .zip(points)
-        .fold_with(MatrixN::<f64, D>::from_element(0.), |acc, (w, p)| {
+        .fold_with(Matrix::<f64, D>::from_element(0.), |acc, (w, p)| {
             acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w)
         })
         .reduce_with(|a, b| a + b)
@@ -352,13 +351,9 @@ where
     ret
 }
 
-pub(crate) fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, DimDiff<D, U1>>,
-{
-    let sym_eigen = SymmetricEigen::new(mat);
-    let mut indices = (0..D::dim()).collect::<Vec<_>>();
+pub(crate) fn inertia_vector<const D: usize>(mat: Matrix<f64, D, D>) -> [f64; D] {
+    let sym_eigen = nalgebra::SymmetricEigen::new(mat);
+    let mut indices = (0..D).collect::<Vec<_>>();
 
     // sort indices in decreasing order
     indices.as_mut_slice().sort_unstable_by(|a, b| {
@@ -370,47 +365,35 @@ where
     sym_eigen.eigenvectors.column(indices[0]).clone_owned()
 }
 
-pub fn householder_reflection<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-{
+pub fn householder_reflection<const D: usize>(element: &[f64; D]) -> Matrix<f64, D, D> {
     let e0 = canonical_vector(0);
 
     // if element is parallel to e0, then the reflection is not valid.
     // return identity (canonical basis)
     let norm = element.norm();
     if Ulps::default().eq(&(element / norm), &e0) {
-        return MatrixN::<f64, D>::identity();
+        return Matrix::<f64, D>::identity();
     }
 
     let sign = if element[0] > 0. { -1. } else { 1. };
     let w = element + sign * e0 * element.norm();
-    let id = MatrixN::<f64, D>::identity();
+    let id = Matrix::<f64, D>::identity();
     id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
 }
 
-pub(crate) fn canonical_vector<D>(nth: usize) -> VectorN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-{
-    let mut ret = VectorN::<f64, D>::from_element(0.);
+pub(crate) fn canonical_vector<const D: usize>(nth: usize) -> [f64; D] {
+    let mut ret = [0.0; D];
     ret[nth] = 1.0;
     ret
 }
 
-pub(crate) fn center<D>(points: &[PointND<D>]) -> PointND<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+pub(crate) fn center<const D: usize>(points: &[PointND<f64, D>]) -> PointND<f64, D> {
     assert!(!points.is_empty());
     let total = points.len() as f64;
-    points.par_iter().sum::<PointND<D>>() / total
+    points.par_iter().sum::<PointND<f64, D>>() / total
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -746,3 +729,4 @@ mod tests {
         assert_eq!(8, octants.iter().unique().count());
     }
 }
+// */

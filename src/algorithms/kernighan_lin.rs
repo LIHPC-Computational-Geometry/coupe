@@ -8,23 +8,16 @@ use crate::partition::Partition;
 use crate::ProcessUniqueId;
 
 use itertools::Itertools;
-use nalgebra::allocator::Allocator;
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
 use sprs::CsMatView;
 
-pub(crate) fn kernighan_lin<'a, D>(
-    initial_partition: &mut Partition<'a, PointND<D>, f64>,
+pub(crate) fn kernighan_lin<'a, const D: usize>(
+    initial_partition: &mut Partition<'a, PointND<f64, D>, f64>,
     adjacency: CsMatView<f64>,
     max_passes: impl Into<Option<usize>>,
     max_flips_per_pass: impl Into<Option<usize>>,
     max_imbalance_per_flip: impl Into<Option<f64>>,
     max_bad_move_in_a_row: usize,
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     // To adapt Kernighan-Lin to a partition of more than 2 parts,
     // we apply the algorithm to each pair of adjacent parts (two parts
     // are adjacent if there exists an element in one part that is linked to
@@ -46,7 +39,7 @@ pub(crate) fn kernighan_lin<'a, D>(
     );
 }
 
-fn kernighan_lin_2_impl<D>(
+fn kernighan_lin_2_impl<const D: usize>(
     weights: &[f64],
     adjacency: CsMatView<f64>,
     initial_partition: &mut [ProcessUniqueId],
@@ -54,11 +47,7 @@ fn kernighan_lin_2_impl<D>(
     max_flips_per_pass: Option<usize>,
     _max_imbalance_per_flip: Option<f64>,
     max_bad_move_in_a_row: usize,
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     let unique_ids = initial_partition
         .iter()
         .cloned()

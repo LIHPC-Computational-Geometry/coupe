@@ -1,11 +1,6 @@
 //! Utilities to manipulate partitions.
 
 use itertools::Itertools;
-use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
 
 use sprs::CsMatView;
 
@@ -394,16 +389,7 @@ impl<'a, P, W> Part<'a, P, W> {
     }
 }
 
-impl<'a, W, D> Part<'a, PointND<D>, W>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D>
-        + Allocator<f64, D, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+impl<'a, W, const D: usize> Part<'a, PointND<f64, D>, W> {
     /// Computes the aspect ratio of a part. It is defined as the aspect ratio of a minimal bounding rectangle
     /// of the set of points contained in the part.
     ///

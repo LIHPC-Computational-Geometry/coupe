@@ -16,12 +16,6 @@ use super::z_curve;
 use itertools::iproduct;
 use itertools::Itertools;
 
-use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
-
 /// A wrapper type for ProcessUniqueId
 /// to enforce that it represents temporary ids
 /// for the k-means algorithm and not a partition id
@@ -33,25 +27,15 @@ type ClusterId = ProcessUniqueId;
 /// this version shows some noticeable oscillations when imposing a restrictive balance constraint.
 /// It also skips the bounding boxes optimization which would slightly reduce the complexity of the
 /// algorithm.
-pub fn simplified_k_means<D>(
-    points: &[PointND<D>],
+pub fn simplified_k_means<const D: usize>(
+    points: &[PointND<f64, D>],
     weights: &[f64],
     num_partitions: usize,
     imbalance_tol: f64,
     mut n_iter: isize,
     hilbert: bool,
-) -> Vec<ProcessUniqueId>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
-    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+) -> Vec<ProcessUniqueId> {
+    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D as u32))) as u32;
     let permu = if hilbert {
         unimplemented!("hilbert curve currently not implemented for n-dimension");
     // hilbert_curve::hilbert_curve_reorder(points, 15)
@@ -222,25 +206,15 @@ impl Default for BalancedKmeansSettings {
     }
 }
 
-pub fn balanced_k_means<D>(
-    points: &[PointND<D>],
+pub fn balanced_k_means<const D: usize>(
+    points: &[PointND<f64, D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
-) -> Vec<ProcessUniqueId>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+) -> Vec<ProcessUniqueId> {
     let settings = settings.into().unwrap_or_default();
 
     // sort points with space filling curve
-    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D as u32))) as u32;
     let mut permu = if settings.hilbert {
         unimplemented!("hilbert curve currently not implemented for n-dimension");
     // hilbert_curve::hilbert_curve_reorder(points, 15)
@@ -309,21 +283,12 @@ where
     assignments
 }
 
-pub fn balanced_k_means_with_initial_partition<D>(
-    points: &[PointND<D>],
+pub fn balanced_k_means_with_initial_partition<const D: usize>(
+    points: &[PointND<f64, D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
     initial_partition: &mut [ProcessUniqueId],
-) where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+) {
     let settings = settings.into().unwrap_or_default();
 
     // validate partition soundness
@@ -387,12 +352,8 @@ pub fn balanced_k_means_with_initial_partition<D>(
 }
 
 #[derive(Clone, Copy)]
-struct Inputs<'a, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
-    points: &'a [PointND<D>],
+struct Inputs<'a, const D: usize> {
+    points: &'a [PointND<f64, D>],
     weights: &'a [f64],
 }
 
@@ -414,23 +375,14 @@ struct AlgorithmState<'a> {
 //  - moving each cluster after load balance
 //  - checking delta threshold
 //  - relaxing lower and upper bounds
-fn balanced_k_means_iter<D>(
+fn balanced_k_means_iter<const D: usize>(
     inputs: Inputs<D>,
-    clusters: Clusters<Vec<PointND<D>>, &[ClusterId]>,
+    clusters: Clusters<Vec<PointND<f64, D>>, &[ClusterId]>,
     permutation: &mut [usize],
     state: AlgorithmState,
     settings: &BalancedKmeansSettings,
     current_iter: usize,
-) where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+) {
     let Inputs { points, weights } = inputs;
     let Clusters {
         centers,
@@ -538,23 +490,14 @@ fn balanced_k_means_iter<D>(
 //   - checking partitions imbalance
 //   - increasing of diminishing clusters influence based on their imbalance
 //   - relaxing upper and lower bounds
-fn assign_and_balance<D>(
-    points: &[PointND<D>],
+fn assign_and_balance<const D: usize>(
+    points: &[PointND<f64, D>],
     weights: &[f64],
     permutation: &mut [usize],
     state: AlgorithmState,
-    clusters: Clusters<&[PointND<D>], &[ClusterId]>,
+    clusters: Clusters<&[PointND<f64, D>], &[ClusterId]>,
     settings: &BalancedKmeansSettings,
-) where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+) {
     let AlgorithmState {
         assignments,
         influences,
@@ -715,9 +658,9 @@ fn relax_bounds(lbs: &mut [f64], ubs: &mut [f64], distances_moved: &[f64], influ
 
 /// Most inner loop of the algorithm that aims to optimize
 /// clusters assignments
-fn best_values<D>(
-    point: &PointND<D>,
-    centers: &[PointND<D>],
+fn best_values<const D: usize>(
+    point: &PointND<f64, D>,
+    centers: &[PointND<f64, D>],
     center_ids: &[ClusterId],
     distances_to_mbr: &[f64],
     influences: &[f64],
@@ -726,12 +669,7 @@ fn best_values<D>(
     f64,               // new lb
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
-)
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     let mut best_value = std::f64::MAX;
     let mut snd_best_value = std::f64::MAX;
     let mut assignment = None;
@@ -766,11 +704,7 @@ fn erosion(distance_moved: f64, average_cluster_diameter: f64) -> f64 {
 }
 
 // computes the maximum distance between two points in the array
-fn max_distance<D>(points: &[PointND<D>]) -> f64
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
+fn max_distance<const D: usize>(points: &[PointND<f64, D>]) -> f64 {
     iproduct!(points, points)
         .map(|(p1, p2)| (p1 - p2).norm())
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))

@@ -1,11 +1,5 @@
 use crate::geometry::*;
 
-use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
-
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -24,12 +18,11 @@ use std::sync::atomic::{self, AtomicPtr};
 ///
 /// the first component of each couple is the id of an object and
 /// the second component is the id of the partition to which that object was assigned
-pub fn rcb<D>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+pub fn rcb<const D: usize>(
+    points: &[PointND<f64, D>],
+    weights: &[f64],
+    n_iter: usize,
+) -> Vec<ProcessUniqueId> {
     let len = weights.len();
     let mut permutation = (0..len).into_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
@@ -46,18 +39,14 @@ where
     initial_partition
 }
 
-pub fn rcb_recurse<D>(
-    points: &[PointND<D>],
+pub fn rcb_recurse<const D: usize>(
+    points: &[PointND<f64, D>],
     weights: &[f64],
     permutation: &mut [usize],
     partition: &AtomicPtr<ProcessUniqueId>,
     n_iter: usize,
     current_coord: usize,
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     if n_iter == 0 {
         // No iteration left. The current
         // ids become a part of the final partition.
@@ -98,7 +87,6 @@ pub fn rcb_recurse<D>(
         // In the next iteration, the split aixs will
         // be orthogonal to the current one
 
-        let dim = D::dim();
         rayon::join(
             || {
                 rcb_recurse(
@@ -107,7 +95,7 @@ pub fn rcb_recurse<D>(
                     left_permu,
                     partition,
                     n_iter - 1,
-                    (current_coord + 1) % dim,
+                    (current_coord + 1) % D,
                 )
             },
             || {
@@ -117,7 +105,7 @@ pub fn rcb_recurse<D>(
                     right_permu,
                     partition,
                     n_iter - 1,
-                    (current_coord + 1) % dim,
+                    (current_coord + 1) % D,
                 )
             },
         );
@@ -125,12 +113,11 @@ pub fn rcb_recurse<D>(
 }
 
 // pub because it is also useful for multijagged and required for benchmarks
-pub fn axis_sort<D>(points: &[PointND<D>], permutation: &mut [usize], current_coord: usize)
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+pub fn axis_sort<const D: usize>(
+    points: &[PointND<f64, D>],
+    permutation: &mut [usize],
+    current_coord: usize,
+) {
     permutation.par_sort_by(|i1, i2| {
         if points[*i1][current_coord] < points[*i2][current_coord] {
             Ordering::Less
@@ -202,16 +189,11 @@ fn half_weight_pos_permu(weights: &[f64], permutation: &[usize]) -> usize {
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib<D>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<ProcessUniqueId>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D>
-        + Allocator<f64, D, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+pub fn rib<const D: usize>(
+    points: &[PointND<f64, D>],
+    weights: &[f64],
+    n_iter: usize,
+) -> Vec<ProcessUniqueId> {
     let mbr = Mbr::from_points(points);
 
     let points = points
@@ -227,7 +209,7 @@ where
 mod tests {
     use super::*;
 
-    fn gen_point_sample() -> Vec<Point2D> {
+    fn gen_point_sample() -> Vec<Point2D<f64>> {
         vec![
             Point2D::new(4., 6.),
             Point2D::new(9., 5.),
