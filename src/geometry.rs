@@ -461,7 +461,7 @@ mod tests {
         let mbr = Mbr::from_points(&points);
         let aspect_ratio = mbr.aspect_ratio();
 
-        relative_eq!(aspect_ratio, 4.);
+        assert_relative_eq!(aspect_ratio, 4.);
     }
 
     #[test]
@@ -522,9 +522,9 @@ mod tests {
             .map(|p| mbr.distance_to_point(p))
             .collect();
 
-        relative_eq!(distances[0], 0.5);
-        relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        relative_eq!(distances[2], 1.);
+        assert_relative_eq!(distances[0], 0.5);
+        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
+        assert_relative_eq!(distances[2], 1.);
     }
 
     #[test]
@@ -607,7 +607,7 @@ mod tests {
         for col1 in 0..6 {
             for col2 in 0..6 {
                 if col1 != col2 {
-                    relative_eq!(mat.column(col1).dot(&mat.column(col2)), 0.);
+                    assert_relative_eq!(mat.column(col1).dot(&mat.column(col2)), 0.);
                 }
             }
         }
@@ -615,7 +615,7 @@ mod tests {
         // check that first column is parallel to el
         let unit_el = el / el.norm();
         let fst_col = mat.column(0).clone_owned();
-        relative_eq!(unit_el * unit_el.dot(&fst_col), fst_col);
+        assert_relative_eq!(unit_el * unit_el.dot(&fst_col), fst_col);
     }
 
     #[test]
@@ -653,7 +653,7 @@ mod tests {
         println!("mbr = {:?}", mbr);
         let aspect_ratio = mbr.aspect_ratio();
 
-        relative_eq!(aspect_ratio, 4.);
+        assert_relative_eq!(aspect_ratio, 4.);
     }
 
     #[test]
@@ -672,7 +672,7 @@ mod tests {
 
         eprintln!("{}", vec);
 
-        relative_eq!(expected.cross(&vec).norm(), 0.);
+        assert_relative_eq!(expected.cross(&vec).norm(), 0.);
     }
 
     #[test]
@@ -704,12 +704,12 @@ mod tests {
             .map(|p| mbr.distance_to_point(p))
             .collect();
 
-        relative_eq!(distances[0], 0.5);
-        relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        relative_eq!(distances[2], 1.);
-        relative_eq!(distances[3], 0.5);
-        relative_eq!(distances[4], 2_f64.sqrt() / 2.);
-        relative_eq!(distances[5], 1.);
+        assert_relative_eq!(distances[0], 0.5);
+        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
+        assert_relative_eq!(distances[2], 1.);
+        assert_relative_eq!(distances[3], 0.5);
+        assert_relative_eq!(distances[4], 2_f64.sqrt() / 2.);
+        assert_relative_eq!(distances[5], 1.);
     }
 
     #[test]

@@ -126,7 +126,7 @@ mod tests {
         let w = [1, 2, 3, 4, 5, 6];
         let mut part = vec![0 as usize; w.len()];
         let imb_ini = imbalance::imbalance(2, &part, &w);
-        vn_best_mono(&mut part, &w, 2);
+        vn_best_mono::<u32>(&mut part, &w, 2);
         let imb_end = imbalance::imbalance(2, &part, &w);
         assert!(imb_end < imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -145,7 +145,7 @@ mod tests {
                 })
         ) {
             let imb_ini = imbalance::max_imbalance(2, &partition, &weights);
-            vn_best_mono(&mut partition, &weights, 2);
+            vn_best_mono::<u64>(&mut partition, &weights, 2);
             let imb_end = imbalance::max_imbalance(2, &partition, &weights);
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini, "{} < {}", imb_ini, imb_end);
