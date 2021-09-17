@@ -52,12 +52,11 @@ use nalgebra::base::dimension::{DimDiff, DimSub};
 use nalgebra::DefaultAllocator;
 use nalgebra::DimName;
 use nalgebra::U1;
+use nalgebra::U2;
 
 use ndarray::ArrayView1;
 use ndarray::ArrayView2;
 use sprs::CsMatView;
-
-use std::marker::PhantomData;
 
 use crate::partition::*;
 
@@ -224,21 +223,17 @@ where
 ///     }
 /// }
 /// ```
-pub struct Rcb<D> {
+pub struct Rcb {
     pub num_iter: usize,
-    _marker: PhantomData<D>,
 }
 
-impl<D> Rcb<D> {
+impl Rcb {
     pub fn new(num_iter: usize) -> Self {
-        Self {
-            num_iter,
-            _marker: PhantomData::<D>,
-        }
+        Self { num_iter }
     }
 }
 
-impl<D> Partitioner<D> for Rcb<D>
+impl<D> Partitioner<D> for Rcb
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -295,22 +290,18 @@ where
 /// // there are two different partition
 /// assert_ne!(ids[1], ids[2]);
 /// ```
-pub struct Rib<D> {
+pub struct Rib {
     /// The number of iterations of the algorithm. This will yield a partition of `2^num_iter` parts.
     pub num_iter: usize,
-    _marker: PhantomData<D>,
 }
 
-impl<D> Rib<D> {
+impl Rib {
     pub fn new(num_iter: usize) -> Self {
-        Self {
-            num_iter,
-            _marker: PhantomData::<D>,
-        }
+        Self { num_iter }
     }
 }
 
-impl<D> Partitioner<D> for Rib<D>
+impl<D> Partitioner<D> for Rib
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -385,23 +376,21 @@ where
 ///     }
 /// }
 /// ```
-pub struct MultiJagged<D> {
+pub struct MultiJagged {
     pub num_partitions: usize,
     pub max_iter: usize,
-    _marker: PhantomData<D>,
 }
 
-impl<D> MultiJagged<D> {
+impl MultiJagged {
     pub fn new(num_partitions: usize, max_iter: usize) -> Self {
         Self {
             num_partitions,
             max_iter,
-            _marker: PhantomData::<D>,
         }
     }
 }
 
-impl<D> Partitioner<D> for MultiJagged<D>
+impl<D> Partitioner<D> for MultiJagged
 where
     D: DimName,
     DefaultAllocator: Allocator<f64, D>,
@@ -462,23 +451,21 @@ where
 /// assert_eq!(ids[4], ids[5]);
 /// assert_eq!(ids[6], ids[7]);
 /// ```  
-pub struct ZCurve<D> {
+pub struct ZCurve {
     pub num_partitions: usize,
     pub order: u32,
-    _marker: PhantomData<D>,
 }
 
-impl<D> ZCurve<D> {
+impl ZCurve {
     pub fn new(num_partitions: usize, order: u32) -> Self {
         Self {
             num_partitions,
             order,
-            _marker: PhantomData::<D>,
         }
     }
 }
 
-impl<D> Partitioner<D> for ZCurve<D>
+impl<D> Partitioner<D> for ZCurve
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -542,26 +529,22 @@ where
 /// assert_eq!(ids[4], ids[5]);
 /// assert_eq!(ids[6], ids[7]);
 /// ```
-pub struct HilbertCurve<D> {
+pub struct HilbertCurve {
     pub num_partitions: usize,
     pub order: u32,
-    _marker: PhantomData<D>,
 }
 
-impl<D> HilbertCurve<D> {
+impl HilbertCurve {
     pub fn new(num_partitions: usize, order: u32) -> Self {
         Self {
             num_partitions,
             order,
-            _marker: PhantomData::<D>,
         }
     }
 }
 
-use nalgebra::base::U2;
-
 // hilbert curve is only implemented in 2d for now
-impl Partitioner<U2> for HilbertCurve<U2> {
+impl Partitioner<U2> for HilbertCurve {
     fn partition<'a>(
         &self,
         points: impl PointsView<'a, U2>,
@@ -640,7 +623,7 @@ impl Partitioner<U2> for HilbertCurve<U2> {
 /// assert_eq!(ids[6], ids[8]);
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct KMeans<D> {
+pub struct KMeans {
     pub num_partitions: usize,
     pub imbalance_tol: f64,
     pub delta_threshold: f64,
@@ -649,7 +632,6 @@ pub struct KMeans<D> {
     pub erode: bool,
     pub hilbert: bool,
     pub mbr_early_break: bool,
-    _marker: PhantomData<D>,
 }
 
 // KMeans builder pattern
@@ -661,21 +643,13 @@ pub struct KMeans<D> {
 //    .max_balance_iter(12)
 //    .build();
 // ```
-#[derive(Debug, Clone, Copy)]
-pub struct KMeansBuilder<D> {
-    inner: KMeans<D>,
+#[derive(Debug, Default, Clone, Copy)]
+pub struct KMeansBuilder {
+    inner: KMeans,
 }
 
-impl<D> Default for KMeansBuilder<D> {
-    fn default() -> Self {
-        Self {
-            inner: KMeans::default(),
-        }
-    }
-}
-
-impl<D> KMeansBuilder<D> {
-    pub fn build(self) -> KMeans<D> {
+impl KMeansBuilder {
+    pub fn build(self) -> KMeans {
         self.inner
     }
 
@@ -720,7 +694,7 @@ impl<D> KMeansBuilder<D> {
     }
 }
 
-impl<D> KMeans<D> {
+impl KMeans {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         num_partitions: usize,
@@ -741,12 +715,11 @@ impl<D> KMeans<D> {
             erode,
             hilbert,
             mbr_early_break,
-            _marker: PhantomData::<D>,
         }
     }
 }
 
-impl<D> Default for KMeans<D> {
+impl Default for KMeans {
     fn default() -> Self {
         Self {
             num_partitions: 7,
@@ -757,12 +730,11 @@ impl<D> Default for KMeans<D> {
             erode: false,         // for now, `erode` yields` enabled yields wrong results
             hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
-            _marker: PhantomData::<D>,
         }
     }
 }
 
-impl<D> PartitionImprover<D> for KMeans<D>
+impl<D> PartitionImprover<D> for KMeans
 where
     D: DimName + DimSub<U1>,
     DefaultAllocator: Allocator<f64, D, D>
@@ -1225,9 +1197,9 @@ where
 /// let num_partitions = 7;
 /// let max_iter = 3;
 ///
-/// let mut k_means = coupe::KMeans::<U3>::default();
+/// let mut k_means = coupe::KMeans::default();
 /// k_means.num_partitions = 7;
-/// let multi_jagged_then_k_means = coupe::MultiJagged::<U3>::new(
+/// let multi_jagged_then_k_means = coupe::MultiJagged::new(
 ///     num_partitions,
 ///     max_iter
 /// ).compose(k_means);
