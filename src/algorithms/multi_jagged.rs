@@ -7,10 +7,6 @@
 
 use approx::Ulps;
 
-use nalgebra::allocator::Allocator;
-use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-
 use crate::geometry::*;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
@@ -150,31 +146,21 @@ fn compute_modifiers(
         .collect()
 }
 
-pub fn multi_jagged<D>(
+pub fn multi_jagged<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     num_parts: usize,
     max_iter: usize,
-) -> Vec<ProcessUniqueId>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) -> Vec<ProcessUniqueId> {
     let partition_scheme = partition_scheme(num_parts, max_iter);
     multi_jagged_with_scheme(points, weights, partition_scheme)
 }
 
-fn multi_jagged_with_scheme<D>(
+fn multi_jagged_with_scheme<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     partition_scheme: PartitionScheme,
-) -> Vec<ProcessUniqueId>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) -> Vec<ProcessUniqueId> {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
     let initial_id = ProcessUniqueId::new();
@@ -194,18 +180,14 @@ where
     initial_partition
 }
 
-fn multi_jagged_recurse<D>(
+fn multi_jagged_recurse<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     permutation: &mut [usize],
     partition: &AtomicPtr<ProcessUniqueId>,
     current_coord: usize,
     partition_scheme: PartitionScheme,
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     if partition_scheme.num_splits != 0 {
         let num_splits = partition_scheme.num_splits;
 
@@ -219,7 +201,6 @@ fn multi_jagged_recurse<D>(
         );
         let mut sub_permutations = split_at_mut_many(permutation, &split_positions);
 
-        let dim = D::dim();
         sub_permutations
             .par_iter_mut()
             .zip(partition_scheme.next.unwrap())
@@ -229,7 +210,7 @@ fn multi_jagged_recurse<D>(
                     weights,
                     permu,
                     partition,
-                    (current_coord + 1) % dim,
+                    (current_coord + 1) % D,
                     scheme,
                 )
             });

@@ -20,11 +20,11 @@ use super::multi_jagged::split_at_mut_many;
 use crate::geometry::{Mbr, PointND};
 
 use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
-use nalgebra::base::U1;
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
 use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
@@ -37,22 +37,17 @@ use std::sync::atomic::{self, AtomicPtr};
 type HashType = u128;
 const HASH_TYPE_MAX: HashType = std::u128::MAX;
 
-pub fn z_curve_partition<D>(
+pub fn z_curve_partition<const D: usize>(
     points: &[PointND<D>],
     num_partitions: usize,
     order: u32,
 ) -> Vec<ProcessUniqueId>
 where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D as u32))) as u32;
     assert!(
         order <= max_order,
         "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
@@ -97,17 +92,12 @@ where
 }
 
 // reorders `permu` to sort points by increasing z-curve hash
-fn z_curve_partition_recurse<D>(
+fn z_curve_partition_recurse<const D: usize>(
     points: &[PointND<D>],
     order: u32,
     mbr: &Mbr<D>,
     permu: &mut [usize],
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+) {
     // we stop recursion if there is only 1 point left to avoid useless calls
     if order == 0 || permu.len() <= 1 {
         return;
@@ -128,7 +118,7 @@ fn z_curve_partition_recurse<D>(
     // instead of traversing the whole array, we can just perform a few binary searches
     // to find the split positions since the array is already sorted
 
-    let mut split_positions = (1..2usize.pow(D::dim() as u32)).collect::<Vec<_>>();
+    let mut split_positions = (1..2usize.pow(D as u32)).collect::<Vec<_>>();
     for n in split_positions.iter_mut() {
         *n = permu
             .binary_search_by(|idx| {
@@ -149,18 +139,13 @@ fn z_curve_partition_recurse<D>(
 
 // reorders a slice of Point3D in increasing z-curve order
 #[allow(unused)]
-pub(crate) fn z_curve_reorder<D>(points: &[PointND<D>], order: u32) -> Vec<usize>
+pub(crate) fn z_curve_reorder<const D: usize>(points: &[PointND<D>], order: u32) -> Vec<usize>
 where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D::dim() as u32))) as u32;
+    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D as u32))) as u32;
     assert!(
         order <= max_order,
         "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
@@ -175,15 +160,14 @@ where
 // reorders a slice of indices such that the associated array of Point3D is sorted
 // by increasing z-order
 #[allow(unused)]
-pub(crate) fn z_curve_reorder_permu<D>(points: &[PointND<D>], permu: &mut [usize], order: u32)
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+pub(crate) fn z_curve_reorder_permu<const D: usize>(
+    points: &[PointND<D>],
+    permu: &mut [usize],
+    order: u32,
+) where
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
     let mbr = Mbr::from_points(points);
     let hashes = permu
@@ -194,11 +178,7 @@ where
     permu.par_sort_by_key(|idx| hashes[*idx]);
 }
 
-fn compute_hash<D>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> HashType
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D>,
-{
+fn compute_hash<const D: usize>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> HashType {
     let current_hash = mbr
         .region(point)
         .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
@@ -206,7 +186,7 @@ where
     if order == 0 {
         HashType::from(current_hash)
     } else {
-        (2_u128.pow(D::dim() as u32)).pow(order) * HashType::from(current_hash)
+        (2_u128.pow(D as u32)).pow(order) * HashType::from(current_hash)
             + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
     }
 }
@@ -219,14 +199,14 @@ mod tests {
     #[test]
     fn test_partition() {
         let points = vec![
-            Point2D::new(0., 0.),
-            Point2D::new(20., 10.),
-            Point2D::new(0., 10.),
-            Point2D::new(20., 0.),
-            Point2D::new(14., 7.),
-            Point2D::new(4., 7.),
-            Point2D::new(14., 2.),
-            Point2D::new(4., 2.),
+            Point2D::from([0., 0.]),
+            Point2D::from([20., 10.]),
+            Point2D::from([0., 10.]),
+            Point2D::from([20., 0.]),
+            Point2D::from([14., 7.]),
+            Point2D::from([4., 7.]),
+            Point2D::from([14., 2.]),
+            Point2D::from([4., 2.]),
         ];
 
         let ids = z_curve_partition(&points, 4, 1);
