@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use nalgebra::{allocator::Allocator, DefaultAllocator, DimName};
 use sprs::CsMatView;
 
 use crate::partition::Partition;
@@ -7,18 +6,14 @@ use crate::PointND;
 use crate::ProcessUniqueId;
 use std::collections::HashMap;
 
-pub fn fiduccia_mattheyses<'a, D>(
+pub fn fiduccia_mattheyses<'a, const D: usize>(
     initial_partition: &mut Partition<'a, PointND<D>, f64>,
     adjacency: CsMatView<f64>,
     max_passes: impl Into<Option<usize>>,
     max_flips_per_pass: impl Into<Option<usize>>,
     max_imbalance_per_flip: impl Into<Option<f64>>,
     max_bad_move_in_a_row: usize,
-) where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+) {
     let max_passes = max_passes.into();
     let max_flips_per_pass = max_flips_per_pass.into();
     let max_imbalance_per_flip = max_imbalance_per_flip.into();

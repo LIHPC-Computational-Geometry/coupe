@@ -2,15 +2,14 @@
 
 use itertools::Itertools;
 use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
 use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
-
-use sprs::CsMatView;
-
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
 use num::{Num, Signed};
 use snowflake::ProcessUniqueId;
+use sprs::CsMatView;
 
 use std::cmp::PartialOrd;
 use std::iter::Sum;
@@ -394,16 +393,7 @@ impl<'a, P, W> Part<'a, P, W> {
     }
 }
 
-impl<'a, W, D> Part<'a, PointND<D>, W>
-where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D>
-        + Allocator<f64, D, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, DimDiff<D, U1>>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+impl<'a, W, const D: usize> Part<'a, PointND<D>, W> {
     /// Computes the aspect ratio of a part. It is defined as the aspect ratio of a minimal bounding rectangle
     /// of the set of points contained in the part.
     ///
@@ -429,7 +419,12 @@ where
     ///     assert_ulps_eq!(part.aspect_ratio(), 3.);
     /// }
     /// ```
-    pub fn aspect_ratio(&self) -> f64 {
+    pub fn aspect_ratio(&self) -> f64
+    where
+        Const<D>: DimSub<Const<1>>,
+        DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+            + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    {
         if self.indices.len() <= 2 {
             panic!("Cannot compute the aspect ratio of a part of less than 2 points");
         }

@@ -3,32 +3,27 @@
 use approx::Ulps;
 use itertools::Itertools;
 use nalgebra::allocator::Allocator;
-use nalgebra::base::dimension::{DimDiff, DimSub};
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
 use nalgebra::DefaultAllocator;
-use nalgebra::DimName;
-use nalgebra::U1;
-use nalgebra::{SymmetricEigen, Vector2, Vector3, VectorN};
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
+use nalgebra::SMatrix;
+use nalgebra::SVector;
 use rayon::prelude::*;
 
-pub type Point2D = Vector2<f64>;
-pub type Point3D = Vector3<f64>;
-pub type PointND<D> = VectorN<f64, D>;
+pub type Point2D = SVector<f64, 2>;
+pub type Point3D = SVector<f64, 3>;
+pub type PointND<const D: usize> = SVector<f64, D>;
+pub type Matrix<const D: usize> = SMatrix<f64, D, D>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Aabb<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
+pub(crate) struct Aabb<const D: usize> {
     p_min: PointND<D>,
     p_max: PointND<D>,
 }
 
-impl<D> Aabb<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-{
+impl<const D: usize> Aabb<D> {
     pub fn p_min(&self) -> &PointND<D> {
         &self.p_min
     }
@@ -37,10 +32,7 @@ where
         &self.p_max
     }
 
-    pub fn from_points(points: &[PointND<D>]) -> Self
-    where
-        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    {
+    pub fn from_points(points: &[PointND<D>]) -> Self {
         if points.len() < 2 {
             panic!("Cannot create an Aabb from less than 2 points.");
         }
@@ -101,9 +93,8 @@ where
     // if bi is set (i.e. bi == 1) then the matching region has a i-th coordinates from center[i] to p_max[i]
     // otherwise, the matching region has a i-th coordinates from p_min[i] to center[i]
     pub fn sub_aabb(&self, region: u32) -> Self {
-        let dim = D::dim();
         assert!(
-            region < 2u32.pow(dim as u32),
+            region < 2u32.pow(D as u32),
             "Wrong region. Region should be composed of dim bits."
         );
 
@@ -215,23 +206,14 @@ where
     }
 }
 
-use nalgebra::MatrixN;
 #[derive(Debug, Clone)]
-pub(crate) struct Mbr<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-{
+pub(crate) struct Mbr<const D: usize> {
     aabb: Aabb<D>,
-    aabb_to_mbr: MatrixN<f64, D>,
-    mbr_to_aabb: MatrixN<f64, D>,
+    aabb_to_mbr: Matrix<D>,
+    mbr_to_aabb: Matrix<D>,
 }
 
-impl<D> Mbr<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-{
+impl<const D: usize> Mbr<D> {
     pub fn aabb(&self) -> &Aabb<D> {
         &self.aabb
     }
@@ -246,11 +228,9 @@ where
     /// The resulting `Mbr` is the smallest Aabb that contains every points of the slice.
     pub fn from_points(points: &[PointND<D>]) -> Self
     where
-        D: DimSub<U1>,
-        DefaultAllocator:
-            Allocator<f64, U1, D> + Allocator<f64, U1, D> + Allocator<f64, DimDiff<D, U1>>,
-        <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-        <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
+        Const<D>: DimSub<Const<1>>,
+        DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+            + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     {
         let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
         let mat = inertia_matrix(&weights, points);
@@ -321,13 +301,7 @@ where
     }
 }
 
-pub(crate) fn inertia_matrix<D>(weights: &[f64], points: &[PointND<D>]) -> MatrixN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-    <DefaultAllocator as Allocator<f64, D, D>>::Buffer: Send + Sync,
-{
+pub(crate) fn inertia_matrix<const D: usize>(weights: &[f64], points: &[PointND<D>]) -> Matrix<D> {
     let total_weight = weights.par_iter().sum::<f64>();
 
     let centroid: PointND<D> = weights
@@ -340,25 +314,24 @@ where
         .unwrap()
         / total_weight;
 
-    let ret: MatrixN<f64, D> = weights
+    weights
         .par_iter()
         .zip(points)
-        .fold_with(MatrixN::<f64, D>::from_element(0.), |acc, (w, p)| {
+        .fold_with(Matrix::from_element(0.), |acc, (w, p)| {
             acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w)
         })
         .reduce_with(|a, b| a + b)
-        .unwrap();
-
-    ret
+        .unwrap()
 }
 
-pub(crate) fn inertia_vector<D>(mat: MatrixN<f64, D>) -> VectorN<f64, D>
+pub(crate) fn inertia_vector<const D: usize>(mat: Matrix<D>) -> PointND<D>
 where
-    D: DimName + DimSub<U1>,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, DimDiff<D, U1>>,
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    let sym_eigen = SymmetricEigen::new(mat);
-    let mut indices = (0..D::dim()).collect::<Vec<_>>();
+    let sym_eigen = mat.symmetric_eigen();
+    let mut indices = (0..D).collect::<Vec<_>>();
 
     // sort indices in decreasing order
     indices.as_mut_slice().sort_unstable_by(|a, b| {
@@ -367,45 +340,32 @@ where
             .unwrap()
     });
 
-    sym_eigen.eigenvectors.column(indices[0]).clone_owned()
+    sym_eigen.eigenvectors.column(indices[0]).into()
 }
 
-pub fn householder_reflection<D>(element: &VectorN<f64, D>) -> MatrixN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-{
+pub fn householder_reflection<const D: usize>(element: &PointND<D>) -> Matrix<D> {
     let e0 = canonical_vector(0);
 
     // if element is parallel to e0, then the reflection is not valid.
     // return identity (canonical basis)
     let norm = element.norm();
     if Ulps::default().eq(&(element / norm), &e0) {
-        return MatrixN::<f64, D>::identity();
+        return Matrix::identity();
     }
 
     let sign = if element[0] > 0. { -1. } else { 1. };
     let w = element + sign * e0 * element.norm();
-    let id = MatrixN::<f64, D>::identity();
+    let id = Matrix::identity();
     id - 2. * &w * w.transpose() / (w.transpose() * w)[0]
 }
 
-pub(crate) fn canonical_vector<D>(nth: usize) -> VectorN<f64, D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D> + Allocator<f64, D, D> + Allocator<f64, U1, D>,
-{
-    let mut ret = VectorN::<f64, D>::from_element(0.);
+pub(crate) fn canonical_vector<const D: usize>(nth: usize) -> PointND<D> {
+    let mut ret = PointND::from_element(0.);
     ret[nth] = 1.0;
     ret
 }
 
-pub(crate) fn center<D>(points: &[PointND<D>]) -> PointND<D>
-where
-    D: DimName,
-    DefaultAllocator: Allocator<f64, D>,
-    <DefaultAllocator as Allocator<f64, D>>::Buffer: Send + Sync,
-{
+pub(crate) fn center<const D: usize>(points: &[PointND<D>]) -> PointND<D> {
     assert!(!points.is_empty());
     let total = points.len() as f64;
     points.par_iter().sum::<PointND<D>>() / total
@@ -420,18 +380,18 @@ mod tests {
     #[test]
     fn test_aabb_2d() {
         let points = vec![
-            Point2D::new(1., 2.),
-            Point2D::new(0., 0.),
-            Point2D::new(3., 1.),
-            Point2D::new(5., 4.),
-            Point2D::new(4., 5.),
+            Point2D::from([1., 2.]),
+            Point2D::from([0., 0.]),
+            Point2D::from([3., 1.]),
+            Point2D::from([5., 4.]),
+            Point2D::from([4., 5.]),
         ];
 
         let aabb = Aabb::from_points(&points);
         let aspect_ratio = aabb.aspect_ratio();
 
-        assert_ulps_eq!(aabb.p_min, Point2D::new(0., 0.));
-        assert_ulps_eq!(aabb.p_max, Point2D::new(5., 5.));
+        assert_ulps_eq!(aabb.p_min, Point2D::from([0., 0.]));
+        assert_ulps_eq!(aabb.p_max, Point2D::from([5., 5.]));
         assert_ulps_eq!(aspect_ratio, 1.);
     }
 
@@ -445,17 +405,17 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_aabb2d_invalid_input_2() {
-        let points = vec![Point2D::new(5., -9.2)];
+        let points = vec![Point2D::from([5., -9.2])];
         let _aabb = Aabb::from_points(&points);
     }
 
     #[test]
     fn test_mbr_2d() {
         let points = vec![
-            Point2D::new(5., 3.),
-            Point2D::new(0., 0.),
-            Point2D::new(1., -1.),
-            Point2D::new(4., 4.),
+            Point2D::from([5., 3.]),
+            Point2D::from([0., 0.]),
+            Point2D::from([1., -1.]),
+            Point2D::from([4., 4.]),
         ];
 
         let mbr = Mbr::from_points(&points);
@@ -467,9 +427,9 @@ mod tests {
     #[test]
     fn test_inertia_matrix() {
         let points = vec![
-            Point2D::new(3., 0.),
-            Point2D::new(0., 3.),
-            Point2D::new(6., -3.),
+            Point2D::from([3., 0.]),
+            Point2D::from([0., 3.]),
+            Point2D::from([6., -3.]),
         ];
 
         let weights = vec![1.; 3];
@@ -483,17 +443,17 @@ mod tests {
     #[test]
     fn test_inertia_vector_2d() {
         let points = vec![
-            Point2D::new(3., 0.),
-            Point2D::new(0., 3.),
-            Point2D::new(6., -3.),
+            Point2D::from([3., 0.]),
+            Point2D::from([0., 3.]),
+            Point2D::from([6., -3.]),
         ];
 
         let weights = vec![1.; 3];
 
         let mat = inertia_matrix(&weights, &points);
         let vec = inertia_vector(mat);
-        let vec = Vector3::new(vec.x, vec.y, 0.);
-        let expected = Vector3::<f64>::new(1., -1., 0.);
+        let vec = Point3D::from([vec.x, vec.y, 0.]);
+        let expected = Point3D::from([1., -1., 0.]);
 
         eprintln!("{}", vec);
 
@@ -503,18 +463,18 @@ mod tests {
     #[test]
     fn test_mbr_distance_to_point_2d() {
         let points = vec![
-            Point2D::new(0., 1.),
-            Point2D::new(1., 0.),
-            Point2D::new(5., 6.),
-            Point2D::new(6., 5.),
+            Point2D::from([0., 1.]),
+            Point2D::from([1., 0.]),
+            Point2D::from([5., 6.]),
+            Point2D::from([6., 5.]),
         ];
 
         let mbr = Mbr::from_points(&points);
 
         let test_points = vec![
-            Point2D::new(2., 2.),
-            Point2D::new(0., 0.),
-            Point2D::new(5., 7.),
+            Point2D::from([2., 2.]),
+            Point2D::from([0., 0.]),
+            Point2D::from([5., 7.]),
         ];
 
         let distances: Vec<_> = test_points
@@ -530,32 +490,32 @@ mod tests {
     #[test]
     fn test_mbr_center() {
         let points = vec![
-            Point2D::new(0., 1.),
-            Point2D::new(1., 0.),
-            Point2D::new(5., 6.),
-            Point2D::new(6., 5.),
+            Point2D::from([0., 1.]),
+            Point2D::from([1., 0.]),
+            Point2D::from([5., 6.]),
+            Point2D::from([6., 5.]),
         ];
 
         let mbr = Mbr::from_points(&points);
 
         let center = mbr.center();
-        assert_ulps_eq!(center, Point2D::new(3., 3.))
+        assert_ulps_eq!(center, Point2D::from([3., 3.]))
     }
 
     #[test]
     fn test_mbr_contains() {
         let points = vec![
-            Point2D::new(0., 1.),
-            Point2D::new(1., 0.),
-            Point2D::new(5., 6.),
-            Point2D::new(6., 5.),
+            Point2D::from([0., 1.]),
+            Point2D::from([1., 0.]),
+            Point2D::from([5., 6.]),
+            Point2D::from([6., 5.]),
         ];
 
         let mbr = Mbr::from_points(&points);
 
-        assert!(!mbr.contains(&Point2D::new(0., 0.)));
+        assert!(!mbr.contains(&Point2D::from([0., 0.])));
         assert!(mbr.contains(&mbr.center()));
-        assert!(mbr.contains(&Point2D::new(5., 4.)));
+        assert!(mbr.contains(&Point2D::from([5., 4.])));
 
         let (min, max) = mbr.minmax();
 
@@ -566,19 +526,19 @@ mod tests {
     #[test]
     fn test_mbr_quadrant() {
         let points = vec![
-            Point2D::new(0., 1.),
-            Point2D::new(1., 0.),
-            Point2D::new(5., 6.),
-            Point2D::new(6., 5.),
+            Point2D::from([0., 1.]),
+            Point2D::from([1., 0.]),
+            Point2D::from([5., 6.]),
+            Point2D::from([6., 5.]),
         ];
 
         let mbr = Mbr::from_points(&points);
 
-        let none = mbr.region(&Point2D::new(0., 0.));
-        let q1 = mbr.region(&Point2D::new(1.2, 1.2));
-        let q2 = mbr.region(&Point2D::new(5.8, 4.9));
-        let q3 = mbr.region(&Point2D::new(0.2, 1.1));
-        let q4 = mbr.region(&Point2D::new(5.1, 5.8));
+        let none = mbr.region(&Point2D::from([0., 0.]));
+        let q1 = mbr.region(&Point2D::from([1.2, 1.2]));
+        let q2 = mbr.region(&Point2D::from([5.8, 4.9]));
+        let q3 = mbr.region(&Point2D::from([0.2, 1.1]));
+        let q4 = mbr.region(&Point2D::from([5.1, 5.8]));
 
         println!("q1 = {:?}", q1);
         println!("q2 = {:?}", q2);
@@ -594,8 +554,7 @@ mod tests {
 
     #[test]
     fn test_householder_reflexion() {
-        use nalgebra::Vector6;
-        let el = Vector6::<f64>::new_random();
+        let el = PointND::<6>::new_random();
         let mat = householder_reflection(&el);
 
         // check that columns are of norm 1
@@ -621,32 +580,32 @@ mod tests {
     #[test]
     fn test_aabb_3d() {
         let points = vec![
-            Point3D::new(1., 2., 0.),
-            Point3D::new(0., 0., 5.),
-            Point3D::new(3., 1., 1.),
-            Point3D::new(5., 4., -2.),
-            Point3D::new(4., 5., 3.),
+            Point3D::from([1., 2., 0.]),
+            Point3D::from([0., 0., 5.]),
+            Point3D::from([3., 1., 1.]),
+            Point3D::from([5., 4., -2.]),
+            Point3D::from([4., 5., 3.]),
         ];
 
         let aabb = Aabb::from_points(&points);
         let aspect_ratio = aabb.aspect_ratio();
 
-        assert_ulps_eq!(aabb.p_min, Point3D::new(0., 0., -2.));
-        assert_ulps_eq!(aabb.p_max, Point3D::new(5., 5., 5.));
+        assert_ulps_eq!(aabb.p_min, Point3D::from([0., 0., -2.]));
+        assert_ulps_eq!(aabb.p_max, Point3D::from([5., 5., 5.]));
         assert_ulps_eq!(aspect_ratio, 7. / 5.);
     }
 
     #[test]
     fn test_mbr_3d() {
         let points = vec![
-            Point3D::new(5., 3., 0.),
-            Point3D::new(0., 0., 0.),
-            Point3D::new(1., -1., 0.),
-            Point3D::new(4., 4., 0.),
-            Point3D::new(5., 3., 2.),
-            Point3D::new(0., 0., 2.),
-            Point3D::new(1., -1., 2.),
-            Point3D::new(4., 4., 2.),
+            Point3D::from([5., 3., 0.]),
+            Point3D::from([0., 0., 0.]),
+            Point3D::from([1., -1., 0.]),
+            Point3D::from([4., 4., 0.]),
+            Point3D::from([5., 3., 2.]),
+            Point3D::from([0., 0., 2.]),
+            Point3D::from([1., -1., 2.]),
+            Point3D::from([4., 4., 2.]),
         ];
 
         let mbr = Mbr::from_points(&points);
@@ -659,16 +618,16 @@ mod tests {
     #[test]
     fn test_inertia_vector_3d() {
         let points = vec![
-            Point3D::new(3., 0., 0.),
-            Point3D::new(0., 3., 3.),
-            Point3D::new(6., -3., -3.),
+            Point3D::from([3., 0., 0.]),
+            Point3D::from([0., 3., 3.]),
+            Point3D::from([6., -3., -3.]),
         ];
 
         let weights = vec![1.; 3];
 
         let mat = inertia_matrix(&weights, &points);
         let vec = inertia_vector(mat);
-        let expected = Vector3::<f64>::new(1., -1., -1.);
+        let expected = Point3D::from([1., -1., -1.]);
 
         eprintln!("{}", vec);
 
@@ -678,25 +637,25 @@ mod tests {
     #[test]
     fn test_mbr_distance_to_point_3d() {
         let points = vec![
-            Point3D::new(0., 1., 0.),
-            Point3D::new(1., 0., 0.),
-            Point3D::new(5., 6., 0.),
-            Point3D::new(6., 5., 0.),
-            Point3D::new(0., 1., 4.),
-            Point3D::new(1., 0., 4.),
-            Point3D::new(5., 6., 4.),
-            Point3D::new(6., 5., 4.),
+            Point3D::from([0., 1., 0.]),
+            Point3D::from([1., 0., 0.]),
+            Point3D::from([5., 6., 0.]),
+            Point3D::from([6., 5., 0.]),
+            Point3D::from([0., 1., 4.]),
+            Point3D::from([1., 0., 4.]),
+            Point3D::from([5., 6., 4.]),
+            Point3D::from([6., 5., 4.]),
         ];
 
         let mbr = Mbr::from_points(&points);
 
         let test_points = vec![
-            Point3D::new(2., 2., 1.),
-            Point3D::new(0., 0., 1.),
-            Point3D::new(5., 7., 1.),
-            Point3D::new(2., 2., 3.),
-            Point3D::new(0., 0., 3.),
-            Point3D::new(5., 7., 3.),
+            Point3D::from([2., 2., 1.]),
+            Point3D::from([0., 0., 1.]),
+            Point3D::from([5., 7., 1.]),
+            Point3D::from([2., 2., 3.]),
+            Point3D::from([0., 0., 3.]),
+            Point3D::from([5., 7., 3.]),
         ];
 
         let distances: Vec<_> = test_points
@@ -715,29 +674,29 @@ mod tests {
     #[test]
     fn test_mbr_octant() {
         let points = vec![
-            Point3D::new(0., 1., 0.),
-            Point3D::new(1., 0., 0.),
-            Point3D::new(5., 6., 0.),
-            Point3D::new(6., 5., 0.),
-            Point3D::new(0., 1., 1.),
-            Point3D::new(1., 0., 1.),
-            Point3D::new(5., 6., 1.),
-            Point3D::new(6., 5., 1.),
+            Point3D::from([0., 1., 0.]),
+            Point3D::from([1., 0., 0.]),
+            Point3D::from([5., 6., 0.]),
+            Point3D::from([6., 5., 0.]),
+            Point3D::from([0., 1., 1.]),
+            Point3D::from([1., 0., 1.]),
+            Point3D::from([5., 6., 1.]),
+            Point3D::from([6., 5., 1.]),
         ];
 
         let mbr = Mbr::from_points(&points);
         eprintln!("mbr = {:#?}", mbr);
 
-        let none = mbr.region(&Point3D::new(0., 0., 0.));
+        let none = mbr.region(&Point3D::from([0., 0., 0.]));
         let octants = vec![
-            mbr.region(&Point3D::new(1.2, 1.2, 0.3)),
-            mbr.region(&Point3D::new(5.8, 4.9, 0.3)),
-            mbr.region(&Point3D::new(0.2, 1.1, 0.3)),
-            mbr.region(&Point3D::new(5.1, 5.8, 0.3)),
-            mbr.region(&Point3D::new(1.2, 1.2, 0.7)),
-            mbr.region(&Point3D::new(5.8, 4.9, 0.7)),
-            mbr.region(&Point3D::new(0.2, 1.1, 0.7)),
-            mbr.region(&Point3D::new(5.1, 5.8, 0.7)),
+            mbr.region(&Point3D::from([1.2, 1.2, 0.3])),
+            mbr.region(&Point3D::from([5.8, 4.9, 0.3])),
+            mbr.region(&Point3D::from([0.2, 1.1, 0.3])),
+            mbr.region(&Point3D::from([5.1, 5.8, 0.3])),
+            mbr.region(&Point3D::from([1.2, 1.2, 0.7])),
+            mbr.region(&Point3D::from([5.8, 4.9, 0.7])),
+            mbr.region(&Point3D::from([0.2, 1.1, 0.7])),
+            mbr.region(&Point3D::from([5.1, 5.8, 0.7])),
         ];
         assert_eq!(none, None);
         assert!(octants.iter().all(|o| o.is_some()));
