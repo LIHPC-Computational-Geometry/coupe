@@ -431,7 +431,7 @@ impl<'a, W, const D: usize> Part<'a, PointND<D>, W> {
         let points = self
             .indices
             .iter()
-            .map(|idx| self.partition.points()[*idx].clone())
+            .map(|&idx| self.partition.points()[idx])
             .collect::<Vec<_>>();
         Mbr::from_points(&points).aspect_ratio()
     }
