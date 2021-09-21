@@ -220,7 +220,7 @@ impl<const D: usize> Mbr<D> {
 
     // Transform a point with the transformation which maps the Mbr to the underlying Aabb
     pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
-        &self.mbr_to_aabb * point
+        self.mbr_to_aabb * point
     }
 
     /// Constructs a new `Mbr` from a slice of `PointND`.
@@ -236,10 +236,10 @@ impl<const D: usize> Mbr<D> {
         let mat = inertia_matrix(&weights, points);
         let vec = inertia_vector(mat);
         let base_change = householder_reflection(&vec);
-        let mbr_to_aabb = base_change.clone().try_inverse().unwrap();
+        let mbr_to_aabb = base_change.try_inverse().unwrap();
         let mapped = points
             .par_iter()
-            .map(|p| &mbr_to_aabb * p)
+            .map(|p| mbr_to_aabb * p)
             .collect::<Vec<_>>();
         let aabb = Aabb::from_points(&mapped);
 
@@ -255,8 +255,8 @@ impl<const D: usize> Mbr<D> {
     pub fn sub_mbr(&self, region: u32) -> Self {
         Self {
             aabb: self.aabb.sub_aabb(region),
-            aabb_to_mbr: self.aabb_to_mbr.clone(),
-            mbr_to_aabb: self.mbr_to_aabb.clone(),
+            aabb_to_mbr: self.aabb_to_mbr,
+            mbr_to_aabb: self.mbr_to_aabb,
         }
     }
 
@@ -270,33 +270,33 @@ impl<const D: usize> Mbr<D> {
 
     /// Computes the distance between a point and the current mbr.
     pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
-        self.aabb.distance_to_point(&(&self.mbr_to_aabb * point))
+        self.aabb.distance_to_point(&(self.mbr_to_aabb * point))
     }
 
     /// Computes the center of the Mbr
     #[allow(unused)]
     pub fn center(&self) -> PointND<D> {
-        &self.aabb_to_mbr * &self.aabb.center()
+        self.aabb_to_mbr * self.aabb.center()
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
     #[allow(unused)]
     pub fn contains(&self, point: &PointND<D>) -> bool {
-        self.aabb.contains(&(&self.mbr_to_aabb * point))
+        self.aabb.contains(&(self.mbr_to_aabb * point))
     }
 
     /// Returns the quadrant of the Aabb in which the specified point is.
     /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
     /// Returns `None` if the specified point is not contained in the Aabb.
     pub fn region(&self, point: &PointND<D>) -> Option<u32> {
-        self.aabb.region(&(&self.mbr_to_aabb * point))
+        self.aabb.region(&(self.mbr_to_aabb * point))
     }
 
     /// Returns the rotated min and max points of the Aabb.
     #[allow(unused)]
     pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
-        let min = &self.aabb_to_mbr * &self.aabb.p_min;
-        let max = &self.aabb_to_mbr * &self.aabb.p_max;
+        let min = self.aabb_to_mbr * self.aabb.p_min;
+        let max = self.aabb_to_mbr * self.aabb.p_max;
         (min, max)
     }
 }
@@ -318,7 +318,7 @@ pub(crate) fn inertia_matrix<const D: usize>(weights: &[f64], points: &[PointND<
         .par_iter()
         .zip(points)
         .fold_with(Matrix::from_element(0.), |acc, (w, p)| {
-            acc + ((p - &centroid) * (p - &centroid).transpose()).map(|e| e * w)
+            acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
         })
         .reduce_with(|a, b| a + b)
         .unwrap()

@@ -61,7 +61,7 @@ where
         .cloned()
         .skip(points_per_center / 2)
         .step_by(points_per_center)
-        .map(|idx| points[idx].clone())
+        .map(|idx| points[idx])
         .collect();
 
     let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
@@ -89,9 +89,9 @@ where
         n_iter -= 1;
 
         // find new assignments
-        permu.par_iter().for_each(|idx| {
+        permu.par_iter().for_each(|&idx| {
             // find closest center
-            let mut distances = ::std::iter::repeat(points[*idx].clone())
+            let mut distances = ::std::iter::repeat(points[idx])
                 .zip(centers.iter())
                 .zip(center_ids.iter())
                 .zip(influences.iter())
@@ -106,7 +106,7 @@ where
 
             let new_assignment = distances.into_iter().next().unwrap().0;
             let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
-            unsafe { std::ptr::write(ptr.add(*idx), new_assignment) }
+            unsafe { std::ptr::write(ptr.add(idx), new_assignment) }
         });
 
         // update centers position from new assignments
@@ -118,7 +118,7 @@ where
                     &permu
                         .iter()
                         // TODO: maybe cloning is avoidable here
-                        .map(|idx| (points[*idx].clone(), assignments[*idx]))
+                        .map(|&idx| (points[idx], assignments[idx]))
                         .filter(|(_, point_id)| *id == *point_id)
                         .map(|(p, _)| p)
                         .collect::<Vec<_>>(),
@@ -250,7 +250,7 @@ where
         .skip(points_per_center / 2)
         .step_by(points_per_center)
         .par_bridge()
-        .map(|idx| points[*idx].clone())
+        .map(|&idx| points[idx])
         .collect();
 
     // generate unique ids for each initial partition that will live throughout
@@ -336,7 +336,7 @@ pub fn balanced_k_means_with_initial_partition<const D: usize>(
                 .par_iter()
                 .zip(initial_partition.par_iter())
                 .filter(|(_, id)| *id == center_id)
-                .map(|(p, _)| p.clone())
+                .map(|(p, _)| *p)
                 .collect::<Vec<_>>();
             crate::geometry::center(&owned_points)
         })
