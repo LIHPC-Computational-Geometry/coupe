@@ -820,6 +820,9 @@ where
         let mut used_ids = ids.clone();
         used_ids.sort_unstable();
         used_ids.dedup();
+        for _ in used_ids.len()..self.num_parts {
+            used_ids.push(ProcessUniqueId::new());
+        }
         let mut ids: Vec<usize> = ids
             .into_iter()
             .map(|id| used_ids.iter().position(|uid| uid == &id).unwrap())
