@@ -1,7 +1,6 @@
 use clap::load_yaml;
 use clap::App;
 
-use coupe::dimension::U2;
 use coupe::geometry::Point2D;
 use coupe::Partitioner;
 use coupe::Rcb;
@@ -22,7 +21,7 @@ fn main() {
         .parse()
         .expect("Wrong value for num_points");
 
-    let rcb = Rcb::<U2>::new(num_iter);
+    let rcb = Rcb::new(num_iter);
 
     let weights = vec![1.; num_points];
 

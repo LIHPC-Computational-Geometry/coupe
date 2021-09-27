@@ -63,7 +63,7 @@ fn rcb<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
-        .map(|p| Point2D::new(p.x, p.y))
+        .map(|p| Point2D::from([p.0, p.1]))
         .collect::<Vec<_>>();
 
     let num_points = points.len();
@@ -98,7 +98,7 @@ fn rib<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
-        .map(|p| Point2D::new(p.x, p.y))
+        .map(|p| Point2D::from([p.0, p.1]))
         .collect::<Vec<_>>();
 
     let num_points = points.len();
@@ -137,7 +137,7 @@ fn multi_jagged<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
-        .map(|p| Point2D::new(p.x, p.y))
+        .map(|p| Point2D::from([p.0, p.1]))
         .collect::<Vec<_>>();
 
     let num_points = points.len();
@@ -166,7 +166,7 @@ fn simplified_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) 
     let points = mesh
         .vertices()
         .into_par_iter()
-        .map(|p| Point2D::new(p.x, p.y))
+        .map(|p| Point2D::from([p.0, p.1]))
         .collect::<Vec<_>>();
 
     let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
@@ -210,7 +210,7 @@ fn balanced_k_means<'a>(mesh: &impl Mesh<Dim = D3>, matches: &ArgMatches<'a>) {
     let points = mesh
         .vertices()
         .into_par_iter()
-        .map(|p| Point2D::new(p.x, p.y))
+        .map(|p| Point2D::from([p.0, p.1]))
         .collect::<Vec<_>>();
 
     let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();

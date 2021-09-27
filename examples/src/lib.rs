@@ -5,20 +5,40 @@ use snowflake::ProcessUniqueId;
 use sprs::CsMat;
 
 use coupe::geometry::Point2D;
+use mesh_io::medit::ElementType;
 use mesh_io::medit::MeditMesh;
 
 // generate adjacency matrix from Medit mesh
 pub fn generate_connectivity_matrix_medit(mesh: &MeditMesh) -> CsMat<u32> {
-    let views = mesh
+    let (_el_type, triangles) = mesh
         .topology()
         .iter()
-        .map(|mat| mat.view())
-        .collect::<Vec<_>>();
-    // let stacked = sprs::vstack(&views);
+        // TODO: really needs to filter on triangles?
+        .find(|(el_type, _elements)| el_type == &ElementType::Triangle)
+        .unwrap();
 
-    // TODO: replace [0] with proper indexing to find matrix
-    // associated with triangle nodes indices
-    views[1].to_owned()
+    let num_triangles = triangles.len() / 3;
+    debug_assert_eq!(triangles.len() % 3, 0);
+    let mut ret = CsMat::zero((num_triangles, num_triangles));
+    for (i, t1) in triangles.chunks_exact(3).enumerate() {
+        for (j, t2) in triangles.chunks_exact(3).enumerate() {
+            if i == j {
+                continue;
+            }
+            let mut nodes = t1.to_vec();
+            nodes.extend(t2.iter().cloned());
+            nodes.sort_unstable();
+            nodes.dedup();
+            debug_assert_eq!(nodes.len() % 2, 0);
+            let num_common_nodes = 3 - nodes.len() / 2;
+            const MIN_COMMON: usize = 1;
+            if MIN_COMMON <= num_common_nodes {
+                ret.insert(i, j, 1);
+            }
+        }
+    }
+
+    ret
 }
 
 pub fn plot_partition(points: Vec<(Point2D, ProcessUniqueId)>) {
@@ -51,7 +71,7 @@ pub fn plot_partition(points: Vec<(Point2D, ProcessUniqueId)>) {
 
 fn random_color_string() -> String {
     let mut rng = rand::thread_rng();
-    let hex = rng.gen_range(0, 0xfff_fff);
+    let hex = rng.gen_range(0..0xfff_fff);
     format!("#{:x}", hex)
 }
 
@@ -68,8 +88,8 @@ pub mod generator {
         let mut ret = Vec::with_capacity(num_points);
         while num_points > 0 {
             let p = Point2D::new(
-                rng.gen_range(bb_p_min.x, bb_p_max.x),
-                rng.gen_range(bb_p_min.y, bb_p_max.y),
+                rng.gen_range(bb_p_min.x..bb_p_max.x),
+                rng.gen_range(bb_p_min.y..bb_p_max.y),
             );
             if (center - p).norm() < radius {
                 num_points -= 1;
@@ -92,8 +112,8 @@ pub mod generator {
         (0..num_points)
             .map(|_| {
                 Point2D::new(
-                    rng.gen_range(p_min.x, p_max.x),
-                    rng.gen_range(p_min.y, p_max.y),
+                    rng.gen_range(p_min.x..p_max.x),
+                    rng.gen_range(p_min.y..p_max.y),
                 )
             })
             .collect()
@@ -108,9 +128,9 @@ pub mod generator {
         (0..num_points)
             .map(|_| {
                 Point3D::new(
-                    rng.gen_range(p_min.x, p_max.x),
-                    rng.gen_range(p_min.y, p_max.y),
-                    rng.gen_range(p_min.z, p_max.z),
+                    rng.gen_range(p_min.x..p_max.x),
+                    rng.gen_range(p_min.y..p_max.y),
+                    rng.gen_range(p_min.z..p_max.z),
                 )
             })
             .collect()
