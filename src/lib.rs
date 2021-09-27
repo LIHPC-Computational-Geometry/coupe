@@ -27,9 +27,12 @@
 //! - Number partitioning:
 //!   + [VN-Best][VnBest]
 
+#![feature(array_chunks)]
+
 pub mod algorithms;
 pub mod geometry;
 pub mod imbalance;
+pub mod mesh;
 pub mod partition;
 mod real;
 mod run_info;
