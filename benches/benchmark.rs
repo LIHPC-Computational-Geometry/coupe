@@ -15,8 +15,8 @@ fn bench_axis_sort_random(c: &mut Criterion) {
         "axis_sort_random",
         Benchmark::new("axis_sort_random", move |b| {
             let sample_points = generator::uniform_rectangle(
-                Point2D::new(0., 0.),
-                Point2D::new(30., 10.),
+                Point2D::from([0., 0.]),
+                Point2D::from([30., 10.]),
                 SAMPLE_SIZE,
             );
             let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
@@ -102,8 +102,8 @@ fn bench_axis_sort_sorted(c: &mut Criterion) {
         "axis_sort_sorted",
         Benchmark::new("axis_sort_sorted", move |b| {
             let sample_points = generator::already_x_sorted_rectangle(
-                Point2D::new(0., 0.),
-                Point2D::new(30., 10.),
+                Point2D::from([0., 0.]),
+                Point2D::from([30., 10.]),
                 SAMPLE_SIZE,
             );
             let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
@@ -118,8 +118,8 @@ fn bench_rcb_random(c: &mut Criterion) {
         "rcb_random",
         Benchmark::new("rcb_random", move |b| {
             let sample_points = generator::uniform_rectangle(
-                Point2D::new(0., 0.),
-                Point2D::new(30., 10.),
+                Point2D::from([0., 0.]),
+                Point2D::from([30., 10.]),
                 SAMPLE_SIZE,
             );
             let weights: Vec<_> = sample_points.iter().map(|_| 1.).collect();
