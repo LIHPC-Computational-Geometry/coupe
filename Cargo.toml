@@ -27,6 +27,9 @@ rand = "0.8"
 snowflake = "1.3"
 sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
 
+# meshio
+vtkio = "0.6"
+
 [dev-dependencies]
 criterion = "0.3"
 gnuplot = "0.0.35"

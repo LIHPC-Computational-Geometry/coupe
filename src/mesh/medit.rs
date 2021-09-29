@@ -1,19 +1,18 @@
-use crate::ElementType;
-use crate::Mesh;
+use super::ElementType;
+use super::Mesh;
 use std::cell;
 use std::error;
 use std::fmt;
-use std::fs;
 use std::io;
 use std::mem;
 use std::num;
-use std::path;
 use std::str;
 
 #[derive(Debug)]
 pub enum ErrorKind {
     UnexpectedToken { expected: String, found: String },
     Io(io::Error),
+    BadDimension { expected: usize, found: usize },
     BadInteger(num::ParseIntError),
     BadFloat(num::ParseFloatError),
 }
@@ -31,6 +30,9 @@ impl fmt::Display for ErrorKind {
                 write!(f, "expected token {:?}, found {}", expected, found)
             }
             ErrorKind::Io(err) => write!(f, "io error: {}", err),
+            ErrorKind::BadDimension { expected, found } => {
+                write!(f, "expected dimension to be {}, found {}", expected, found)
+            }
             ErrorKind::BadInteger(err) => write!(f, "when parsing integer: {}", err),
             ErrorKind::BadFloat(err) => write!(f, "when parsing float: {}", err),
         }
@@ -91,6 +93,18 @@ fn parse_element_type(s: &str) -> Option<ElementType> {
         "hexahedra" => ElementType::Hexahedron,
         _ => return None,
     })
+}
+
+fn format_element_type(element_type: ElementType) -> &'static str {
+    match element_type {
+        ElementType::Vertex => "Vertices",
+        ElementType::Edge => "Edges",
+        ElementType::Triangle => "Triangles",
+        ElementType::Quadrangle => "Quadrangles",
+        ElementType::Quadrilateral => "Quadrilaterals",
+        ElementType::Tetrahedron => "Tetrahedra",
+        ElementType::Hexahedron => "Hexahedra",
+    }
 }
 
 /// a token separator
@@ -172,7 +186,7 @@ where
     }
 }
 
-pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
+pub fn parse<R: io::BufRead, const D: usize>(mut input: R) -> Result<Mesh<D>, Error> {
     enum Read {
         T,
         L,
@@ -233,10 +247,18 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
         .parse::<usize>()
         .map_err(with_lineno(*lineno.borrow()))?;
 
-    let mut mesh = MeditMesh {
-        dimension,
-        ..Default::default()
-    };
+    if dimension != D {
+        return Err(Error {
+            kind: ErrorKind::BadDimension {
+                expected: D,
+                found: dimension,
+            },
+            lineno: *lineno.borrow(),
+        });
+    }
+
+    let mut nodes = Vec::new();
+    let mut elements = Vec::new();
 
     loop {
         let section = read(T).map_err(with_lineno(*lineno.borrow()))?;
@@ -250,19 +272,20 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
                     .map_err(with_lineno(*lineno.borrow()))?
                     .parse::<usize>()
                     .map_err(with_lineno(*lineno.borrow()))?;
-                let mut coords = Vec::with_capacity(dimension * num_vertices);
+                nodes = Vec::with_capacity(dimension * num_vertices);
 
                 for _ in 0..num_vertices {
                     let line = read(L).map_err(with_lineno(*lineno.borrow()))?;
                     let mut words = line.split_whitespace();
-                    for _ in 0..dimension {
-                        let c = words
+                    let mut node = [0.0; D];
+                    for coord in node.iter_mut() {
+                        *coord = words
                             .next()
                             .ok_or(io::ErrorKind::UnexpectedEof)?
                             .parse::<f64>()
                             .map_err(with_lineno(*lineno.borrow()))?;
-                        coords.push(c);
                     }
+                    nodes.push(node);
                     if let Some(word) = words.next() {
                         let _vertex_ref = word
                             .parse::<usize>()
@@ -279,11 +302,9 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
                         });
                     }
                 }
-
-                mesh.coordinates = coords;
             }
-            element_type if element_type.parse::<ElementType>().is_ok() => {
-                let element_type = element_type.parse::<ElementType>().unwrap();
+            element_type if parse_element_type(element_type).is_some() => {
+                let element_type = parse_element_type(element_type).unwrap();
                 mem::drop(section); // drop the borrow on token
 
                 let prev_lineno = *lineno.borrow();
@@ -326,7 +347,7 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
                     }
                 }
 
-                mesh.topology.push((element_type, vertices));
+                elements.push((element_type, vertices));
             }
             "corners" | "ridges" | "requiredvertices" => {
                 mem::drop(section); // drop the borrow on token
@@ -349,56 +370,35 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<MeditMesh, Error> {
             }
         }
     }
-    Ok(mesh)
+    Ok(Mesh { nodes, elements })
 }
 
-impl MeditMesh {
-    /// Import from a medit mesh file.
-    pub fn from_file(path: impl AsRef<path::Path>) -> Result<MeditMesh, Error> {
-        let file = fs::File::open(path)?;
-        parse(io::BufReader::new(file))
-    }
+pub struct Display<'a, const D: usize> {
+    pub mesh: &'a Mesh<D>,
 }
 
-impl str::FromStr for MeditMesh {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<MeditMesh, Error> {
-        parse(io::Cursor::new(s))
-    }
-}
-
-impl fmt::Display for ElementType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ElementType::Vertex => write!(f, "Vertices"),
-            ElementType::Edge => write!(f, "Edges"),
-            ElementType::Triangle => write!(f, "Triangles"),
-            ElementType::Quadrangle => write!(f, "Quadrangles"),
-            ElementType::Quadrilateral => write!(f, "Quadrilaterals"),
-            ElementType::Tetrahedron => write!(f, "Tetrahedra"),
-            ElementType::Hexahedron => write!(f, "Hexahedra"),
-        }
-    }
-}
-
-impl fmt::Display for MeditMesh {
+impl<const D: usize> fmt::Display for Display<'_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "MeshVersionFormatted 2\nDimension {}\n\nVertices\n\t{}\n",
-            self.dimension,
-            self.num_nodes(),
+            D,
+            self.mesh.nodes.len(),
         )?;
-        for vertex in self.coordinates.chunks(self.dimension) {
+        for vertex in &self.mesh.nodes {
             for coordinate in vertex {
                 write!(f, " {}", coordinate)?;
             }
             writeln!(f, " 0")?;
         }
-        for (element_type, nodes) in &self.topology {
+        for (element_type, nodes) in &self.mesh.elements {
             let num_elements = nodes.len() / element_type.num_nodes();
-            write!(f, "\n{}\n\t{}\n", element_type, num_elements)?;
+            write!(
+                f,
+                "\n{}\n\t{}\n",
+                format_element_type(*element_type),
+                num_elements,
+            )?;
             for element in nodes.chunks(element_type.num_nodes()) {
                 for node in element {
                     write!(f, " {}", node + 1)?;
@@ -432,7 +432,9 @@ Triangles
  2 3 4 0
 
 End";
-        let output = input.parse::<MeditMesh>().unwrap().to_string();
+        let input = io::Cursor::new(input);
+        let mesh = parse(input).unwrap();
+        let output = format(&mesh);
         assert_eq!(input, output);
     }
 

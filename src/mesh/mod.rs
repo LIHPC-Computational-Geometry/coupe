@@ -1,4 +1,10 @@
-pub mod io;
+use std::fmt;
+use std::fs;
+use std::io;
+use std::path::Path;
+
+mod medit;
+mod vtk;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ElementType {
@@ -23,7 +29,6 @@ impl ElementType {
     }
 }
 
-#[derive(Default, Debug)]
 pub struct Mesh<const D: usize> {
     nodes: Vec<[f64; D]>,
     elements: Vec<(ElementType, Vec<usize>)>,
@@ -103,5 +108,65 @@ impl<const D: usize> Mesh<D> {
             .iter()
             .find(|(et, _node_ids)| et == &el_type)
             .map(|(_et, node_ids)| node_ids)
+    }
+}
+
+impl<const D: usize> Mesh<D> {
+    pub fn from_reader(mut r: impl io::BufRead + io::Seek) -> io::Result<Mesh<D>> {
+        use std::io::SeekFrom;
+
+        let start_pos = r.stream_position()?;
+
+        if let Ok(mesh) = medit::parse(&mut r) {
+            return Ok(mesh);
+        }
+
+        let offset = (r.stream_position()? - start_pos) as i64;
+        r.seek(SeekFrom::Current(-offset))?;
+
+        if let Ok(mesh) = vtk::parse_xml(&mut r) {
+            return Ok(mesh);
+        }
+
+        let offset = (r.stream_position()? - start_pos) as i64;
+        r.seek(SeekFrom::Current(-offset))?;
+
+        if let Ok(mesh) = vtk::parse_legacy_le(&mut r) {
+            return Ok(mesh);
+        }
+
+        Err(io::ErrorKind::InvalidData.into())
+    }
+
+    pub fn from_reader_medit(r: impl io::BufRead) -> io::Result<Mesh<D>> {
+        medit::parse(r).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+
+    pub fn from_reader_vtk_xml(r: impl io::BufRead) -> io::Result<Mesh<D>> {
+        vtk::parse_xml(r).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+
+    pub fn from_str(s: &str) -> io::Result<Mesh<D>> {
+        Mesh::from_reader(io::Cursor::new(s))
+    }
+
+    pub fn from_file(path: impl AsRef<Path>) -> io::Result<Mesh<D>> {
+        let path = path.as_ref();
+        let extension = path.extension().and_then(std::ffi::OsStr::to_str);
+
+        let file = fs::File::open(path)?;
+        let r = io::BufReader::new(file);
+
+        match extension {
+            Some("mesh") => Mesh::from_reader_medit(r),
+            Some("vtk") => Mesh::from_reader_vtk_xml(r), // TODO get the extension right
+            _ => Mesh::from_reader(r),
+        }
+    }
+}
+
+impl<const D: usize> Mesh<D> {
+    pub fn fmt_medit(&self) -> impl fmt::Display + '_ {
+        medit::Display { mesh: self }
     }
 }
