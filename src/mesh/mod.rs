@@ -1,3 +1,7 @@
+//! Mesh I/O - Read and write meshes to files and al.
+//!
+//! See the [Mesh] struct for more details.
+
 use std::fmt;
 use std::fs;
 use std::io;
@@ -37,6 +41,7 @@ pub struct Mesh<const D: usize> {
     elements: Vec<(ElementType, Vec<usize>)>,
 }
 
+/// Data methods.
 impl<const D: usize> Mesh<D> {
     /// Iterator over the nodes of the mesh.
     pub fn nodes(&self) -> impl Iterator<Item = [f64; D]> + ExactSizeIterator + '_ {
@@ -90,6 +95,7 @@ impl<const D: usize> Mesh<D> {
     }
 }
 
+/// Parsing methods.
 impl<const D: usize> Mesh<D> {
     /// Read and parse a mesh from a stream of bytes.
     ///
@@ -159,6 +165,7 @@ impl<const D: usize> str::FromStr for Mesh<D> {
     }
 }
 
+/// Formatting methods.
 impl<const D: usize> Mesh<D> {
     /// Serialize the mesh using the ASCII Medit format.
     ///
