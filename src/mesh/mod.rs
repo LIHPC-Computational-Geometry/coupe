@@ -6,103 +6,81 @@ use std::path::Path;
 mod medit;
 mod vtk;
 
+/// Type of a mesh element (also called cell).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ElementType {
     Vertex,
     Edge,
     Triangle,
     Quadrangle,
-    Quadrilateral,
     Tetrahedron,
     Hexahedron,
 }
 
 impl ElementType {
+    /// The number of nodes involved in the definition of this type of element.
     pub fn num_nodes(self) -> usize {
         match self {
             ElementType::Vertex => 1,
             ElementType::Edge => 2,
             ElementType::Triangle => 3,
-            ElementType::Quadrangle | ElementType::Quadrilateral | ElementType::Tetrahedron => 4,
+            ElementType::Quadrangle | ElementType::Tetrahedron => 4,
             ElementType::Hexahedron => 8,
         }
     }
 }
 
+/// Main struct for a mesh.
 pub struct Mesh<const D: usize> {
     nodes: Vec<[f64; D]>,
     elements: Vec<(ElementType, Vec<usize>)>,
 }
 
 impl<const D: usize> Mesh<D> {
+    /// Iterator over the nodes of the mesh.
     pub fn nodes(&self) -> impl Iterator<Item = [f64; D]> + ExactSizeIterator + '_ {
         self.nodes.iter().cloned()
     }
 
+    /// A single node of the mesh.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic iff node_idx is greater or equal to the number
+    /// of nodes.
     pub fn node(&self, node_idx: usize) -> [f64; D] {
         self.nodes[node_idx]
     }
 
+    /// An iterator over the triangles present in the mesh.
     pub fn triangles(&self) -> Option<impl Iterator<Item = [usize; 3]> + ExactSizeIterator + '_> {
         let node_ids = self.elements_of_type(ElementType::Triangle)?;
         debug_assert_eq!(node_ids.len() % 3, 0);
         Some(node_ids.array_chunks().cloned())
     }
 
-    pub fn num_quads(&self) -> usize {
-        let quadrangles = self
-            .elements_of_type(ElementType::Quadrangle)
-            .map_or(0, |node_ids| {
-                debug_assert_eq!(node_ids.len() % 4, 0);
-                node_ids.len() / 4
-            });
-        let quadrilaterals =
-            self.elements_of_type(ElementType::Quadrilateral)
-                .map_or(0, |node_ids| {
-                    debug_assert_eq!(node_ids.len() % 4, 0);
-                    node_ids.len() / 4
-                });
-        quadrangles + quadrilaterals
-    }
-
-    pub fn quads(&self) -> Option<impl Iterator<Item = [usize; 4]> + '_> {
-        let quadrangles = self
-            .elements_of_type(ElementType::Quadrangle)?
-            .array_chunks()
-            .cloned();
-        let quadrilaterals = self
-            .elements_of_type(ElementType::Quadrilateral)?
-            .array_chunks()
-            .cloned();
-        Some(quadrangles.chain(quadrilaterals))
-    }
-
+    /// An iterator over the quadrangles present in the mesh.
     pub fn quadrangles(&self) -> Option<impl Iterator<Item = [usize; 4]> + ExactSizeIterator + '_> {
         let node_ids = self.elements_of_type(ElementType::Quadrangle)?;
         debug_assert_eq!(node_ids.len() % 4, 0);
         Some(node_ids.array_chunks().cloned())
     }
 
-    pub fn quadrilaterals(
-        &self,
-    ) -> Option<impl Iterator<Item = [usize; 4]> + ExactSizeIterator + '_> {
-        let node_ids = self.elements_of_type(ElementType::Quadrilateral)?;
-        debug_assert_eq!(node_ids.len() % 4, 0);
-        Some(node_ids.array_chunks().cloned())
-    }
-
+    /// An iterator over the tetrahedra present in the mesh.
     pub fn tetrahedra(&self) -> Option<impl Iterator<Item = [usize; 4]> + ExactSizeIterator + '_> {
         let node_ids = self.elements_of_type(ElementType::Tetrahedron)?;
         debug_assert_eq!(node_ids.len() % 4, 0);
         Some(node_ids.array_chunks().cloned())
     }
 
+    /// An iterator over the hexahedra present in the mesh.
     pub fn hexahedra(&self) -> Option<impl Iterator<Item = [usize; 8]> + ExactSizeIterator + '_> {
         let node_ids = self.elements_of_type(ElementType::Hexahedron)?;
         debug_assert_eq!(node_ids.len() % 8, 0);
         Some(node_ids.array_chunks().cloned())
     }
 
+    /// An iterator over the elements of the given type present in the mesh.
     fn elements_of_type(&self, el_type: ElementType) -> Option<&Vec<usize>> {
         self.elements
             .iter()
@@ -112,6 +90,9 @@ impl<const D: usize> Mesh<D> {
 }
 
 impl<const D: usize> Mesh<D> {
+    /// Read and parse a mesh from a stream of bytes.
+    ///
+    /// The first format that succeeds to parse is chosen.
     pub fn from_reader(mut r: impl io::BufRead + io::Seek) -> io::Result<Mesh<D>> {
         use std::io::SeekFrom;
 
@@ -138,18 +119,26 @@ impl<const D: usize> Mesh<D> {
         Err(io::ErrorKind::InvalidData.into())
     }
 
+    /// Read and parse a mesh using the ASCII Medit format.
     pub fn from_reader_medit(r: impl io::BufRead) -> io::Result<Mesh<D>> {
         medit::parse(r).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 
+    /// Read and parse a mesh using the XML VTK format.
     pub fn from_reader_vtk_xml(r: impl io::BufRead) -> io::Result<Mesh<D>> {
         vtk::parse_xml(r).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 
+    /// Read and parse a mesh from a string.
+    ///
+    /// The first format that succeeds to parse is chosen.
     pub fn from_str(s: &str) -> io::Result<Mesh<D>> {
         Mesh::from_reader(io::Cursor::new(s))
     }
 
+    /// Read and parse a mesh from a file.
+    ///
+    /// The file extension is used to detect the underlying format.
     pub fn from_file(path: impl AsRef<Path>) -> io::Result<Mesh<D>> {
         let path = path.as_ref();
         let extension = path.extension().and_then(std::ffi::OsStr::to_str);
@@ -166,7 +155,19 @@ impl<const D: usize> Mesh<D> {
 }
 
 impl<const D: usize> Mesh<D> {
+    /// Serialize the mesh using the ASCII Medit format.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use coupe::mesh::Mesh;
+    /// let mesh = Mesh::<2>::from_str("MeshVersionFormatted 1\nDimension 2\n")
+    ///     .unwrap();
+    /// println!("{}", mesh.fmt_medit());
+    /// ```
     pub fn fmt_medit(&self) -> impl fmt::Display + '_ {
         medit::Display { mesh: self }
     }
+
+    // TODO fmt_vtk
 }

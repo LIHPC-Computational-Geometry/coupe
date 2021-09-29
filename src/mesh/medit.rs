@@ -87,7 +87,7 @@ fn parse_element_type(s: &str) -> Option<ElementType> {
     Some(match s {
         "edges" => ElementType::Edge,
         "triangles" => ElementType::Triangle,
-        "quadrilaterals" => ElementType::Quadrilateral,
+        "quadrilaterals" => ElementType::Quadrangle,
         "quadrangles" => ElementType::Quadrangle,
         "tetrahedra" => ElementType::Tetrahedron,
         "hexahedra" => ElementType::Hexahedron,
@@ -101,7 +101,6 @@ fn format_element_type(element_type: ElementType) -> &'static str {
         ElementType::Edge => "Edges",
         ElementType::Triangle => "Triangles",
         ElementType::Quadrangle => "Quadrangles",
-        ElementType::Quadrilateral => "Quadrilaterals",
         ElementType::Tetrahedron => "Tetrahedra",
         ElementType::Hexahedron => "Hexahedra",
     }
