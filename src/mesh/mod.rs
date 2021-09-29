@@ -2,6 +2,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::str;
 
 mod medit;
 mod vtk;
@@ -129,13 +130,6 @@ impl<const D: usize> Mesh<D> {
         vtk::parse_xml(r).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 
-    /// Read and parse a mesh from a string.
-    ///
-    /// The first format that succeeds to parse is chosen.
-    pub fn from_str(s: &str) -> io::Result<Mesh<D>> {
-        Mesh::from_reader(io::Cursor::new(s))
-    }
-
     /// Read and parse a mesh from a file.
     ///
     /// The file extension is used to detect the underlying format.
@@ -151,6 +145,17 @@ impl<const D: usize> Mesh<D> {
             Some("vtk") => Mesh::from_reader_vtk_xml(r), // TODO get the extension right
             _ => Mesh::from_reader(r),
         }
+    }
+}
+
+impl<const D: usize> str::FromStr for Mesh<D> {
+    type Err = io::Error;
+
+    /// Read and parse a mesh from a string.
+    ///
+    /// The first format that succeeds to parse is chosen.
+    fn from_str(s: &str) -> io::Result<Mesh<D>> {
+        Mesh::from_reader(io::Cursor::new(s))
     }
 }
 
