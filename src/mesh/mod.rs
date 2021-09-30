@@ -52,8 +52,8 @@ impl<const D: usize> Mesh<D> {
     ///
     /// # Panics
     ///
-    /// This function will panic iff node_idx is greater or equal to the number
-    /// of nodes.
+    /// This function will panic iff `node_idx` is greater or equal to the
+    /// number of nodes.
     pub fn node(&self, node_idx: usize) -> [f64; D] {
         self.nodes[node_idx]
     }

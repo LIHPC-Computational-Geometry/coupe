@@ -1,3 +1,9 @@
+//! Medit file format (de)serialization.
+//!
+//! This implementation followed [UPMC's spec][0] (french).
+//!
+//! [0]: https://www.ljll.math.upmc.fr/frey/logiciels/Docmedit.dir/Docmedit.html#SECTION00030000000000000000
+
 use super::ElementType;
 use super::Mesh;
 use std::cell;
