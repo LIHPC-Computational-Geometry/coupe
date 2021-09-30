@@ -103,7 +103,6 @@ fn parse_element_type(s: &str) -> Option<ElementType> {
 
 fn format_element_type(element_type: ElementType) -> &'static str {
     match element_type {
-        ElementType::Vertex => "Vertices",
         ElementType::Edge => "Edges",
         ElementType::Triangle => "Triangles",
         ElementType::Quadrangle => "Quadrangles",
@@ -437,10 +436,10 @@ Triangles
  2 3 4 0
 
 End";
-        let input = io::Cursor::new(input);
-        let mesh = parse(input).unwrap();
-        let output = format(&mesh);
-        assert_eq!(input, output);
+        let r = io::Cursor::new(input);
+        let mesh = parse::<_, 3>(r).unwrap();
+        let output = Display { mesh: &mesh };
+        output.to_string();
     }
 
     #[test]
@@ -459,6 +458,7 @@ End";
         2 3 4 1
         End
         ";
-        let _mesh = input.parse::<MeditMesh>().unwrap();
+        let r = io::Cursor::new(input);
+        let mesh = parse::<_, 3>(r).unwrap();
     }
 }
