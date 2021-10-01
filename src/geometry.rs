@@ -206,6 +206,7 @@ impl<const D: usize> Aabb<D> {
     }
 }
 
+/// Minimum bounding rectangle.
 #[derive(Debug, Clone)]
 pub(crate) struct Mbr<const D: usize> {
     aabb: Aabb<D>,
@@ -374,7 +375,8 @@ pub(crate) fn center<const D: usize>(points: &[PointND<D>]) -> PointND<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::*;
+    use approx::assert_relative_eq;
+    use approx::assert_ulps_eq;
     use nalgebra::Matrix2;
 
     #[test]
@@ -409,7 +411,7 @@ mod tests {
         let _aabb = Aabb::from_points(&points);
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_mbr_2d() {
         let points = vec![
             Point2D::from([5., 3.]),
@@ -421,7 +423,7 @@ mod tests {
         let mbr = Mbr::from_points(&points);
         let aspect_ratio = mbr.aspect_ratio();
 
-        assert_relative_eq!(aspect_ratio, 4.);
+        assert_relative_eq!(aspect_ratio, 4., epsilon = 1e-14);
     }
 
     #[test]
@@ -552,7 +554,7 @@ mod tests {
         assert!(q4.is_some());
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_householder_reflexion() {
         let el = PointND::<6>::new_random();
         let mat = householder_reflection(&el);
@@ -566,7 +568,11 @@ mod tests {
         for col1 in 0..6 {
             for col2 in 0..6 {
                 if col1 != col2 {
-                    assert_relative_eq!(mat.column(col1).dot(&mat.column(col2)), 0.);
+                    assert_relative_eq!(
+                        mat.column(col1).dot(&mat.column(col2)),
+                        0.,
+                        epsilon = 1e-14,
+                    );
                 }
             }
         }
@@ -595,7 +601,7 @@ mod tests {
         assert_ulps_eq!(aspect_ratio, 7. / 5.);
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_mbr_3d() {
         let points = vec![
             Point3D::from([5., 3., 0.]),
@@ -612,10 +618,10 @@ mod tests {
         println!("mbr = {:?}", mbr);
         let aspect_ratio = mbr.aspect_ratio();
 
-        assert_relative_eq!(aspect_ratio, 4.);
+        assert_relative_eq!(aspect_ratio, 4., epsilon = 1e-14);
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_inertia_vector_3d() {
         let points = vec![
             Point3D::from([3., 0., 0.]),
@@ -631,7 +637,7 @@ mod tests {
 
         eprintln!("{}", vec);
 
-        assert_relative_eq!(expected.cross(&vec).norm(), 0.);
+        assert_relative_eq!(expected.cross(&vec).norm(), 0., epsilon = 1e-15);
     }
 
     //#[test] // TODO
