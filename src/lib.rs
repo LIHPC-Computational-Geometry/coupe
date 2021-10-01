@@ -35,9 +35,6 @@ mod real;
 mod run_info;
 pub mod topology;
 
-#[cfg(test)]
-mod tests;
-
 // API
 
 // SUBMODULES REEXPORT
