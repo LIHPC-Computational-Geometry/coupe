@@ -153,41 +153,16 @@ impl<const D: usize> Aabb<D> {
     }
 
     pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
-        if !self.contains(point) {
-            let clamped = PointND::<D>::from_iterator(
-                self.p_min
-                    .iter()
-                    .zip(self.p_max.iter())
-                    .zip(point.iter())
-                    .map(|((min, max), point)| {
-                        if point > max {
-                            *max
-                        } else if point < min {
-                            *min
-                        } else {
-                            *point
-                        }
-                    }),
-            );
-            clamped.norm()
-        } else {
-            let center = self.center();
-
+        PointND::<D>::from_iterator(
             self.p_min
                 .iter()
                 .zip(self.p_max.iter())
                 .zip(point.iter())
-                .zip(center.into_iter())
-                .map(|(((min, max), point), center)| {
-                    if point > center {
-                        (max - point).abs()
-                    } else {
-                        (min - point).abs()
-                    }
-                })
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
-                .unwrap()
-        }
+                .map(|((p_min, p_max), point)| {
+                    f64::max(f64::max(p_min - point, 0.0), point - p_max)
+                }),
+        )
+        .norm()
     }
 
     pub fn region(&self, point: &PointND<D>) -> Option<u32> {
@@ -462,7 +437,7 @@ mod tests {
         assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_mbr_distance_to_point_2d() {
         let points = vec![
             Point2D::from([0., 1.]),
@@ -484,9 +459,9 @@ mod tests {
             .map(|p| mbr.distance_to_point(p))
             .collect();
 
-        assert_relative_eq!(distances[0], 0.5);
-        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[2], 1.);
+        assert_relative_eq!(distances[0], 0.0);
+        assert_relative_eq!(distances[1], 0.0);
+        assert_relative_eq!(distances[2], 1.0, epsilon = 1e-14);
     }
 
     #[test]
@@ -640,7 +615,7 @@ mod tests {
         assert_relative_eq!(expected.cross(&vec).norm(), 0., epsilon = 1e-15);
     }
 
-    //#[test] // TODO
+    #[test]
     fn test_mbr_distance_to_point_3d() {
         let points = vec![
             Point3D::from([0., 1., 0.]),
@@ -669,12 +644,12 @@ mod tests {
             .map(|p| mbr.distance_to_point(p))
             .collect();
 
-        assert_relative_eq!(distances[0], 0.5);
-        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[2], 1.);
-        assert_relative_eq!(distances[3], 0.5);
-        assert_relative_eq!(distances[4], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[5], 1.);
+        assert_relative_eq!(distances[0], 0.0);
+        assert_relative_eq!(distances[1], 0.0);
+        assert_relative_eq!(distances[2], 1.0);
+        assert_relative_eq!(distances[3], 0.0);
+        assert_relative_eq!(distances[4], 0.0);
+        assert_relative_eq!(distances[5], 1.0);
     }
 
     #[test]
