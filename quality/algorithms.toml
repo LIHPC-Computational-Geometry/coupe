@@ -1,0 +1,14 @@
+mesh_file = "../meshes/triangles_310.mesh"
+
+[distribution]
+name = "uniform"
+low = 0.0
+high = 1.0
+
+[[algorithm]]
+name = "rcb"
+iterations = 2
+
+[[algorithm]]
+name = "vnbest"
+parts = 2

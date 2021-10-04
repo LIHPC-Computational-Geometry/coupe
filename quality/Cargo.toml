@@ -1,0 +1,20 @@
+[package]
+name = "quality"
+version = "0.1.0"
+authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+coupe = { path = ".." }
+
+# Command-line options
+getopts = { version = "0.2", default-features = false, features = ["std"] }
+
+# Error handling
+anyhow = { version = "1", default-features = false, features = ["std"] }
+
+# Algorithm chain parsing
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
+toml = { version = "0.5", default-features = false, features = ["preserve_order"] }
