@@ -30,6 +30,7 @@
 pub mod algorithms;
 pub mod geometry;
 pub mod imbalance;
+pub mod mesh;
 pub mod partition;
 mod real;
 mod run_info;

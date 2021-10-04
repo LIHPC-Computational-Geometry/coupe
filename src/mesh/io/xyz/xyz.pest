@@ -1,0 +1,4 @@
+field = @{ ( "-" | "+" )? ~ ASCII_DIGIT* ~ "."? ~ ASCII_DIGIT* }
+record = { (field){3} }
+file = { SOI ~ NEWLINE* ~ (record ~ NEWLINE+)* ~ (EOI | (record ~ EOI)) }
+WHITESPACE = _{ " " | "\t"}
