@@ -10,111 +10,446 @@ use nalgebra::DimSub;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
-use std::cmp::Ordering;
+use std::cmp;
+use std::collections::BTreeMap;
+use std::mem;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::SeqCst;
+use std::sync::Arc;
+use std::sync::Barrier;
+use std::sync::Condvar;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
+use std::sync::RwLock;
+use std::sync::Weak;
 
-fn rcb_recurse<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    n_iter: usize,
-    partition: &mut Vec<ProcessUniqueId>,
-    current_part: ProcessUniqueId,
-    current_coord: usize,
+// Needed for an exponentiation where the exponent is a usize and needs to be
+// converted to a u32.
+const _USIZE_LARGER_THAN_U32: &[()] = &[(); mem::size_of::<usize>() - mem::size_of::<u32>()];
+
+#[derive(Debug)]
+struct Item<'p, const D: usize> {
+    point: PointND<D>,
+    weight: f64,
+    part: &'p mut ProcessUniqueId,
+}
+
+fn weighted_median<'p, const D: usize>(
+    s: &rayon::Scope<'p>,
+    q: Arc<JobQueue<'p, D>>,
+    items: Vec<Item<'p, D>>,
+    coord: usize,
+    num_iter: usize,
     tolerance: f64,
-) {
-    if n_iter == 0 {
-        return;
+    num_avail_threads: usize,
+) -> usize {
+    use std::sync::atomic::AtomicBool;
+
+    /// InitData is everything that is computed beforehand by all threads.
+    ///
+    /// It contains the bouding box (min, max) and the sum of all weights.  The
+    /// bounding box is updated at each iteration to compute the "split target".
+    struct InitData {
+        min: f64,
+        max: f64,
+        sum: f64,
     }
 
-    let sum: f64 = weights
-        .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_weight, weight_part)| **weight_part == current_part)
-        .map(|(weight, _weight_part)| *weight)
-        .sum();
+    /// LoopData is the result of each iteration.
+    ///
+    /// It is written by all threads, each threads decrements the TTL
+    /// (time-to-live). The thread that obtains ttl==0 updates InitData's min
+    /// and max, and decides whether to continue the iteration or not.
+    struct LoopData {
+        /// Weight on the left of the split target.  The weight on the right can
+        /// be obtained through InitData's sum.
+        weight_left: f64,
 
-    let max_imbalance = tolerance * sum;
+        /// The number of weights on the left of the split target.  The number
+        /// on the right can be obtained through items's length.
+        count_left: usize,
 
-    let (min, max) = points
-        .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_point, point_part)| **point_part == current_part)
-        .map(|(point, _point_part)| point[current_coord])
-        .fold(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
-        )
-        .reduce(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
-        );
+        /// The number of weights on the left of max and min.  Used to tell
+        /// whether it is impossible to find a split target that satisfy the
+        /// tolerance, and thus stop the iteration.
+        count_left_max: usize,
+        count_left_min: usize,
 
-    let mut split_min = min;
-    let mut split_max = max;
-    let mut split_target = (split_max + split_min) / 2.0;
+        /// Time-to-Live, initialized to the number of threads and decreased on
+        /// every write.  To know when the next iteration can begin.
+        ttl: usize,
+    }
 
-    while max_imbalance < split_max - split_min {
-        let (weight_left, weight_right) = weights
-            .par_iter()
-            .zip(points)
-            .enumerate()
-            // TODO zip
-            .filter(|(weight_id, (_, _))| partition[*weight_id] == current_part)
-            .map(|(_id, (weight, point))| {
-                let point = point[current_coord];
-                if point < split_target {
-                    (*weight, 0.0)
-                } else {
-                    (0.0, *weight)
+    /// Data shared by all threads
+    struct ThreadContext {
+        init_data: RwLock<InitData>,
+        loop_data: Mutex<LoopData>,
+        barrier: Barrier,
+        /// whether to stop the computation
+        run: AtomicBool,
+    }
+
+    if num_iter == 0 {
+        #[cfg(debug_assertions)]
+        println!("num_iter=0,num_items={}", items.len());
+        s.spawn(move |_| {
+            let part = ProcessUniqueId::new();
+            for item in items {
+                *item.part = part;
+            }
+            q.lock().free_threads(1);
+        });
+        return 1;
+    }
+
+    let num_items = items.len();
+    let chunk_size = usize::max((num_items + num_avail_threads - 1) / num_avail_threads, 64);
+    let num_threads = (num_items + chunk_size - 1) / chunk_size;
+    #[cfg(debug_assertions)]
+    println!(
+        "num_iter={},avail_threads={},num_threads={},num_items={},chunk_size={}",
+        num_iter, num_avail_threads, num_threads, num_items, chunk_size,
+    );
+
+    let ctx = Arc::new(ThreadContext {
+        init_data: RwLock::new(InitData {
+            min: f64::INFINITY,
+            max: f64::NEG_INFINITY,
+            sum: 0.0,
+        }),
+        loop_data: Mutex::new(LoopData {
+            weight_left: 0.0,
+            count_left: 0,
+            count_left_max: items.len(),
+            count_left_min: 0,
+            ttl: num_threads,
+        }),
+        barrier: Barrier::new(num_threads),
+        run: AtomicBool::new(true),
+    });
+
+    let items = Arc::new(items);
+    // Used to wait for all threads to be shut down, before unwraping items.
+    let (t_send, t_recv) = crossbeam_channel::bounded::<()>(0);
+
+    #[cfg(debug_assertions)]
+    let mut i = 0;
+
+    for chunk_start in (0..num_items).step_by(chunk_size) {
+        let q = Arc::clone(&q);
+        let ctx = Arc::clone(&ctx);
+        let items = Arc::clone(&items);
+        let t_send = t_send.clone();
+        let t_recv = t_recv.clone();
+        s.spawn(move |_| {
+            #[cfg(debug_assertions)]
+            println!("compute {}: spawn", i);
+            struct ThreadItem {
+                point_coord: f64,
+                weight: f64,
+            }
+
+            // Copy weights and coordinates into a hopefully nearer memory part.
+            let chunk_end = usize::min(num_items, chunk_start + chunk_size);
+            let thread_items: Vec<_> = items[chunk_start..chunk_end]
+                .iter()
+                .map(|item| ThreadItem {
+                    point_coord: item.point[coord],
+                    weight: item.weight,
+                })
+                .collect();
+
+            // Compute the sum, the min and the max and merge them.
+            let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
+
+            use itertools::Itertools as _;
+            let (partial_min, partial_max) = thread_items
+                .iter()
+                .map(|item| item.point_coord)
+                .minmax()
+                .into_option()
+                .unwrap();
+
+            {
+                #[cfg(debug_assertions)]
+                println!("compute {}: write sum/min/max", i);
+                let mut d = ctx.init_data.write().unwrap();
+                if partial_min < d.min {
+                    d.min = partial_min;
                 }
-            })
-            .reduce(
-                || (0.0, 0.0),
-                |(weight_left0, weight_right0), (weight_left1, weight_right1)| {
-                    (weight_left0 + weight_left1, weight_right0 + weight_right1)
-                },
-            );
+                if d.max < partial_max {
+                    d.max = partial_max;
+                }
+                d.sum += partial_sum;
+            }
+            #[cfg(debug_assertions)]
+            println!("compute {}: waiting for barrier", i);
+            ctx.barrier.wait();
+            #[cfg(debug_assertions)]
+            println!("compute {}: woke up", i);
 
-        let imbalance = f64::abs(weight_left - weight_right);
-        if imbalance < max_imbalance {
-            break;
-        }
+            let mut lead = false;
+            let mut split_target = 0.0;
+            while ctx.run.load(SeqCst) {
+                let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
+                split_target = (min + max) / 2.0;
+                let partial_weight_left: f64 = thread_items
+                    .iter()
+                    .filter(|item| item.point_coord < split_target)
+                    .map(|item| item.weight)
+                    .sum();
+                let partial_left_count = thread_items
+                    .iter()
+                    .filter(|item| item.point_coord < split_target)
+                    .count();
 
-        if weight_left < weight_right {
-            split_min = split_target;
-        } else {
-            split_max = split_target;
+                {
+                    #[cfg(debug_assertions)]
+                    println!("compute {}: write weight_left/right", i);
+                    let mut ld = ctx.loop_data.lock().unwrap();
+                    ld.weight_left += partial_weight_left;
+                    ld.count_left += partial_left_count;
+                    let ttl = ld.ttl - 1;
+                    if ttl == 0 {
+                        #[cfg(debug_assertions)]
+                        println!("compute {}: last write, computing next split_target", i);
+                        let mut id = ctx.init_data.try_write().unwrap();
+                        let weight_right = id.sum - ld.weight_left;
+                        let max_imbalance = tolerance * id.sum;
+
+                        if ld.weight_left < weight_right {
+                            id.min = split_target;
+                            ld.count_left_min = ld.count_left;
+                        } else {
+                            id.max = split_target;
+                            ld.count_left_max = ld.count_left;
+                        }
+
+                        if f64::abs(ld.weight_left - weight_right) < max_imbalance
+                            || ld.count_left_min == ld.count_left_max
+                        {
+                            #[cfg(debug_assertions)]
+                            println!(
+                                "compute {}: finish computation, split_target={}",
+                                i, split_target,
+                            );
+                            ctx.run.store(false, SeqCst);
+                            lead = true;
+                        } else {
+                            ld.weight_left = 0.0;
+                            ld.count_left = 0;
+                            ld.ttl = num_threads;
+                        }
+                    } else {
+                        ld.ttl = ttl;
+                    }
+                }
+                #[cfg(debug_assertions)]
+                println!("compute {}: waiting for barrier", i);
+                ctx.barrier.wait();
+                #[cfg(debug_assertions)]
+                println!("compute {}: woke up", i);
+            }
+            if lead {
+                mem::drop(t_send);
+                t_recv.recv().unwrap_err();
+                let items = match Arc::try_unwrap(items) {
+                    Ok(items) => items,
+                    Err(_) => unreachable!(),
+                };
+                let (left, right): (Vec<_>, Vec<_>) = items
+                    .into_iter()
+                    .partition(|item| item.point[coord] < split_target);
+                let next_coord = (coord + 1) % D;
+                let (threads_left, threads_right) = {
+                    let now = num_avail_threads as f64;
+                    let left = left.len() as f64;
+                    let right = right.len() as f64;
+                    let threads_left = left / (left + right) * now;
+                    let threads_right = right / (left + right) * now;
+                    (threads_left as usize, threads_right as usize)
+                };
+                let mut lock = q.lock();
+                lock.push(
+                    usize::max(threads_left, 1),
+                    Job {
+                        items: left,
+                        num_iter: num_iter - 1,
+                        coord: next_coord,
+                    },
+                );
+                lock.push(
+                    usize::max(threads_right, 1),
+                    Job {
+                        items: right,
+                        num_iter: num_iter - 1,
+                        coord: next_coord,
+                    },
+                );
+                lock.free_threads(num_threads);
+            }
+        });
+        #[cfg(debug_assertions)]
+        {
+            i += 1;
         }
-        split_target = (split_max + split_min) / 2.0;
+    }
+    #[cfg(debug_assertions)]
+    assert_eq!(i, num_threads);
+
+    num_threads
+}
+
+struct Job<'p, const D: usize> {
+    items: Vec<Item<'p, D>>,
+    coord: usize,
+    num_iter: usize,
+}
+
+impl<'p, const D: usize> std::fmt::Debug for Job<'p, D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Job {{ item_count: {}, coord: {}, num_iter: {} }}",
+            self.items.len(),
+            self.coord,
+            self.num_iter,
+        )
+    }
+}
+
+type TodoList<'p, const D: usize> = BTreeMap<usize, Vec<Job<'p, D>>>;
+
+struct JobQueue<'p, const D: usize> {
+    available_threads: AtomicUsize,
+    cond: Condvar,
+    todo_list: Mutex<TodoList<'p, D>>,
+}
+
+impl<'p, const D: usize> JobQueue<'p, D> {
+    pub fn new(available_threads: usize) -> Arc<JobQueue<'p, D>> {
+        Arc::new(JobQueue {
+            available_threads: AtomicUsize::new(available_threads),
+            cond: Condvar::new(),
+            todo_list: Mutex::new(BTreeMap::new()),
+        })
     }
 
-    let new_part = ProcessUniqueId::new();
-    partition
-        .par_iter_mut()
-        .zip(points)
-        .filter(|(point_part, point)| {
-            **point_part == current_part && point[current_coord] < split_target
-        })
-        .for_each(|(point_part, _point)| *point_part = new_part);
+    pub fn lock<'q>(self: &'q Arc<JobQueue<'p, D>>) -> JobQueueLock<'p, 'q, D> {
+        JobQueueLock {
+            queue_ref: Arc::downgrade(self),
+            available_threads: &self.available_threads,
+            cond: &self.cond,
+            todo_list: Some(self.todo_list.lock().unwrap()),
+        }
+    }
+}
 
-    let next_coord = (current_coord + 1) % D;
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        current_part,
-        next_coord,
-        tolerance,
+struct JobQueueLock<'p, 'q, const D: usize> {
+    queue_ref: Weak<JobQueue<'p, D>>,
+    available_threads: &'q AtomicUsize,
+    cond: &'q Condvar,
+    todo_list: Option<MutexGuard<'q, TodoList<'p, D>>>,
+}
+
+impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
+    pub fn push(&mut self, job_threads: usize, job: Job<'p, D>) {
+        self.todo_list
+            .as_mut()
+            .unwrap()
+            .entry(job_threads)
+            .or_default()
+            .push(job);
+    }
+
+    pub fn pop(&mut self) -> Option<(usize, Job<'p, D>)> {
+        loop {
+            let available_threads = self.available_threads.load(SeqCst);
+            for (num_threads, bucket) in self
+                .todo_list
+                .as_mut()
+                .unwrap()
+                .range_mut(..=available_threads)
+            {
+                if let Some(job) = bucket.pop() {
+                    return Some((*num_threads, job));
+                }
+            }
+            if self.queue_ref.strong_count() <= 1 {
+                return None;
+            }
+            let mut todo_list = mem::replace(&mut self.todo_list, None).unwrap();
+            #[cfg(debug_assertions)]
+            if !todo_list.values().all(Vec::is_empty) {
+                println!(
+                    "Queue::pop: self.todo_list={:?}, available_threads={}",
+                    todo_list,
+                    self.available_threads.load(SeqCst),
+                );
+            }
+            todo_list = self.cond.wait(todo_list).unwrap();
+            self.todo_list = Some(todo_list);
+        }
+    }
+
+    pub fn lock_threads(&self, used_threads: usize) {
+        self.available_threads.fetch_sub(used_threads, SeqCst);
+    }
+
+    pub fn free_threads(&self, extra_threads: usize) {
+        self.available_threads.fetch_add(extra_threads, SeqCst);
+    }
+}
+
+impl<'p, 'q, const D: usize> Drop for JobQueueLock<'p, 'q, D> {
+    fn drop(&mut self) {
+        self.cond.notify_all();
+    }
+}
+
+fn rcb_recurse<'p, const D: usize>(
+    s: &rayon::Scope<'p>,
+    items: Vec<Item<'p, D>>,
+    num_iter: usize,
+    coord: usize,
+    tolerance: f64,
+    available_threads: usize,
+) {
+    let q = JobQueue::new(available_threads);
+    q.lock().push(
+        available_threads,
+        Job {
+            items,
+            coord,
+            num_iter,
+        },
     );
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        new_part,
-        next_coord,
-        tolerance,
-    );
+
+    let total_jobs = usize::pow(2, num_iter as u32 + 1) - 1;
+    for job_num in 0..total_jobs {
+        #[cfg(debug_assertions)]
+        println!("Waiting for job #{} on {}", job_num, total_jobs);
+        let mut lock = q.lock();
+        let (num_threads, job) = match lock.pop() {
+            Some(val) => val,
+            None => break,
+        };
+        let Job {
+            items,
+            coord,
+            num_iter,
+        } = job;
+        let used_threads = weighted_median(
+            s,
+            Arc::clone(&q),
+            items,
+            coord,
+            num_iter,
+            tolerance,
+            num_threads,
+        );
+        lock.lock_threads(used_threads);
+    }
 }
 
 pub fn rcb<const D: usize>(
@@ -122,11 +457,22 @@ pub fn rcb<const D: usize>(
     weights: &[f64],
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
-    let len = weights.len();
-    let initial_id = ProcessUniqueId::new();
-    let mut partition = vec![initial_id; len];
+    let dummy_id = ProcessUniqueId::new();
+    let mut partition = vec![dummy_id; points.len()];
 
-    rcb_recurse(points, weights, n_iter, &mut partition, initial_id, 0, 0.05);
+    rayon::scope(|s| {
+        let items = points
+            .par_iter()
+            .zip(weights)
+            .zip(&mut partition)
+            .map(|((&point, &weight), part)| Item {
+                point,
+                weight,
+                part,
+            })
+            .collect();
+        rcb_recurse(s, items, n_iter, 0, 0.05, rayon::current_num_threads() - 1);
+    });
 
     partition
 }
@@ -139,9 +485,9 @@ pub fn axis_sort<const D: usize>(
 ) {
     permutation.par_sort_by(|i1, i2| {
         if points[*i1][current_coord] < points[*i2][current_coord] {
-            Ordering::Less
+            cmp::Ordering::Less
         } else {
-            Ordering::Greater
+            cmp::Ordering::Greater
         }
     })
 }
@@ -257,14 +603,14 @@ mod tests {
     }
 
     #[test]
-    fn test_rcb() {
+    fn test_rcb_rand() {
         use std::collections::HashMap;
 
-        let points: Vec<Point2D> = (0..40)
-            .map(|_| Point2D::new(rand::random(), rand::random()))
+        let points: Vec<Point2D> = (0..40000)
+            .map(|_| Point2D::from([rand::random(), rand::random()]))
             .collect();
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
-        let partition = rcb(&points, &weights, 2);
+        let partition = rcb(&points, &weights, 3);
         let mut loads: HashMap<ProcessUniqueId, f64> = HashMap::new();
         let mut sizes: HashMap<ProcessUniqueId, usize> = HashMap::new();
         for (weight_id, part) in partition.iter().enumerate() {
