@@ -52,7 +52,9 @@ fn rcb_recurse<const D: usize>(
     let mut split_max = max;
     let mut split_target = (split_max + split_min) / 2.0;
 
-    while max_imbalance < split_max - split_min {
+    let mut prev_weight_left = 0.0;
+
+    loop {
         let (weight_left, weight_right) = weights
             .par_iter()
             .zip(points)
@@ -75,7 +77,7 @@ fn rcb_recurse<const D: usize>(
             );
 
         let imbalance = f64::abs(weight_left - weight_right);
-        if imbalance < max_imbalance {
+        if imbalance < max_imbalance || prev_weight_left == weight_left {
             break;
         }
 
@@ -85,6 +87,8 @@ fn rcb_recurse<const D: usize>(
             split_max = split_target;
         }
         split_target = (split_max + split_min) / 2.0;
+
+        prev_weight_left = weight_left;
     }
 
     let new_part = ProcessUniqueId::new();
