@@ -10,35 +10,36 @@ use nalgebra::DimSub;
 use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
-use std::cmp::Ordering;
+use std::cmp;
+use std::mem;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 fn rcb_recurse<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
+    partition: &[AtomicUsize],
+    pw: Vec<(usize, PointND<D>, f64)>,
     n_iter: usize,
-    partition: &mut Vec<ProcessUniqueId>,
-    current_part: ProcessUniqueId,
     current_coord: usize,
     tolerance: f64,
 ) {
     if n_iter == 0 {
+        let part_id = match pw.first() {
+            Some((first_idx, _first_point, _first_weight)) => *first_idx,
+            None => return,
+        };
+        for (idx, _point, _weight) in pw {
+            partition[idx].store(part_id, Ordering::Relaxed);
+        }
         return;
     }
 
-    let sum: f64 = weights
-        .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_weight, weight_part)| **weight_part == current_part)
-        .map(|(weight, _weight_part)| *weight)
-        .sum();
+    let sum: f64 = pw.par_iter().map(|(_idx, _point, weight)| *weight).sum();
 
     let max_imbalance = tolerance * sum;
 
-    let (min, max) = points
+    let (min, max) = pw
         .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_point, point_part)| **point_part == current_part)
-        .map(|(point, _point_part)| point[current_coord])
+        .map(|(_idx, point, _weight)| point[current_coord])
         .fold(
             || (f64::INFINITY, f64::NEG_INFINITY),
             |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
@@ -55,13 +56,9 @@ fn rcb_recurse<const D: usize>(
     let mut prev_weight_left = 0.0;
 
     loop {
-        let (weight_left, weight_right) = weights
+        let (weight_left, weight_right) = pw
             .par_iter()
-            .zip(points)
-            .enumerate()
-            // TODO zip
-            .filter(|(weight_id, (_, _))| partition[*weight_id] == current_part)
-            .map(|(_id, (weight, point))| {
+            .map(|(_idx, point, weight)| {
                 let point = point[current_coord];
                 if point < split_target {
                     (*weight, 0.0)
@@ -91,33 +88,14 @@ fn rcb_recurse<const D: usize>(
         prev_weight_left = weight_left;
     }
 
-    let new_part = ProcessUniqueId::new();
-    partition
-        .par_iter_mut()
-        .zip(points)
-        .filter(|(point_part, point)| {
-            **point_part == current_part && point[current_coord] < split_target
-        })
-        .for_each(|(point_part, _point)| *point_part = new_part);
+    let (pw_left, pw_right): (Vec<_>, Vec<_>) = pw
+        .par_iter()
+        .partition(|(_idx, point, _weight)| point[current_coord] < split_target);
 
     let next_coord = (current_coord + 1) % D;
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        current_part,
-        next_coord,
-        tolerance,
-    );
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        new_part,
-        next_coord,
-        tolerance,
+    rayon::join(
+        || rcb_recurse(partition, pw_left, n_iter - 1, next_coord, tolerance),
+        || rcb_recurse(partition, pw_right, n_iter - 1, next_coord, tolerance),
     );
 }
 
@@ -126,13 +104,30 @@ pub fn rcb<const D: usize>(
     weights: &[f64],
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
-    let len = weights.len();
-    let initial_id = ProcessUniqueId::new();
-    let mut partition = vec![initial_id; len];
+    let pw = points
+        .par_iter()
+        .zip(weights)
+        .enumerate()
+        .map(|(i, (point, weight))| (i, *point, *weight))
+        .collect();
 
-    rcb_recurse(points, weights, n_iter, &mut partition, initial_id, 0, 0.05);
+    let partition: Vec<usize> = vec![0; weights.len()];
+    let partition_slice = unsafe { mem::transmute::<_, &[AtomicUsize]>(partition.as_slice()) };
+
+    rcb_recurse(partition_slice, pw, n_iter, 0, 0.05);
+
+    use std::collections::HashMap;
+    let mut usize2id = HashMap::new();
 
     partition
+        .into_iter()
+        .map(|id| {
+            usize2id
+                .entry(id)
+                .or_insert_with(ProcessUniqueId::new)
+                .clone()
+        })
+        .collect()
 }
 
 // pub because it is also useful for multijagged and required for benchmarks
@@ -143,9 +138,9 @@ pub fn axis_sort<const D: usize>(
 ) {
     permutation.par_sort_by(|i1, i2| {
         if points[*i1][current_coord] < points[*i2][current_coord] {
-            Ordering::Less
+            cmp::Ordering::Less
         } else {
-            Ordering::Greater
+            cmp::Ordering::Greater
         }
     })
 }
