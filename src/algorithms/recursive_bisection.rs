@@ -12,108 +12,188 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 
-fn rcb_recurse<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    n_iter: usize,
-    partition: &mut Vec<ProcessUniqueId>,
-    current_part: ProcessUniqueId,
-    current_coord: usize,
+/*
+fn weighted_partition_at_index_loop<T, F, W>(
+    mut v: &'a mut [T],
+    mut index: usize,
+    is_less: &mut F,
+    weight: &mut W,
+    mut pred: Option<&'a T>,
+) -> (&mut [T], &mut T, &mut [T])
+where
+    F: FnMut(&T, &T) -> bool,
+    W: FnMut(&T) -> f64,
+{
+    loop {
+        const MAX_SORT: usize = 10;
+        if v.len() <= MAX_SORT {
+            v.sort_unstable_by(|a, b| if is_less(a, b) { Ordering::Less
+        }
+    }
+}
+
+pub fn weighted_partition_at_index<T, F, W>(
+    v: &mut [T],
+    index: usize,
+    mut is_less: F,
+    mut weight: W,
+) -> (&mut [T], &mut T, &mut [T])
+where
+    F: FnMut(&T, &T) -> bool,
+    W: FnMut(&T) -> f64,
+{
+    assert!(
+        index < v.len(),
+        "partition_at_index index {} greater than length of slice {}",
+        index,
+        v.len(),
+    );
+
+    if mem::size_of::<T>() == 0 {
+        // Do nothing for zero-sized types.
+    } else if index == v.len() - 1 {
+        // Find max element and place it in the last position of the array. We're free to use
+        // `unwrap()` here because we know v must not be empty.
+        let (max_index, _) = v
+            .iter()
+            .enumerate()
+            .max_by(|&(_, x), &(_, y)| if is_less(x, y) { Ordering::Less } else { Ordering::Greater })
+            .unwrap();
+        v.swap(max_index, index);
+    } else if index == 0 {
+        // Find min element and place it in the first position of the array. We're free to use
+        // `unwrap()` here because we know v must not be empty.
+        let (min_index, _) = v
+            .iter()
+            .enumerate()
+            .min_by(|&(_, x), &(_, y)| if is_less(x, y) { Ordering::Less } else { Ordering::Greater })
+            .unwrap();
+        v.swap(min_index, index);
+    } else {
+        weighted_partition_at_index_loop(v, index, &mut is_less, &mut weight, None);
+    }
+
+    let (left, right) = v.split_at_mut(index);
+    let (pivot, right) = right.split_at_mut(1);
+    let pivot = &mut pivot[0];
+    (left, pivot, right)
+}
+// */
+
+#[derive(Clone)]
+struct Item<const D: usize> {
+    initial_idx: usize,
+    point: PointND<D>,
+    weight: f64,
+    part_id: ProcessUniqueId,
+}
+
+/*
+fn weighted_select<const D: usize>(
+    items: &mut [Item<D>],
+    coord: usize,
+) -> (&mut [PointND<D>], &mut [PointND<D>]) {
+    const MAX_SORT: usize = 64;
+    if points.len() < MAX_SORT {
+        items.sort_unsable_by_key(|item| item.point[coord]);
+        let sum: f64 = points.iter().map(|item| item.weight).sum();
+        let mut half = 0.0;
+        let mut half_idx = 0;
+        for (i, item) in items.enumerate() {
+            if sum < half * 2.0 {
+                half_idx = i;
+            }
+            half += item.weight;
+        }
+        return items.split_at_mut(half_idx);
+    }
+
+    const CHUNK_LEN: usize = 5;
+    let mut medianstrip: Vec<f64> = items
+        .par_chunks_mut(CHUNK_LEN)
+        .map(|chunk| {
+            chunk.sort_unstable_by_key(|item| item.point[coord]);
+            chunk[chunk.len() / 2].point[coord]
+        })
+        .collect();
+    let (_, &mut mm, _) = medianstrip.select_nth_unstable(medianstrip.len() / 2);
+}
+// */
+
+fn weighted_median_aux<const D: usize>(
+    mut items: &mut [Item<D>],
+    coord: usize,
     tolerance: f64,
-) {
+) -> usize {
+    let start = items.as_ptr();
+    let offset =
+        |el: &Item<D>| -> usize { unsafe { (el as *const Item<D>).offset_from(start) as usize } };
+    let sum: f64 = items.par_iter().map(|item| item.weight).sum();
+
+    let mut sup_weight_lower = 0.0;
+    loop {
+        const MAX_SORT: usize = 64;
+        if items.len() < MAX_SORT {
+            items.sort_unstable_by(|item1, item2| {
+                f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+            });
+            let sum: f64 = items.par_iter().map(|item| item.weight).sum();
+            let mut half = 0.0;
+            let mut half_idx = 0;
+            for (i, item) in items.iter().enumerate() {
+                if sum < half * 2.0 {
+                    half_idx = i;
+                    break;
+                }
+                half += item.weight;
+            }
+            return offset(&items[half_idx]);
+        }
+
+        let (lower, median, upper) = items
+            .select_nth_unstable_by(items.len() / 2, |item1, item2| {
+                f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+            });
+        let lower_sum = sup_weight_lower + lower.par_iter().map(|item| item.weight).sum::<f64>();
+        let upper_sum = sum - lower_sum - median.weight;
+        let lower_sum_norm = lower_sum / sum;
+        let upper_sum_norm = upper_sum / sum;
+
+        if f64::abs(upper_sum_norm - lower_sum_norm) < tolerance {
+            break offset(median);
+        } else if 0.5 < lower_sum_norm {
+            items = lower;
+        } else {
+            items = upper;
+            sup_weight_lower += lower_sum;
+        }
+    }
+}
+
+fn weighted_median<const D: usize>(
+    mut items: &mut [Item<D>],
+    coord: usize,
+    tolerance: f64,
+) -> (&mut [Item<D>], &mut [Item<D>]) {
+    let median = weighted_median_aux(&mut items, coord, tolerance);
+    items.split_at_mut(median)
+}
+
+fn rcb_recurse<const D: usize>(items: &mut [Item<D>], n_iter: usize, coord: usize, tolerance: f64) {
     if n_iter == 0 {
+        let part_id = ProcessUniqueId::new();
+        for item in items {
+            item.part_id = part_id;
+        }
         return;
     }
 
-    let sum: f64 = weights
-        .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_weight, weight_part)| **weight_part == current_part)
-        .map(|(weight, _weight_part)| *weight)
-        .sum();
+    let (left, right) = weighted_median(items, coord, tolerance);
+    let coord = (coord + 1) % D;
 
-    let max_imbalance = tolerance * sum;
-
-    let (min, max) = points
-        .par_iter()
-        .zip(partition.as_slice())
-        .filter(|(_point, point_part)| **point_part == current_part)
-        .map(|(point, _point_part)| point[current_coord])
-        .fold(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
-        )
-        .reduce(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
-        );
-
-    let mut split_min = min;
-    let mut split_max = max;
-    let mut split_target = (split_max + split_min) / 2.0;
-
-    while max_imbalance < split_max - split_min {
-        let (weight_left, weight_right) = weights
-            .par_iter()
-            .zip(points)
-            .enumerate()
-            // TODO zip
-            .filter(|(weight_id, (_, _))| partition[*weight_id] == current_part)
-            .map(|(_id, (weight, point))| {
-                let point = point[current_coord];
-                if point < split_target {
-                    (*weight, 0.0)
-                } else {
-                    (0.0, *weight)
-                }
-            })
-            .reduce(
-                || (0.0, 0.0),
-                |(weight_left0, weight_right0), (weight_left1, weight_right1)| {
-                    (weight_left0 + weight_left1, weight_right0 + weight_right1)
-                },
-            );
-
-        let imbalance = f64::abs(weight_left - weight_right);
-        if imbalance < max_imbalance {
-            break;
-        }
-
-        if weight_left < weight_right {
-            split_min = split_target;
-        } else {
-            split_max = split_target;
-        }
-        split_target = (split_max + split_min) / 2.0;
-    }
-
-    let new_part = ProcessUniqueId::new();
-    partition
-        .par_iter_mut()
-        .zip(points)
-        .filter(|(point_part, point)| {
-            **point_part == current_part && point[current_coord] < split_target
-        })
-        .for_each(|(point_part, _point)| *point_part = new_part);
-
-    let next_coord = (current_coord + 1) % D;
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        current_part,
-        next_coord,
-        tolerance,
-    );
-    rcb_recurse(
-        points,
-        weights,
-        n_iter - 1,
-        partition,
-        new_part,
-        next_coord,
-        tolerance,
+    rayon::join(
+        || rcb_recurse(left, n_iter - 1, coord, tolerance),
+        || rcb_recurse(right, n_iter - 1, coord, tolerance),
     );
 }
 
@@ -122,11 +202,25 @@ pub fn rcb<const D: usize>(
     weights: &[f64],
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
-    let len = weights.len();
     let initial_id = ProcessUniqueId::new();
-    let mut partition = vec![initial_id; len];
+    let mut items: Vec<_> = points
+        .iter()
+        .zip(weights)
+        .enumerate()
+        .map(|(initial_idx, (&point, &weight))| Item {
+            initial_idx,
+            point,
+            weight,
+            part_id: initial_id,
+        })
+        .collect();
 
-    rcb_recurse(points, weights, n_iter, &mut partition, initial_id, 0, 0.05);
+    rcb_recurse(&mut items, n_iter, 0, 0.05);
+
+    let mut partition = vec![initial_id; items.len()];
+    for item in items {
+        partition[item.initial_idx] = item.part_id;
+    }
 
     partition
 }
@@ -200,6 +294,40 @@ mod tests {
             Point2D::from([-4., 3.]),
             Point2D::from([1., 2.]),
         ]
+    }
+
+    #[test]
+    fn test_weighted_median() {
+        let mut items: Vec<_> = gen_point_sample()
+            .into_iter()
+            .enumerate()
+            .map(|(i, point)| Item {
+                point,
+                weight: rand::random(),
+                initial_idx: i,
+                part_id: ProcessUniqueId::new(),
+            })
+            .collect();
+        let (left, right) = weighted_median(&mut items, 0, 0.01);
+        let left: Vec<_> = left
+            .to_vec()
+            .into_iter()
+            .map(|item| (item.point, item.weight))
+            .collect();
+        let right: Vec<_> = right
+            .to_vec()
+            .into_iter()
+            .map(|item| (item.point, item.weight))
+            .collect();
+        let weight_left: f64 = left.iter().map(|(point, weight)| weight).sum();
+        let weight_right: f64 = right.iter().map(|(point, weight)| weight).sum();
+        let items: Vec<_> = items
+            .into_iter()
+            .map(|item| (item.point, item.weight))
+            .collect();
+        println!("total: {:?}", items);
+        println!("left {} {:?}", weight_left, left);
+        println!("right {} {:?}", weight_right, right);
     }
 
     #[test]
