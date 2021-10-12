@@ -12,25 +12,17 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp;
 use std::mem;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 
 fn rcb_recurse<const D: usize>(
-    partition: &[AtomicUsize],
+    part_sizes: &mut [usize],
     pw: Vec<(usize, PointND<D>, f64)>,
     n_iter: usize,
     current_coord: usize,
     tolerance: f64,
-) {
+) -> Vec<usize> {
     if n_iter == 0 {
-        let part_id = match pw.first() {
-            Some((first_idx, _first_point, _first_weight)) => *first_idx,
-            None => return,
-        };
-        for (idx, _point, _weight) in pw {
-            partition[idx].store(part_id, Ordering::Relaxed);
-        }
-        return;
+        part_sizes[0] = pw.len();
+        return pw.iter().map(|(idx, _point, _weight)| *idx).collect();
     }
 
     let sum: f64 = pw.par_iter().map(|(_idx, _point, weight)| *weight).sum();
@@ -93,10 +85,21 @@ fn rcb_recurse<const D: usize>(
         .partition(|(_idx, point, _weight)| point[current_coord] < split_target);
 
     let next_coord = (current_coord + 1) % D;
-    rayon::join(
-        || rcb_recurse(partition, pw_left, n_iter - 1, next_coord, tolerance),
-        || rcb_recurse(partition, pw_right, n_iter - 1, next_coord, tolerance),
+    let (part_sizes_left, part_sizes_right) = part_sizes.split_at_mut(part_sizes.len() / 2);
+    let (mut parts_left, mut parts_right) = rayon::join(
+        || rcb_recurse(part_sizes_left, pw_left, n_iter - 1, next_coord, tolerance),
+        || {
+            rcb_recurse(
+                part_sizes_right,
+                pw_right,
+                n_iter - 1,
+                next_coord,
+                tolerance,
+            )
+        },
     );
+    parts_left.append(&mut parts_right);
+    parts_left
 }
 
 pub fn rcb<const D: usize>(
@@ -111,23 +114,22 @@ pub fn rcb<const D: usize>(
         .map(|(i, (point, weight))| (i, *point, *weight))
         .collect();
 
-    let partition: Vec<usize> = vec![0; weights.len()];
-    let partition_slice = unsafe { mem::transmute::<_, &[AtomicUsize]>(partition.as_slice()) };
+    let mut part_sizes = vec![0; usize::pow(2, n_iter as u32)];
+    let elem_parts = rcb_recurse(&mut part_sizes, pw, n_iter, 0, 0.05);
 
-    rcb_recurse(partition_slice, pw, n_iter, 0, 0.05);
+    let dummy_id = ProcessUniqueId::new();
+    let mut partition = vec![dummy_id; points.len()];
 
-    use std::collections::HashMap;
-    let mut usize2id = HashMap::new();
+    let mut off = 0;
+    for part_size in part_sizes {
+        let part_id = ProcessUniqueId::new();
+        for elem in &elem_parts[off..off + part_size] {
+            partition[*elem] = part_id;
+        }
+        off += part_size;
+    }
 
     partition
-        .into_iter()
-        .map(|id| {
-            usize2id
-                .entry(id)
-                .or_insert_with(ProcessUniqueId::new)
-                .clone()
-        })
-        .collect()
 }
 
 // pub because it is also useful for multijagged and required for benchmarks
