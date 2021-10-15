@@ -12,74 +12,6 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 
-/*
-fn weighted_partition_at_index_loop<T, F, W>(
-    mut v: &'a mut [T],
-    mut index: usize,
-    is_less: &mut F,
-    weight: &mut W,
-    mut pred: Option<&'a T>,
-) -> (&mut [T], &mut T, &mut [T])
-where
-    F: FnMut(&T, &T) -> bool,
-    W: FnMut(&T) -> f64,
-{
-    loop {
-        const MAX_SORT: usize = 10;
-        if v.len() <= MAX_SORT {
-            v.sort_unstable_by(|a, b| if is_less(a, b) { Ordering::Less
-        }
-    }
-}
-
-pub fn weighted_partition_at_index<T, F, W>(
-    v: &mut [T],
-    index: usize,
-    mut is_less: F,
-    mut weight: W,
-) -> (&mut [T], &mut T, &mut [T])
-where
-    F: FnMut(&T, &T) -> bool,
-    W: FnMut(&T) -> f64,
-{
-    assert!(
-        index < v.len(),
-        "partition_at_index index {} greater than length of slice {}",
-        index,
-        v.len(),
-    );
-
-    if mem::size_of::<T>() == 0 {
-        // Do nothing for zero-sized types.
-    } else if index == v.len() - 1 {
-        // Find max element and place it in the last position of the array. We're free to use
-        // `unwrap()` here because we know v must not be empty.
-        let (max_index, _) = v
-            .iter()
-            .enumerate()
-            .max_by(|&(_, x), &(_, y)| if is_less(x, y) { Ordering::Less } else { Ordering::Greater })
-            .unwrap();
-        v.swap(max_index, index);
-    } else if index == 0 {
-        // Find min element and place it in the first position of the array. We're free to use
-        // `unwrap()` here because we know v must not be empty.
-        let (min_index, _) = v
-            .iter()
-            .enumerate()
-            .min_by(|&(_, x), &(_, y)| if is_less(x, y) { Ordering::Less } else { Ordering::Greater })
-            .unwrap();
-        v.swap(min_index, index);
-    } else {
-        weighted_partition_at_index_loop(v, index, &mut is_less, &mut weight, None);
-    }
-
-    let (left, right) = v.split_at_mut(index);
-    let (pivot, right) = right.split_at_mut(1);
-    let pivot = &mut pivot[0];
-    (left, pivot, right)
-}
-// */
-
 #[derive(Clone)]
 struct Item<const D: usize> {
     initial_idx: usize,
@@ -88,68 +20,40 @@ struct Item<const D: usize> {
     part_id: ProcessUniqueId,
 }
 
-/*
-fn weighted_select<const D: usize>(
-    items: &mut [Item<D>],
-    coord: usize,
-) -> (&mut [PointND<D>], &mut [PointND<D>]) {
-    const MAX_SORT: usize = 64;
-    if points.len() < MAX_SORT {
-        items.sort_unsable_by_key(|item| item.point[coord]);
-        let sum: f64 = points.iter().map(|item| item.weight).sum();
-        let mut half = 0.0;
-        let mut half_idx = 0;
-        for (i, item) in items.enumerate() {
-            if sum < half * 2.0 {
-                half_idx = i;
-            }
-            half += item.weight;
-        }
-        return items.split_at_mut(half_idx);
-    }
-
-    const CHUNK_LEN: usize = 5;
-    let mut medianstrip: Vec<f64> = items
-        .par_chunks_mut(CHUNK_LEN)
-        .map(|chunk| {
-            chunk.sort_unstable_by_key(|item| item.point[coord]);
-            chunk[chunk.len() / 2].point[coord]
-        })
-        .collect();
-    let (_, &mut mm, _) = medianstrip.select_nth_unstable(medianstrip.len() / 2);
-}
-// */
-
+// items musn't be empty.
 fn weighted_median_aux<const D: usize>(
     mut items: &mut [Item<D>],
     coord: usize,
     tolerance: f64,
 ) -> usize {
-    let start = items.as_ptr();
-    let offset =
-        |el: &Item<D>| -> usize { unsafe { (el as *const Item<D>).offset_from(start) as usize } };
+    let mut offset = 0;
     let sum: f64 = items.par_iter().map(|item| item.weight).sum();
 
     let mut sup_weight_lower = 0.0;
     loop {
         const MAX_SORT: usize = 64;
-        if items.len() < MAX_SORT {
+        let items_len = items.len();
+        if items_len < MAX_SORT {
             items.sort_unstable_by(|item1, item2| {
                 f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
             });
             let sum: f64 = items.par_iter().map(|item| item.weight).sum();
             let mut half = 0.0;
             let mut half_idx = 0;
-            for (i, item) in items.iter().enumerate() {
+            for item in items {
                 if sum < half * 2.0 {
-                    half_idx = i;
                     break;
                 }
+                half_idx += 1;
                 half += item.weight;
             }
-            return offset(&items[half_idx]);
+            if half_idx == items_len {
+                half_idx -= 1;
+            }
+            return offset + half_idx;
         }
 
+        let median_idx = items.len() / 2;
         let (lower, median, upper) = items
             .select_nth_unstable_by(items.len() / 2, |item1, item2| {
                 f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
@@ -160,12 +64,13 @@ fn weighted_median_aux<const D: usize>(
         let upper_sum_norm = upper_sum / sum;
 
         if f64::abs(upper_sum_norm - lower_sum_norm) < tolerance {
-            break offset(median);
+            break offset + median_idx;
         } else if 0.5 < lower_sum_norm {
             items = lower;
         } else {
             items = upper;
             sup_weight_lower += lower_sum;
+            offset += median_idx;
         }
     }
 }
@@ -175,6 +80,9 @@ fn weighted_median<const D: usize>(
     coord: usize,
     tolerance: f64,
 ) -> (&mut [Item<D>], &mut [Item<D>]) {
+    if items.is_empty() {
+        return (&mut [], &mut []);
+    }
     let median = weighted_median_aux(&mut items, coord, tolerance);
     items.split_at_mut(median)
 }
@@ -319,8 +227,8 @@ mod tests {
             .into_iter()
             .map(|item| (item.point, item.weight))
             .collect();
-        let weight_left: f64 = left.iter().map(|(point, weight)| weight).sum();
-        let weight_right: f64 = right.iter().map(|(point, weight)| weight).sum();
+        let weight_left: f64 = left.iter().map(|(_point, weight)| weight).sum();
+        let weight_right: f64 = right.iter().map(|(_point, weight)| weight).sum();
         let items: Vec<_> = items
             .into_iter()
             .map(|item| (item.point, item.weight))
