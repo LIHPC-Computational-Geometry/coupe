@@ -11,27 +11,32 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp;
-use std::mem;
 
-fn rcb_recurse<const D: usize>(
-    part_sizes: &mut [usize],
-    pw: Vec<(usize, PointND<D>, f64)>,
+struct Item<'p, const D: usize> {
+    point: PointND<D>,
+    weight: f64,
+    part: &'p mut ProcessUniqueId,
+}
+
+fn rcb_recurse<'p, const D: usize>(
+    mut items: Vec<Item<'p, D>>,
     n_iter: usize,
     current_coord: usize,
     tolerance: f64,
-) -> Vec<usize> {
+) {
     if n_iter == 0 {
-        part_sizes[0] = pw.len();
-        return pw.iter().map(|(idx, _point, _weight)| *idx).collect();
+        let part = ProcessUniqueId::new();
+        items.par_iter_mut().for_each(|item| *item.part = part);
+        return;
     }
 
-    let sum: f64 = pw.par_iter().map(|(_idx, _point, weight)| *weight).sum();
+    let sum: f64 = items.par_iter().map(|item| item.weight).sum();
 
     let max_imbalance = tolerance * sum;
 
-    let (min, max) = pw
+    let (min, max) = items
         .par_iter()
-        .map(|(_idx, point, _weight)| point[current_coord])
+        .map(|item| item.point[current_coord])
         .fold(
             || (f64::INFINITY, f64::NEG_INFINITY),
             |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
@@ -48,14 +53,14 @@ fn rcb_recurse<const D: usize>(
     let mut prev_weight_left = 0.0;
 
     loop {
-        let (weight_left, weight_right) = pw
+        let (weight_left, weight_right) = items
             .par_iter()
-            .map(|(_idx, point, weight)| {
-                let point = point[current_coord];
+            .map(|item| {
+                let point = item.point[current_coord];
                 if point < split_target {
-                    (*weight, 0.0)
+                    (item.weight, 0.0)
                 } else {
-                    (0.0, *weight)
+                    (0.0, item.weight)
                 }
             })
             .reduce(
@@ -80,26 +85,22 @@ fn rcb_recurse<const D: usize>(
         prev_weight_left = weight_left;
     }
 
-    let (pw_left, pw_right): (Vec<_>, Vec<_>) = pw
-        .par_iter()
-        .partition(|(_idx, point, _weight)| point[current_coord] < split_target);
+    let (items_left, items_right): (Vec<_>, Vec<_>) = items
+        .into_par_iter()
+        .partition(|item| item.point[current_coord] < split_target);
 
     let next_coord = (current_coord + 1) % D;
-    let (part_sizes_left, part_sizes_right) = part_sizes.split_at_mut(part_sizes.len() / 2);
-    let (mut parts_left, mut parts_right) = rayon::join(
-        || rcb_recurse(part_sizes_left, pw_left, n_iter - 1, next_coord, tolerance),
+    rayon::join(
+        || rcb_recurse(items_left, n_iter - 1, next_coord, tolerance),
         || {
             rcb_recurse(
-                part_sizes_right,
-                pw_right,
+                items_right,
                 n_iter - 1,
                 next_coord,
                 tolerance,
             )
         },
     );
-    parts_left.append(&mut parts_right);
-    parts_left
 }
 
 pub fn rcb<const D: usize>(
@@ -107,27 +108,20 @@ pub fn rcb<const D: usize>(
     weights: &[f64],
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
-    let pw = points
-        .par_iter()
-        .zip(weights)
-        .enumerate()
-        .map(|(i, (point, weight))| (i, *point, *weight))
-        .collect();
-
-    let mut part_sizes = vec![0; usize::pow(2, n_iter as u32)];
-    let elem_parts = rcb_recurse(&mut part_sizes, pw, n_iter, 0, 0.05);
-
     let dummy_id = ProcessUniqueId::new();
     let mut partition = vec![dummy_id; points.len()];
+    let items = points
+        .par_iter()
+        .zip(weights)
+        .zip(&mut partition)
+        .map(|((&point, &weight), part)| Item {
+            point,
+            weight,
+            part,
+        })
+        .collect();
 
-    let mut off = 0;
-    for part_size in part_sizes {
-        let part_id = ProcessUniqueId::new();
-        for elem in &elem_parts[off..off + part_size] {
-            partition[*elem] = part_id;
-        }
-        off += part_size;
-    }
+    rcb_recurse(items, n_iter, 0, 0.05);
 
     partition
 }
