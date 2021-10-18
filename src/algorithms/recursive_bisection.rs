@@ -12,12 +12,10 @@ use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 
-#[derive(Clone)]
-struct Item<const D: usize> {
-    initial_idx: usize,
+struct Item<'p, const D: usize> {
     point: PointND<D>,
     weight: f64,
-    part_id: ProcessUniqueId,
+    part: &'p mut ProcessUniqueId,
 }
 
 // items musn't be empty.
@@ -75,11 +73,11 @@ fn weighted_median_aux<const D: usize>(
     }
 }
 
-fn weighted_median<const D: usize>(
-    mut items: &mut [Item<D>],
+fn weighted_median<'d, 'p, const D: usize>(
+    mut items: &'d mut [Item<'p, D>],
     coord: usize,
     tolerance: f64,
-) -> (&mut [Item<D>], &mut [Item<D>]) {
+) -> (&'d mut [Item<'p, D>], &'d mut [Item<'p, D>]) {
     if items.is_empty() {
         return (&mut [], &mut []);
     }
@@ -87,11 +85,11 @@ fn weighted_median<const D: usize>(
     items.split_at_mut(median)
 }
 
-fn rcb_recurse<const D: usize>(items: &mut [Item<D>], n_iter: usize, coord: usize, tolerance: f64) {
+fn rcb_recurse<'p, const D: usize>(items: &mut [Item<'p, D>], n_iter: usize, coord: usize, tolerance: f64) {
     if n_iter == 0 {
         let part_id = ProcessUniqueId::new();
         for item in items {
-            item.part_id = part_id;
+            *item.part = part_id;
         }
         return;
     }
@@ -111,24 +109,20 @@ pub fn rcb<const D: usize>(
     n_iter: usize,
 ) -> Vec<ProcessUniqueId> {
     let initial_id = ProcessUniqueId::new();
+    let mut partition = vec![initial_id; points.len()];
+
     let mut items: Vec<_> = points
         .iter()
         .zip(weights)
-        .enumerate()
-        .map(|(initial_idx, (&point, &weight))| Item {
-            initial_idx,
+        .zip(&mut partition)
+        .map(|((&point, &weight), part)| Item {
             point,
             weight,
-            part_id: initial_id,
+            part,
         })
         .collect();
 
     rcb_recurse(&mut items, n_iter, 0, 0.05);
-
-    let mut partition = vec![initial_id; items.len()];
-    for item in items {
-        partition[item.initial_idx] = item.part_id;
-    }
 
     partition
 }
