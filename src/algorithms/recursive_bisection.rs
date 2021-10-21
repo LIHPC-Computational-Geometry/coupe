@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use snowflake::ProcessUniqueId;
 
 use std::cmp;
+use std::sync;
 
 struct Item<'p, const D: usize> {
     point: PointND<D>,
@@ -18,89 +19,214 @@ struct Item<'p, const D: usize> {
     part: &'p mut ProcessUniqueId,
 }
 
-fn rcb_recurse<'p, const D: usize>(
+fn weighted_median<'p, const D: usize>(
     mut items: Vec<Item<'p, D>>,
-    n_iter: usize,
-    current_coord: usize,
+    coord: usize,
     tolerance: f64,
-) {
-    if n_iter == 0 {
-        let part = ProcessUniqueId::new();
-        items.par_iter_mut().for_each(|item| *item.part = part);
-        return;
-    }
-
-    let sum: f64 = items.par_iter().map(|item| item.weight).sum();
-
-    let max_imbalance = tolerance * sum;
-
-    let (min, max) = items
-        .par_iter()
-        .map(|item| item.point[current_coord])
-        .fold(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min, max), projection| (f64::min(min, projection), f64::max(max, projection)),
-        )
-        .reduce(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
+    num_avail_threads: usize,
+) -> (Vec<Item<'p, D>>, Vec<Item<'p, D>>) {
+    let split_target = crossbeam_utils::thread::scope(|s| {
+        let num_items = items.len();
+        let chunk_size = usize::max((num_items + num_avail_threads - 1) / num_avail_threads, 64);
+        let num_threads = (num_items + chunk_size - 1) / chunk_size;
+        #[cfg(debug_assertions)]
+        println!(
+            "avail_threads={},num_threads={},num_items={},chunk_size={}",
+            num_avail_threads, num_threads, num_items, chunk_size,
         );
 
-    let mut split_min = min;
-    let mut split_max = max;
-    let mut split_target = (split_max + split_min) / 2.0;
+        let (sender, receiver) = sync::mpsc::sync_channel(num_threads);
+        let split_target: sync::Arc<sync::RwLock<Option<f64>>> =
+            sync::Arc::new(sync::RwLock::new(None));
+        let barrier = sync::Arc::new(sync::Barrier::new(num_threads + 1));
 
-    let mut prev_weight_left = 0.0;
-
-    loop {
-        let (weight_left, weight_right) = items
-            .par_iter()
-            .map(|item| {
-                let point = item.point[current_coord];
-                if point < split_target {
-                    (item.weight, 0.0)
-                } else {
-                    (0.0, item.weight)
+        #[cfg(debug_assertions)]
+        let mut i = 0;
+        for item_chunk in items.chunks_mut(chunk_size) {
+            let split_target = split_target.clone();
+            let sender = sender.clone();
+            let barrier = barrier.clone();
+            s.spawn(move |_| {
+                #[cfg(debug_assertions)]
+                println!("compute {}: spawn", i);
+                struct ThreadItem {
+                    point_coord: f64,
+                    weight: f64,
                 }
-            })
-            .reduce(
-                || (0.0, 0.0),
-                |(weight_left0, weight_right0), (weight_left1, weight_right1)| {
-                    (weight_left0 + weight_left1, weight_right0 + weight_right1)
-                },
-            );
+                let thread_items: Vec<_> = item_chunk
+                    .into_iter()
+                    .map(|item| ThreadItem {
+                        point_coord: item.point[coord],
+                        weight: item.weight,
+                    })
+                    .collect();
+                let sum: f64 = thread_items.iter().map(|item| item.weight).sum();
 
-        let imbalance = f64::abs(weight_left - weight_right);
-        if imbalance < max_imbalance || prev_weight_left == weight_left {
-            break;
+                use itertools::Itertools as _;
+                let (min, max) = thread_items
+                    .iter()
+                    .map(|item| item.point_coord)
+                    .minmax()
+                    .into_option()
+                    .unwrap();
+
+                #[cfg(debug_assertions)]
+                println!("compute {}: send sum/min/max", i);
+                sender.send((sum, min, max)).unwrap();
+                #[cfg(debug_assertions)]
+                println!("compute {}: waiting for barrier", i);
+                barrier.wait();
+                #[cfg(debug_assertions)]
+                println!("compute {}: woke up", i);
+
+                loop {
+                    let split_target = match *split_target.try_read().unwrap() {
+                        Some(val) => val,
+                        None => break,
+                    };
+                    let (weight_left, weight_right) = thread_items
+                        .iter()
+                        .map(|item| {
+                            if item.point_coord < split_target {
+                                (item.weight, 0.0)
+                            } else {
+                                (0.0, item.weight)
+                            }
+                        })
+                        .fold((0.0, 0.0), |(wl0, wr0), (wl1, wr1)| (wl0 + wl1, wr0 + wr1));
+                    #[cfg(debug_assertions)]
+                    println!("compute {}: send weight_left/right", i);
+                    sender.send((weight_left, weight_right, 0.0)).unwrap();
+                    #[cfg(debug_assertions)]
+                    println!("compute {}: waiting for barrier", i);
+                    barrier.wait();
+                    #[cfg(debug_assertions)]
+                    println!("compute {}: woke up", i);
+                }
+            });
+            #[cfg(debug_assertions)]
+            {
+                i += 1;
+            }
         }
+        #[cfg(debug_assertions)]
+        assert_eq!(i, num_threads,);
 
-        if weight_left < weight_right {
-            split_min = split_target;
-        } else {
-            split_max = split_target;
+        let mut sum = 0.0;
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
+
+        for times_to_recv in 0..num_threads {
+            #[cfg(debug_assertions)]
+            println!("main: receiving sum/min/max ({})", times_to_recv);
+            let (partial_sum, partial_min, partial_max) = receiver.recv().unwrap();
+            sum += partial_sum;
+            if partial_min < min {
+                min = partial_min;
+            }
+            if max < partial_max {
+                max = partial_max;
+            }
         }
-        split_target = (split_max + split_min) / 2.0;
+        let max_imbalance = tolerance * sum;
+        let mut prev_weight_left = 0.0;
+        let mut split_target_val = (max + min) / 2.0;
+        #[cfg(debug_assertions)]
+        println!("main: writing split_target");
+        *split_target.try_write().unwrap() = Some(split_target_val);
+        #[cfg(debug_assertions)]
+        println!("main: waiting for barrier");
+        barrier.wait();
+        #[cfg(debug_assertions)]
+        println!("main: woke up");
 
-        prev_weight_left = weight_left;
-    }
+        loop {
+            let mut weight_left = 0.0;
+            let mut weight_right = 0.0;
+            for _times_to_recv in 0..num_threads {
+                #[cfg(debug_assertions)]
+                println!("main: receiving weight_left/right");
+                let (partial_weight_left, partial_weight_right, _) = receiver.recv().unwrap();
+                weight_left += partial_weight_left;
+                weight_right += partial_weight_right;
+            }
 
-    let (items_left, items_right): (Vec<_>, Vec<_>) = items
+            let imbalance = f64::abs(weight_left - weight_right);
+            if imbalance < max_imbalance || prev_weight_left == weight_left {
+                #[cfg(debug_assertions)]
+                println!("main: exiting split_target");
+                *split_target.try_write().unwrap() = None; // shutdown other threads
+                #[cfg(debug_assertions)]
+                println!("main: waiting for barrier");
+                barrier.wait();
+                #[cfg(debug_assertions)]
+                println!("main: woke up");
+                break;
+            }
+
+            if weight_left < weight_right {
+                min = split_target_val;
+            } else {
+                max = split_target_val;
+            }
+            split_target_val = (max + min) / 2.0;
+            #[cfg(debug_assertions)]
+            println!("main: writing split_target");
+            *split_target.try_write().unwrap() = Some(split_target_val);
+            #[cfg(debug_assertions)]
+            println!("main: waiting for barrier");
+            barrier.wait();
+            #[cfg(debug_assertions)]
+            println!("main: woke up");
+
+            prev_weight_left = weight_left;
+        }
+        split_target_val
+    });
+
+    let split_target = split_target.unwrap();
+    items
         .into_par_iter()
-        .partition(|item| item.point[current_coord] < split_target);
+        .partition(|item| item.point[coord] < split_target)
+}
 
-    let next_coord = (current_coord + 1) % D;
-    rayon::join(
-        || rcb_recurse(items_left, n_iter - 1, next_coord, tolerance),
-        || {
-            rcb_recurse(
-                items_right,
-                n_iter - 1,
-                next_coord,
-                tolerance,
-            )
-        },
-    );
+fn rcb_recurse<'p, const D: usize>(
+    s: &crossbeam_utils::thread::Scope<'p>,
+    items: Vec<Item<'p, D>>,
+    num_iter: usize,
+    coord: usize,
+    tolerance: f64,
+    num_avail_threads: usize,
+) {
+    if num_iter == 0 {
+        let part = ProcessUniqueId::new();
+        items.into_iter().for_each(|item| *item.part = part);
+        return;
+    }
+    let (left, right) = weighted_median(items, coord, tolerance, num_avail_threads);
+
+    let next_coord = (coord + 1) % D;
+    let next_num_avail_threads = usize::max(num_avail_threads / 2, 1);
+    s.spawn(move |s| {
+        rcb_recurse(
+            s,
+            left,
+            num_iter - 1,
+            next_coord,
+            tolerance,
+            next_num_avail_threads,
+        )
+    });
+    s.spawn(move |s| {
+        rcb_recurse(
+            s,
+            right,
+            num_iter - 1,
+            next_coord,
+            tolerance,
+            next_num_avail_threads,
+        )
+    });
 }
 
 pub fn rcb<const D: usize>(
@@ -110,18 +236,21 @@ pub fn rcb<const D: usize>(
 ) -> Vec<ProcessUniqueId> {
     let dummy_id = ProcessUniqueId::new();
     let mut partition = vec![dummy_id; points.len()];
-    let items = points
-        .par_iter()
-        .zip(weights)
-        .zip(&mut partition)
-        .map(|((&point, &weight), part)| Item {
-            point,
-            weight,
-            part,
-        })
-        .collect();
 
-    rcb_recurse(items, n_iter, 0, 0.05);
+    crossbeam_utils::thread::scope(|s| {
+        let items = points
+            .par_iter()
+            .zip(weights)
+            .zip(&mut partition)
+            .map(|((&point, &weight), part)| Item {
+                point,
+                weight,
+                part,
+            })
+            .collect();
+        rcb_recurse(s, items, n_iter, 0, 0.05, rayon::current_num_threads());
+    })
+    .unwrap();
 
     partition
 }
@@ -252,14 +381,14 @@ mod tests {
     }
 
     #[test]
-    fn test_rcb() {
+    fn test_rcb_rand() {
         use std::collections::HashMap;
 
-        let points: Vec<Point2D> = (0..40)
-            .map(|_| Point2D::new(rand::random(), rand::random()))
+        let points: Vec<Point2D> = (0..40000)
+            .map(|_| Point2D::from([rand::random(), rand::random()]))
             .collect();
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
-        let partition = rcb(&points, &weights, 2);
+        let partition = rcb(&points, &weights, 3);
         let mut loads: HashMap<ProcessUniqueId, f64> = HashMap::new();
         let mut sizes: HashMap<ProcessUniqueId, usize> = HashMap::new();
         for (weight_id, part) in partition.iter().enumerate() {

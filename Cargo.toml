@@ -22,6 +22,7 @@ itertools = "0.10"
 nalgebra = { version = "0.29", features = ["rand"] }
 ndarray = "0.15"
 num = "0.4"
+crossbeam-utils = "0.8"
 rayon = "1.3"
 rand = "0.8"
 snowflake = "1.3"
