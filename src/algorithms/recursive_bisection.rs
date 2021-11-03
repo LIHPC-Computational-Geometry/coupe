@@ -1,6 +1,7 @@
 use crate::geometry::Mbr;
 use crate::geometry::PointND;
 
+use itertools::Itertools as _;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -36,7 +37,7 @@ struct Item<'p, const D: usize> {
 fn weighted_median<'p, const D: usize>(
     s: &rayon::Scope<'p>,
     q: Arc<JobQueue<'p, D>>,
-    items: Vec<Item<'p, D>>,
+    mut items: Vec<Item<'p, D>>,
     coord: usize,
     num_iter: usize,
     tolerance: f64,
@@ -127,44 +128,29 @@ fn weighted_median<'p, const D: usize>(
         run: AtomicBool::new(true),
     });
 
-    let items = Arc::new(items);
-    // Used to wait for all threads to be shut down, before unwraping items.
-    let (t_send, t_recv) = crossbeam_channel::bounded::<()>(0);
+    let (t_send, t_recv) = crossbeam_channel::bounded::<(Vec<Item<'p, D>>, usize)>(num_threads - 1);
 
     #[cfg(debug_assertions)]
     let mut i = 0;
 
-    for chunk_start in (0..num_items).step_by(chunk_size) {
+    for chunk_start in (0..num_items).step_by(chunk_size).rev() {
+        let chunk = items.split_off(chunk_start);
         let q = Arc::clone(&q);
         let ctx = Arc::clone(&ctx);
-        let items = Arc::clone(&items);
         let t_send = t_send.clone();
         let t_recv = t_recv.clone();
         s.spawn(move |_| {
             #[cfg(debug_assertions)]
             println!("compute {}: spawn", i);
-            struct ThreadItem {
-                point_coord: f64,
-                weight: f64,
-            }
 
-            // Copy weights and coordinates into a hopefully nearer memory part.
-            let chunk_end = usize::min(num_items, chunk_start + chunk_size);
-            let thread_items: Vec<_> = items[chunk_start..chunk_end]
-                .iter()
-                .map(|item| ThreadItem {
-                    point_coord: item.point[coord],
-                    weight: item.weight,
-                })
-                .collect();
+            let mut thread_items: Vec<_> = chunk.into_iter().collect();
 
             // Compute the sum, the min and the max and merge them.
             let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
 
-            use itertools::Itertools as _;
             let (partial_min, partial_max) = thread_items
                 .iter()
-                .map(|item| item.point_coord)
+                .map(|item| item.point[coord])
                 .minmax()
                 .into_option()
                 .unwrap();
@@ -187,26 +173,41 @@ fn weighted_median<'p, const D: usize>(
             #[cfg(debug_assertions)]
             println!("compute {}: woke up", i);
 
+            let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
+            let mut split_target = (min + max) / 2.0;
+
             let mut lead = false;
-            let mut split_target = 0.0;
+            let mut item_view = &mut *thread_items;
+            let mut additional_partial_left_count = 0;
+            let mut additional_partial_left_weight = 0.0;
+            let mut median_idx = 0;
             while ctx.run.load(SeqCst) {
-                let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
-                split_target = (min + max) / 2.0;
-                let partial_weight_left: f64 = thread_items
+                let partial_left_count = item_view
                     .iter()
-                    .filter(|item| item.point_coord < split_target)
-                    .map(|item| item.weight)
-                    .sum();
-                let partial_left_count = thread_items
-                    .iter()
-                    .filter(|item| item.point_coord < split_target)
+                    .filter(|item| item.point[coord] < split_target)
                     .count();
+
+                let (partial_left, partial_right) = if partial_left_count == item_view.len() {
+                    let empty: &mut [Item<'p, D>] = &mut [];
+                    (item_view, empty)
+                } else {
+                    let (l, _, r) =
+                        item_view.select_nth_unstable_by(partial_left_count, |item1, item2| {
+                            f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+                        });
+                    (l, r)
+                };
+
+                let partial_left_weight: f64 = partial_left.iter().map(|item| item.weight).sum();
+                let partial_left_weight = partial_left_weight + additional_partial_left_weight;
+
+                let partial_left_count = partial_left_count + additional_partial_left_count;
 
                 {
                     #[cfg(debug_assertions)]
                     println!("compute {}: write weight_left/right", i);
                     let mut ld = ctx.loop_data.lock().unwrap();
-                    ld.weight_left += partial_weight_left;
+                    ld.weight_left += partial_left_weight;
                     ld.count_left += partial_left_count;
                     let ttl = ld.ttl - 1;
                     if ttl == 0 {
@@ -248,17 +249,32 @@ fn weighted_median<'p, const D: usize>(
                 ctx.barrier.wait();
                 #[cfg(debug_assertions)]
                 println!("compute {}: woke up", i);
+
+                let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
+                let new_split_target = (min + max) / 2.0;
+                if split_target < new_split_target {
+                    median_idx = 0;
+                    additional_partial_left_weight = partial_left_weight;
+                    additional_partial_left_count = partial_left_count;
+                    item_view = partial_right;
+                } else {
+                    median_idx = partial_left.len();
+                    item_view = partial_left;
+                }
+                split_target = new_split_target;
             }
+            let median_idx = additional_partial_left_count + median_idx;
             if lead {
+                let ld = ctx.loop_data.try_lock().unwrap();
+                let mut left = Vec::with_capacity(ld.count_left);
+                let mut right = Vec::with_capacity(num_items - ld.count_left);
+                right.extend(thread_items.drain(median_idx..));
+                left.extend(thread_items);
                 mem::drop(t_send);
-                t_recv.recv().unwrap_err();
-                let items = match Arc::try_unwrap(items) {
-                    Ok(items) => items,
-                    Err(_) => unreachable!(),
-                };
-                let (left, right): (Vec<_>, Vec<_>) = items
-                    .into_iter()
-                    .partition(|item| item.point[coord] < split_target);
+                while let Ok((mut thread_items, median_idx)) = t_recv.recv() {
+                    right.extend(thread_items.drain(median_idx..));
+                    left.extend(thread_items);
+                }
                 let next_coord = (coord + 1) % D;
                 let (threads_left, threads_right) = {
                     let now = num_avail_threads as f64;
@@ -286,6 +302,8 @@ fn weighted_median<'p, const D: usize>(
                     },
                 );
                 lock.free_threads(num_threads);
+            } else {
+                t_send.send((thread_items, median_idx)).unwrap();
             }
         });
         #[cfg(debug_assertions)]
