@@ -9,7 +9,6 @@ use approx::Ulps;
 
 use crate::geometry::*;
 use rayon::prelude::*;
-use snowflake::ProcessUniqueId;
 
 use std::sync::atomic::{self, AtomicPtr};
 
@@ -151,7 +150,7 @@ pub fn multi_jagged<const D: usize>(
     weights: &[f64],
     num_parts: usize,
     max_iter: usize,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<usize> {
     let partition_scheme = partition_scheme(num_parts, max_iter);
     multi_jagged_with_scheme(points, weights, partition_scheme)
 }
@@ -160,13 +159,10 @@ fn multi_jagged_with_scheme<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     partition_scheme: PartitionScheme,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<usize> {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
-    let initial_id = ProcessUniqueId::new();
-    let mut initial_partition = rayon::iter::repeat(initial_id)
-        .take(len)
-        .collect::<Vec<_>>();
+    let mut initial_partition = vec![0; points.len()];
 
     multi_jagged_recurse(
         points,
@@ -184,7 +180,7 @@ fn multi_jagged_recurse<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     permutation: &mut [usize],
-    partition: &AtomicPtr<ProcessUniqueId>,
+    partition: &AtomicPtr<usize>,
     current_coord: usize,
     partition_scheme: PartitionScheme,
 ) {
@@ -215,7 +211,7 @@ fn multi_jagged_recurse<const D: usize>(
                 )
             });
     } else {
-        let part_id = ProcessUniqueId::new();
+        let part_id = crate::uid();
         permutation.par_iter().for_each(|idx| {
             let ptr = partition.load(atomic::Ordering::Relaxed);
             unsafe { std::ptr::write(ptr.add(*idx), part_id) }

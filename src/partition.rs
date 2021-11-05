@@ -8,7 +8,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use num::{Num, Signed};
-use snowflake::ProcessUniqueId;
 use sprs::CsMatView;
 
 use std::cmp::PartialOrd;
@@ -31,11 +30,8 @@ use crate::PointND;
 /// use coupe::partition::Partition;
 /// use approx::*;
 ///
-/// let id1 = coupe::ProcessUniqueId::new();
-/// let id2 = coupe::ProcessUniqueId::new();
-/// let id3 = coupe::ProcessUniqueId::new();
 ///
-/// let ids = vec![id1, id2, id3, id1, id2, id3, id1, id2, id3];
+/// let ids = vec![1, 2, 3, 1, 2, 3, 1, 2, 3];
 /// let weights = vec![1.; 9];
 /// let points = vec![
 ///     Point2D::new(2., 2.),
@@ -60,7 +56,7 @@ use crate::PointND;
 pub struct Partition<'a, P, W> {
     points: &'a [P],
     weights: &'a [W],
-    ids: Vec<ProcessUniqueId>,
+    ids: Vec<usize>,
 }
 
 impl<'a, P, W> Partition<'a, P, W> {
@@ -77,14 +73,10 @@ impl<'a, P, W> Partition<'a, P, W> {
             );
         }
 
-        // allocate a new vector
-        let dummy_id = ProcessUniqueId::new();
-        let ids = vec![dummy_id; points.len()];
-
         Self {
             points,
             weights,
-            ids,
+            ids: vec![0; points.len()],
         }
     }
 
@@ -93,7 +85,7 @@ impl<'a, P, W> Partition<'a, P, W> {
     /// # Panics
     ///
     /// Panics if `points`, `weights` and `ids` do not have the same length.
-    pub fn from_ids(points: &'a [P], weights: &'a [W], ids: Vec<ProcessUniqueId>) -> Self {
+    pub fn from_ids(points: &'a [P], weights: &'a [W], ids: Vec<usize>) -> Self {
         if points.len() != weights.len() {
             panic!(
                 "Cannot initialize a partition with points and weights of different sizes. Found {} points and {} weights",
@@ -116,7 +108,7 @@ impl<'a, P, W> Partition<'a, P, W> {
     }
 
     /// Consumes the partition, returning the internal array of ids representing the partition.
-    pub fn into_ids(self) -> Vec<ProcessUniqueId> {
+    pub fn into_ids(self) -> Vec<usize> {
         self.ids
     }
 
@@ -133,25 +125,25 @@ impl<'a, P, W> Partition<'a, P, W> {
     ///     // do something with the fields
     /// }
     /// ```
-    pub fn into_raw(self) -> (&'a [P], &'a [W], Vec<ProcessUniqueId>) {
+    pub fn into_raw(self) -> (&'a [P], &'a [W], Vec<usize>) {
         (self.points, self.weights, self.ids)
     }
 
-    pub fn as_raw(&self) -> (&'a [P], &'a [W], &[ProcessUniqueId]) {
+    pub fn as_raw(&self) -> (&'a [P], &'a [W], &[usize]) {
         (self.points, self.weights, &self.ids)
     }
 
-    pub fn as_raw_mut(&mut self) -> (&'a [P], &'a [W], &mut [ProcessUniqueId]) {
+    pub fn as_raw_mut(&mut self) -> (&'a [P], &'a [W], &mut [usize]) {
         (self.points, self.weights, &mut self.ids)
     }
 
     /// Returns a slice of the IDs used to represent the partition.
-    pub fn ids(&self) -> &[ProcessUniqueId] {
+    pub fn ids(&self) -> &[usize] {
         &self.ids
     }
 
     /// Returns of mutable slice of the IDs used to represent the partition.
-    pub fn ids_mut(&mut self) -> &mut [ProcessUniqueId] {
+    pub fn ids_mut(&mut self) -> &mut [usize] {
         &mut self.ids
     }
 
@@ -196,10 +188,7 @@ impl<'a, P, W> Partition<'a, P, W> {
     ///
     /// let weights = [1, 2, 3, 4, 5];
     ///
-    /// let id1 = coupe::ProcessUniqueId::new();
-    /// let id2 = coupe::ProcessUniqueId::new();
-    /// let id3 = coupe::ProcessUniqueId::new();
-    /// let ids = vec![id1, id2, id2, id2, id3];
+    /// let ids = vec![1, 2, 2, 2, 3];
     ///
     /// let partition = Partition::from_ids(&points[..], &weights[..], ids);
     ///
@@ -240,10 +229,7 @@ impl<'a, P, W> Partition<'a, P, W> {
     ///
     /// let weights = [1000, 1000, 1000, 1000, 6000];
     ///
-    /// let id1 = coupe::ProcessUniqueId::new();
-    /// let id2 = coupe::ProcessUniqueId::new();
-    /// let id3 = coupe::ProcessUniqueId::new();
-    /// let ids = vec![id1, id2, id2, id2, id3];
+    /// let ids = vec![1, 2, 2, 2, 3];
     ///
     /// let partition = Partition::from_ids(&points[..], &weights[..], ids);
     ///
@@ -275,7 +261,7 @@ impl<'a, P, W> Partition<'a, P, W> {
     /// Merge two parts of the partition (identified by unique id).
     ///
     /// If either `id1` or `id2` is not contained in the partition, does nothing.
-    pub fn merge_parts(&mut self, id1: ProcessUniqueId, id2: ProcessUniqueId) {
+    pub fn merge_parts(&mut self, id1: usize, id2: usize) {
         for id in self.ids.iter_mut() {
             if *id == id2 {
                 *id = id1;

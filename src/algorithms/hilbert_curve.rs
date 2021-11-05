@@ -12,14 +12,13 @@
 
 use crate::geometry::{Mbr, Point2D};
 use rayon::prelude::*;
-use snowflake::ProcessUniqueId;
 
 pub fn hilbert_curve_partition(
     points: &[Point2D],
     weights: &[f64],
     num_partitions: usize,
     order: usize,
-) -> Vec<ProcessUniqueId> {
+) -> Vec<usize> {
     assert!(
         order < 32,
         "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
@@ -39,8 +38,7 @@ pub fn hilbert_curve_partition(
     // dummy modifiers to use directly the routine from multi_jagged
     let modifiers = vec![1. / num_partitions as f64; num_partitions];
 
-    let initial_id = ProcessUniqueId::new();
-    let mut partition = vec![initial_id; points.len()];
+    let mut partition = vec![0; points.len()];
 
     let split_positions = super::multi_jagged::compute_split_positions(
         weights,
@@ -53,13 +51,15 @@ pub fn hilbert_curve_partition(
         super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
     let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
 
-    sub_permutation.par_iter_mut().for_each(|slice| {
-        let part_id = ProcessUniqueId::new();
-        let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
-        for i in slice.iter_mut() {
-            unsafe { std::ptr::write(ptr.add(*i), part_id) }
-        }
-    });
+    sub_permutation
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(part_id, slice)| {
+            let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
+            for i in slice.iter_mut() {
+                unsafe { std::ptr::write(ptr.add(*i), part_id) }
+            }
+        });
 
     partition
 }
@@ -110,7 +110,7 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64
     let y_mapping = segment_to_segment(ay.0, ay.1, 0., order as f64);
 
     move |p| {
-        let p = rotate(&Point2D::new(p.0, p.1));
+        let p = rotate(&Point2D::from([p.0, p.1]));
         encode(x_mapping(p.x) as u32, y_mapping(p.y) as u32, order)
     }
 }

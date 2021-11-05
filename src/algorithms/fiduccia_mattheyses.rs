@@ -3,7 +3,6 @@ use sprs::CsMatView;
 
 use crate::partition::Partition;
 use crate::PointND;
-use crate::ProcessUniqueId;
 use std::collections::HashMap;
 
 pub fn fiduccia_mattheyses<'a, const D: usize>(
@@ -33,7 +32,7 @@ pub fn fiduccia_mattheyses<'a, const D: usize>(
 fn fiduccia_mattheyses_impl(
     weights: &[f64],
     adjacency: CsMatView<f64>,
-    initial_partition: &mut [ProcessUniqueId],
+    initial_partition: &mut [usize],
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     max_imbalance_per_flip: Option<f64>,
@@ -46,7 +45,7 @@ fn fiduccia_mattheyses_impl(
         .collect::<Vec<_>>();
 
     // store weights of each part to update imbalance easily
-    let mut parts_weights: HashMap<ProcessUniqueId, f64> = unique_ids
+    let mut parts_weights: HashMap<usize, f64> = unique_ids
         .iter()
         .cloned()
         .map(|id| {
@@ -107,7 +106,7 @@ fn fiduccia_mattheyses_impl(
         //
         // note that the current part in wich a node is is still considered as a potential target part
         // with a gain 0.
-        let mut gains: Vec<Vec<(ProcessUniqueId, f64)>> = (0..initial_partition.len())
+        let mut gains: Vec<Vec<(usize, f64)>> = (0..initial_partition.len())
             .map(|_idx| unique_ids.iter().cloned().map(|id2| (id2, 0.)).collect())
             .collect();
 

@@ -11,7 +11,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use rayon::prelude::*;
-use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
@@ -25,7 +24,7 @@ use itertools::Itertools;
 /// A wrapper type for ProcessUniqueId
 /// to enforce that it represents temporary ids
 /// for the k-means algorithm and not a partition id
-type ClusterId = ProcessUniqueId;
+type ClusterId = usize;
 
 /// A simplified implementation of the algorithm described in the paper
 /// by Moritz von Looz et al. that follows the same idea but without the small
@@ -40,7 +39,7 @@ pub fn simplified_k_means<const D: usize>(
     imbalance_tol: f64,
     mut n_iter: isize,
     hilbert: bool,
-) -> Vec<ProcessUniqueId>
+) -> Vec<usize>
 where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -64,12 +63,12 @@ where
         .map(|idx| points[idx])
         .collect();
 
-    let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
+    let center_ids: Vec<ClusterId> = centers.par_iter().map(|_| crate::uid()).collect();
 
     let mut influences = centers.par_iter().map(|_| 1.).collect::<Vec<_>>();
 
-    let dummy_id = ClusterId::new();
-    let mut assignments = permu.par_iter().map(|_| dummy_id).collect::<Vec<_>>();
+    let dummy_id = crate::uid();
+    let mut assignments: Vec<ClusterId> = permu.par_iter().map(|_| dummy_id).collect();
     let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
     permu
         .par_chunks(points_per_center)
@@ -221,7 +220,7 @@ pub fn balanced_k_means<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
-) -> Vec<ProcessUniqueId>
+) -> Vec<usize>
 where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -255,10 +254,10 @@ where
 
     // generate unique ids for each initial partition that will live throughout
     // the algorithm (no new id is generated afterwards)
-    let center_ids: Vec<_> = centers.par_iter().map(|_| ClusterId::new()).collect();
+    let center_ids: Vec<ClusterId> = centers.par_iter().map(|_| crate::uid()).collect();
 
-    let dummy_id = ProcessUniqueId::new();
-    let mut assignments = permu.par_iter().map(|_| dummy_id).collect::<Vec<_>>();
+    let dummy_id = crate::uid();
+    let mut assignments: Vec<_> = permu.par_iter().map(|_| dummy_id).collect();
     let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
     permu
         .par_chunks(points_per_center)
@@ -303,7 +302,7 @@ pub fn balanced_k_means_with_initial_partition<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
-    initial_partition: &mut [ProcessUniqueId],
+    initial_partition: &mut [usize],
 ) where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -384,7 +383,7 @@ struct Clusters<T, U> {
 }
 
 struct AlgorithmState<'a> {
-    assignments: &'a mut [ProcessUniqueId],
+    assignments: &'a mut [usize],
     influences: &'a mut [f64],
     lbs: &'a mut [f64],
     ubs: &'a mut [f64],

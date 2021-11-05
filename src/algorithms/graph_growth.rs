@@ -1,18 +1,12 @@
-use crate::ProcessUniqueId;
 use rand::seq::SliceRandom;
 use sprs::CsMatView;
 
-pub fn graph_growth(
-    weights: &[f64],
-    adjacency: CsMatView<f64>,
-    num_parts: usize,
-) -> Vec<ProcessUniqueId> {
+pub fn graph_growth(weights: &[f64], adjacency: CsMatView<f64>, num_parts: usize) -> Vec<usize> {
     let (shape_x, shape_y) = adjacency.shape();
     assert_eq!(shape_x, shape_y);
     assert_eq!(weights.len(), shape_x);
 
-    let dummy_id = ProcessUniqueId::new();
-    let mut initial_ids = vec![dummy_id; weights.len()];
+    let mut initial_ids = vec![0; weights.len()];
     // let total_weight = weights.iter().sum::<f64>();
     // let weight_per_part = total_weight / num_parts as f64;
     let max_expansion_per_pass = 20;
@@ -28,10 +22,7 @@ pub fn graph_growth(
 
     // tracks if each node has already been assigned to a partition or not
     let mut assigned = vec![false; weights.len()];
-    let unique_ids = indices
-        .iter()
-        .map(|_| ProcessUniqueId::new())
-        .collect::<Vec<_>>();
+    let unique_ids: Vec<_> = indices.iter().map(|_| crate::uid()).collect();
 
     // assign initial nodes
     for (idx, id) in indices.iter().cloned().zip(unique_ids.iter()) {
