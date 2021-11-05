@@ -14,7 +14,7 @@ use std::cmp;
 use std::collections::BTreeMap;
 use std::mem;
 use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Barrier;
 use std::sync::Condvar;
@@ -27,17 +27,17 @@ use std::sync::Weak;
 // converted to a u32.
 const _USIZE_LARGER_THAN_U32: &[()] = &[(); mem::size_of::<usize>() - mem::size_of::<u32>()];
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Item<'p, const D: usize> {
     point: PointND<D>,
     weight: f64,
-    part: &'p mut usize,
+    part: &'p AtomicUsize,
 }
 
 fn weighted_median<'p, const D: usize>(
     s: &rayon::Scope<'p>,
     q: Arc<JobQueue<'p, D>>,
-    mut items: Vec<Item<'p, D>>,
+    items: Vec<Item<'p, D>>,
     coord: usize,
     num_iter: usize,
     tolerance: f64,
@@ -95,7 +95,7 @@ fn weighted_median<'p, const D: usize>(
         s.spawn(move |_| {
             let part = crate::uid();
             for item in items {
-                *item.part = part;
+                item.part.store(part, Ordering::Relaxed);
             }
             q.lock().free_threads(1);
         });
@@ -128,22 +128,25 @@ fn weighted_median<'p, const D: usize>(
         run: AtomicBool::new(true),
     });
 
+    let items = Arc::new(items);
     let (t_send, t_recv) = crossbeam_channel::bounded::<(Vec<Item<'p, D>>, usize)>(num_threads - 1);
 
     #[cfg(debug_assertions)]
     let mut i = 0;
 
-    for chunk_start in (0..num_items).step_by(chunk_size).rev() {
-        let chunk = items.split_off(chunk_start);
+    for chunk_start in (0..num_items).step_by(chunk_size) {
         let q = Arc::clone(&q);
         let ctx = Arc::clone(&ctx);
+        let items = Arc::clone(&items);
         let t_send = t_send.clone();
         let t_recv = t_recv.clone();
         s.spawn(move |_| {
             #[cfg(debug_assertions)]
             println!("compute {}: spawn", i);
 
-            let mut thread_items: Vec<_> = chunk.into_iter().collect();
+            // Copy weights and coordinates into a hopefully nearer memory part.
+            let chunk_end = usize::min(num_items, chunk_start + chunk_size);
+            let mut thread_items: Vec<_> = items[chunk_start..chunk_end].iter().cloned().collect();
 
             // Compute the sum, the min and the max and merge them.
             let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
@@ -181,7 +184,7 @@ fn weighted_median<'p, const D: usize>(
             let mut additional_partial_left_count = 0;
             let mut additional_partial_left_weight = 0.0;
             let mut median_idx = 0;
-            while ctx.run.load(SeqCst) {
+            while ctx.run.load(Ordering::SeqCst) {
                 let partial_left_count = item_view
                     .iter()
                     .filter(|item| item.point[coord] < split_target)
@@ -191,11 +194,11 @@ fn weighted_median<'p, const D: usize>(
                     let empty: &mut [Item<'p, D>] = &mut [];
                     (item_view, empty)
                 } else {
-                    let (l, _, r) =
+                    let (partial_left, _, partial_right) =
                         item_view.select_nth_unstable_by(partial_left_count, |item1, item2| {
                             f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
                         });
-                    (l, r)
+                    (partial_left, partial_right)
                 };
 
                 let partial_left_weight: f64 = partial_left.iter().map(|item| item.weight).sum();
@@ -233,7 +236,7 @@ fn weighted_median<'p, const D: usize>(
                                 "compute {}: finish computation, split_target={}",
                                 i, split_target,
                             );
-                            ctx.run.store(false, SeqCst);
+                            ctx.run.store(false, Ordering::SeqCst);
                             lead = true;
                         } else {
                             ld.weight_left = 0.0;
@@ -381,7 +384,7 @@ impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
 
     pub fn pop(&mut self) -> Option<(usize, Job<'p, D>)> {
         loop {
-            let available_threads = self.available_threads.load(SeqCst);
+            let available_threads = self.available_threads.load(Ordering::SeqCst);
             for (num_threads, bucket) in self
                 .todo_list
                 .as_mut()
@@ -401,7 +404,7 @@ impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
                 println!(
                     "Queue::pop: self.todo_list={:?}, available_threads={}",
                     todo_list,
-                    self.available_threads.load(SeqCst),
+                    self.available_threads.load(Ordering::SeqCst),
                 );
             }
             todo_list = self.cond.wait(todo_list).unwrap();
@@ -410,11 +413,13 @@ impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
     }
 
     pub fn lock_threads(&self, used_threads: usize) {
-        self.available_threads.fetch_sub(used_threads, SeqCst);
+        self.available_threads
+            .fetch_sub(used_threads, Ordering::SeqCst);
     }
 
     pub fn free_threads(&self, extra_threads: usize) {
-        self.available_threads.fetch_add(extra_threads, SeqCst);
+        self.available_threads
+            .fetch_add(extra_threads, Ordering::SeqCst);
     }
 }
 
@@ -476,7 +481,7 @@ pub fn rcb<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize
         let items = points
             .par_iter()
             .zip(weights)
-            .zip(&mut partition)
+            .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut partition) })
             .map(|((&point, &weight), part)| Item {
                 point,
                 weight,
