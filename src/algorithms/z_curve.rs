@@ -26,7 +26,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use rayon::prelude::*;
-use snowflake::ProcessUniqueId;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
@@ -41,7 +40,7 @@ pub fn z_curve_partition<const D: usize>(
     points: &[PointND<D>],
     num_partitions: usize,
     order: u32,
-) -> Vec<ProcessUniqueId>
+) -> Vec<usize>
 where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -59,8 +58,7 @@ where
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
-    let initial_id = ProcessUniqueId::new();
-    let mut ininial_partition: Vec<_> = points.par_iter().map(|_| initial_id).collect();
+    let mut ininial_partition = vec![0; points.len()];
 
     // reorder points
     z_curve_partition_recurse(points, order, &mbr, &mut permutation);
@@ -80,8 +78,8 @@ where
     permutation[..threshold_idx]
         .par_chunks(points_per_partition + 1)
         .chain(permutation[threshold_idx..].par_chunks(points_per_partition))
-        .for_each(|chunk| {
-            let id = ProcessUniqueId::new();
+        .enumerate()
+        .for_each(|(id, chunk)| {
             let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
             for idx in chunk {
                 unsafe { std::ptr::write(ptr.add(*idx), id) }

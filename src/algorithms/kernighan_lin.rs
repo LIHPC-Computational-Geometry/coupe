@@ -5,7 +5,6 @@
 
 use crate::geometry::PointND;
 use crate::partition::Partition;
-use crate::ProcessUniqueId;
 
 use itertools::Itertools;
 use sprs::CsMatView;
@@ -42,7 +41,7 @@ pub(crate) fn kernighan_lin<'a, const D: usize>(
 fn kernighan_lin_2_impl<const D: usize>(
     weights: &[f64],
     adjacency: CsMatView<f64>,
-    initial_partition: &mut [ProcessUniqueId],
+    initial_partition: &mut [usize],
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     _max_imbalance_per_flip: Option<f64>,

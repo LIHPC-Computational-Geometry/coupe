@@ -8,7 +8,6 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use rayon::prelude::*;
-use snowflake::ProcessUniqueId;
 
 use std::cmp;
 use std::collections::BTreeMap;
@@ -31,7 +30,7 @@ const _USIZE_LARGER_THAN_U32: &[()] = &[(); mem::size_of::<usize>() - mem::size_
 struct Item<'p, const D: usize> {
     point: PointND<D>,
     weight: f64,
-    part: &'p mut ProcessUniqueId,
+    part: &'p mut usize,
 }
 
 fn weighted_median<'p, const D: usize>(
@@ -93,7 +92,7 @@ fn weighted_median<'p, const D: usize>(
         #[cfg(debug_assertions)]
         println!("num_iter=0,num_items={}", items.len());
         s.spawn(move |_| {
-            let part = ProcessUniqueId::new();
+            let part = crate::uid();
             for item in items {
                 *item.part = part;
             }
@@ -452,13 +451,8 @@ fn rcb_recurse<'p, const D: usize>(
     }
 }
 
-pub fn rcb<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    n_iter: usize,
-) -> Vec<ProcessUniqueId> {
-    let dummy_id = ProcessUniqueId::new();
-    let mut partition = vec![dummy_id; points.len()];
+pub fn rcb<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<usize> {
+    let mut partition = vec![0; points.len()];
 
     rayon::scope(|s| {
         let items = points
@@ -510,11 +504,7 @@ pub fn axis_sort<const D: usize>(
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    n_iter: usize,
-) -> Vec<ProcessUniqueId>
+pub fn rib<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<usize>
 where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -611,8 +601,8 @@ mod tests {
             .collect();
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
         let partition = rcb(&points, &weights, 3);
-        let mut loads: HashMap<ProcessUniqueId, f64> = HashMap::new();
-        let mut sizes: HashMap<ProcessUniqueId, usize> = HashMap::new();
+        let mut loads: HashMap<usize, f64> = HashMap::new();
+        let mut sizes: HashMap<usize, usize> = HashMap::new();
         for (weight_id, part) in partition.iter().enumerate() {
             let weight = weights[weight_id];
             *loads.entry(*part).or_default() += weight;

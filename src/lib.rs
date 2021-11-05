@@ -34,6 +34,7 @@ pub mod partition;
 mod real;
 mod run_info;
 pub mod topology;
+mod uid;
 
 // API
 
@@ -41,7 +42,7 @@ pub mod topology;
 pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::real::Real;
 pub use crate::run_info::RunInfo;
-pub use snowflake::ProcessUniqueId;
+pub use crate::uid::uid;
 
 pub mod dimension {
     pub use nalgebra::base::dimension::*;
@@ -547,14 +548,8 @@ where
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
         let mut rng = self.rng.borrow_mut();
-        let part_ids: Vec<_> = (0..self.num_parts)
-            .map(|_| ProcessUniqueId::new())
-            .collect();
         let ids = (0..weights.len())
-            .map(|_| {
-                let i = rng.gen_range(0..self.num_parts);
-                part_ids[i]
-            })
+            .map(|_| rng.gen_range(0..self.num_parts))
             .collect();
         Partition::from_ids(points.to_points_nd(), weights, ids)
     }
@@ -591,18 +586,11 @@ impl<const D: usize> Partitioner<D> for Greedy {
         points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
-        let mut partition = vec![0; weights.len()];
+        let mut ids = vec![0; weights.len()];
         {
             let weights = weights.iter().map(Real::from);
-            algorithms::greedy::greedy(&mut partition, weights, self.num_parts);
+            algorithms::greedy::greedy(&mut ids, weights, self.num_parts);
         }
-        let part_ids: Vec<_> = (0..self.num_parts)
-            .map(|_| ProcessUniqueId::new())
-            .collect();
-        let ids = partition
-            .into_iter()
-            .map(|part_id| part_ids[part_id])
-            .collect();
         Partition::from_ids(points.to_points_nd(), weights, ids)
     }
 }
@@ -638,18 +626,11 @@ impl<const D: usize> Partitioner<D> for KarmarkarKarp {
         points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
-        let mut partition = vec![0; weights.len()];
+        let mut ids = vec![0; weights.len()];
         {
             let weights = weights.iter().map(Real::from);
-            algorithms::kk::kk(&mut partition, weights, 2);
+            algorithms::kk::kk(&mut ids, weights, self.num_parts);
         }
-        let part_ids: Vec<_> = (0..self.num_parts)
-            .map(|_| ProcessUniqueId::new())
-            .collect();
-        let ids = partition
-            .into_iter()
-            .map(|part_id| part_ids[part_id])
-            .collect();
         Partition::from_ids(points.to_points_nd(), weights, ids)
     }
 }
@@ -685,17 +666,11 @@ impl<const D: usize> Partitioner<D> for CompleteKarmarkarKarp {
         points: impl PointsView<'a, D>,
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
-        let mut partition = vec![0; weights.len()];
+        let mut ids = vec![0; weights.len()];
         {
             let weights = weights.iter().map(Real::from);
-            algorithms::ckk::ckk_bipart(&mut partition, weights, self.tolerance);
+            algorithms::ckk::ckk_bipart(&mut ids, weights, self.tolerance);
         }
-        let first_part = ProcessUniqueId::new();
-        let second_part = ProcessUniqueId::new();
-        let ids = partition
-            .into_iter()
-            .map(|part| if part == 0 { first_part } else { second_part })
-            .collect();
         Partition::from_ids(points.to_points_nd(), weights, ids)
     }
 }
@@ -738,20 +713,9 @@ impl<const D: usize> PartitionImprover<D> for VnBest {
         &self,
         partition: Partition<'a, PointND<D>, f64>,
     ) -> Partition<'a, PointND<D>, f64> {
-        let (points, weights, ids) = partition.into_raw();
-        let mut used_ids = ids.clone();
-        used_ids.sort_unstable();
-        used_ids.dedup();
-        for _ in used_ids.len()..self.num_parts {
-            used_ids.push(ProcessUniqueId::new());
-        }
-        let mut ids: Vec<usize> = ids
-            .into_iter()
-            .map(|id| used_ids.iter().position(|uid| uid == &id).unwrap())
-            .collect();
+        let (points, weights, mut ids) = partition.into_raw();
         let weights_real: Vec<Real> = weights.iter().map(Real::from).collect();
         algorithms::vn::best::vn_best_mono::<Real>(&mut ids, &weights_real, self.num_parts);
-        let ids = ids.into_iter().map(|part_id| used_ids[part_id]).collect();
         Partition::from_ids(points, weights, ids)
     }
 }
@@ -771,13 +735,9 @@ impl<const D: usize> PartitionImprover<D> for VnBest {
 /// ```rust
 /// use coupe::Point2D;
 /// use coupe::PartitionImprover;
-/// use coupe::ProcessUniqueId;
 /// use coupe::partition::Partition;
 ///
 /// // create ids for initial partition
-/// let p1 = ProcessUniqueId::new();
-/// let p2 = ProcessUniqueId::new();
-/// let p3 = ProcessUniqueId::new();
 ///
 /// let points = vec![
 ///     Point2D::new(0., 0.),
@@ -797,7 +757,7 @@ impl<const D: usize> PartitionImprover<D> for VnBest {
 /// //  - p1: total weight = 1
 /// //  - p2: total weight = 7
 /// //  - p3: total weight = 1
-/// let ids = vec![p1, p2, p2, p2, p2, p2, p2, p2, p3];
+/// let ids = vec![1, 2, 2, 2, 2, 2, 2, 2, 3];
 /// let partition = Partition::from_ids(&points, &weights, ids);
 ///
 /// let mut k_means = coupe::KMeans::default();
@@ -970,7 +930,7 @@ where
 /// # Example
 ///
 /// ```rust
-/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::Point2D;
 /// use coupe::TopologicPartitionImprover;
 /// use coupe::partition::Partition;
 /// use sprs::CsMat;
@@ -991,10 +951,8 @@ where
 ///      Point2D::new(2., 1.),
 ///      Point2D::new(3., 1.),
 ///  ];
-///  let id0 = ProcessUniqueId::new();
-///  let id1 = ProcessUniqueId::new();
 ///
-///  let ids = vec![id0, id0, id1, id1, id0, id1, id0, id1];
+///  let ids = vec![0, 0, 1, 1, 0, 1, 0, 1];
 ///  let weights = vec![1.; 8];
 ///
 ///  let mut partition = Partition::from_ids(&points, &weights, ids);
@@ -1031,8 +989,8 @@ where
 /// let partition = algo.improve_partition(partition, adjacency.view());
 ///
 /// let new_ids = partition.into_ids();
-/// assert_eq!(new_ids[5], id0);
-/// assert_eq!(new_ids[6], id1);
+/// assert_eq!(new_ids[5], 0);
+/// assert_eq!(new_ids[6], 1);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KernighanLin {
@@ -1094,7 +1052,7 @@ impl<const D: usize> TopologicPartitionImprover<D> for KernighanLin {
 /// # Example
 ///
 /// ```rust
-/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::Point2D;
 /// use coupe::TopologicPartitionImprover;
 /// use coupe::partition::Partition;
 /// use sprs::CsMat;
@@ -1115,10 +1073,8 @@ impl<const D: usize> TopologicPartitionImprover<D> for KernighanLin {
 ///      Point2D::new(2., 1.),
 ///      Point2D::new(3., 1.),
 ///  ];
-///  let id0 = ProcessUniqueId::new();
-///  let id1 = ProcessUniqueId::new();
 ///
-///  let ids = vec![id0, id0, id1, id1, id0, id1, id0, id1];
+///  let ids = vec![0, 0, 1, 1, 0, 1, 0, 1];
 ///  let weights = vec![1.; 8];
 ///
 ///  let mut partition = Partition::from_ids(&points, &weights, ids);
@@ -1155,8 +1111,8 @@ impl<const D: usize> TopologicPartitionImprover<D> for KernighanLin {
 /// let partition = algo.improve_partition(partition, adjacency.view());
 ///
 /// let new_ids = partition.into_ids();
-/// assert_eq!(new_ids[5], id0);
-/// assert_eq!(new_ids[6], id1);
+/// assert_eq!(new_ids[5], 0);
+/// assert_eq!(new_ids[6], 1);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct FiducciaMattheyses {
@@ -1209,7 +1165,7 @@ impl<const D: usize> TopologicPartitionImprover<D> for FiducciaMattheyses {
 /// # Example
 ///
 /// ```rust
-/// use coupe::{Point2D, ProcessUniqueId};
+/// use coupe::Point2D;
 /// use coupe::TopologicPartitioner;
 /// use coupe::partition::Partition;
 /// use sprs::CsMat;
