@@ -27,471 +27,134 @@ use std::sync::Weak;
 // converted to a u32.
 const _USIZE_LARGER_THAN_U32: &[()] = &[(); mem::size_of::<usize>() - mem::size_of::<u32>()];
 
-#[derive(Clone, Debug)]
-struct Item<'p, const D: usize> {
-    point: PointND<D>,
-    weight: f64,
-    part: &'p AtomicUsize,
+#[derive(Clone)]
+struct Items<const D: usize> {
+    points: Vec<PointND<D>>,
+    weights: Vec<f64>,
 }
 
-fn weighted_median<'p, const D: usize>(
-    s: &rayon::Scope<'p>,
-    q: Arc<JobQueue<'p, D>>,
-    items: Vec<Item<'p, D>>,
-    coord: usize,
-    num_iter: usize,
-    tolerance: f64,
-    num_avail_threads: usize,
-) -> usize {
-    use std::sync::atomic::AtomicBool;
-
-    /// InitData is everything that is computed beforehand by all threads.
-    ///
-    /// It contains the bouding box (min, max) and the sum of all weights.  The
-    /// bounding box is updated at each iteration to compute the "split target".
-    struct InitData {
-        min: f64,
-        max: f64,
-        sum: f64,
-    }
-
-    /// LoopData is the result of each iteration.
-    ///
-    /// It is written by all threads, each threads decrements the TTL
-    /// (time-to-live). The thread that obtains ttl==0 updates InitData's min
-    /// and max, and decides whether to continue the iteration or not.
-    struct LoopData {
-        /// Weight on the left of the split target.  The weight on the right can
-        /// be obtained through InitData's sum.
-        weight_left: f64,
-
-        /// The number of weights on the left of the split target.  The number
-        /// on the right can be obtained through items's length.
-        count_left: usize,
-
-        /// The number of weights on the left of max and min.  Used to tell
-        /// whether it is impossible to find a split target that satisfy the
-        /// tolerance, and thus stop the iteration.
-        count_left_max: usize,
-        count_left_min: usize,
-
-        /// Time-to-Live, initialized to the number of threads and decreased on
-        /// every write.  To know when the next iteration can begin.
-        ttl: usize,
-    }
-
-    /// Data shared by all threads
-    struct ThreadContext {
-        init_data: RwLock<InitData>,
-        loop_data: Mutex<LoopData>,
-        barrier: Barrier,
-        /// whether to stop the computation
-        run: AtomicBool,
-    }
-
-    if num_iter == 0 {
-        #[cfg(debug_assertions)]
-        println!("num_iter=0,num_items={}", items.len());
-        s.spawn(move |_| {
-            let part = crate::uid();
-            for item in items {
-                item.part.store(part, Ordering::Relaxed);
-            }
-            q.lock().free_threads(1);
-        });
-        return 1;
-    }
-
-    let num_items = items.len();
-    let chunk_size = usize::max((num_items + num_avail_threads - 1) / num_avail_threads, 64);
-    let num_threads = (num_items + chunk_size - 1) / chunk_size;
-    #[cfg(debug_assertions)]
-    println!(
-        "num_iter={},avail_threads={},num_threads={},num_items={},chunk_size={}",
-        num_iter, num_avail_threads, num_threads, num_items, chunk_size,
-    );
-
-    let ctx = Arc::new(ThreadContext {
-        init_data: RwLock::new(InitData {
-            min: f64::INFINITY,
-            max: f64::NEG_INFINITY,
-            sum: 0.0,
-        }),
-        loop_data: Mutex::new(LoopData {
-            weight_left: 0.0,
-            count_left: 0,
-            count_left_max: items.len(),
-            count_left_min: 0,
-            ttl: num_threads,
-        }),
-        barrier: Barrier::new(num_threads),
-        run: AtomicBool::new(true),
-    });
-
-    let items = Arc::new(items);
-    let (t_send, t_recv) = crossbeam_channel::bounded::<(Vec<Item<'p, D>>, usize)>(num_threads - 1);
-
-    #[cfg(debug_assertions)]
-    let mut i = 0;
-
-    for chunk_start in (0..num_items).step_by(chunk_size) {
-        let q = Arc::clone(&q);
-        let ctx = Arc::clone(&ctx);
-        let items = Arc::clone(&items);
-        let t_send = t_send.clone();
-        let t_recv = t_recv.clone();
-        s.spawn(move |_| {
-            #[cfg(debug_assertions)]
-            println!("compute {}: spawn", i);
-
-            // Copy weights and coordinates into a hopefully nearer memory part.
-            let chunk_end = usize::min(num_items, chunk_start + chunk_size);
-            let mut thread_items: Vec<_> = items[chunk_start..chunk_end].iter().cloned().collect();
-
-            // Compute the sum, the min and the max and merge them.
-            let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
-
-            let (partial_min, partial_max) = thread_items
-                .iter()
-                .map(|item| item.point[coord])
-                .minmax()
-                .into_option()
-                .unwrap();
-
-            {
-                #[cfg(debug_assertions)]
-                println!("compute {}: write sum/min/max", i);
-                let mut d = ctx.init_data.write().unwrap();
-                if partial_min < d.min {
-                    d.min = partial_min;
-                }
-                if d.max < partial_max {
-                    d.max = partial_max;
-                }
-                d.sum += partial_sum;
-            }
-            #[cfg(debug_assertions)]
-            println!("compute {}: waiting for barrier", i);
-            ctx.barrier.wait();
-            #[cfg(debug_assertions)]
-            println!("compute {}: woke up", i);
-
-            let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
-            let mut split_target = (min + max) / 2.0;
-
-            let mut lead = false;
-            let mut item_view = &mut *thread_items;
-            let mut additional_partial_left_count = 0;
-            let mut additional_partial_left_weight = 0.0;
-            let mut median_idx = 0;
-            while ctx.run.load(Ordering::SeqCst) {
-                let partial_left_count = item_view
-                    .iter()
-                    .filter(|item| item.point[coord] < split_target)
-                    .count();
-
-                let (partial_left, partial_right) = if partial_left_count == item_view.len() {
-                    let empty: &mut [Item<'p, D>] = &mut [];
-                    (item_view, empty)
-                } else {
-                    let (partial_left, _, partial_right) =
-                        item_view.select_nth_unstable_by(partial_left_count, |item1, item2| {
-                            f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
-                        });
-                    (partial_left, partial_right)
-                };
-
-                let partial_left_weight: f64 = partial_left.iter().map(|item| item.weight).sum();
-                let partial_left_weight = partial_left_weight + additional_partial_left_weight;
-
-                let partial_left_count = partial_left_count + additional_partial_left_count;
-
-                {
-                    #[cfg(debug_assertions)]
-                    println!("compute {}: write weight_left/right", i);
-                    let mut ld = ctx.loop_data.lock().unwrap();
-                    ld.weight_left += partial_left_weight;
-                    ld.count_left += partial_left_count;
-                    let ttl = ld.ttl - 1;
-                    if ttl == 0 {
-                        #[cfg(debug_assertions)]
-                        println!("compute {}: last write, computing next split_target", i);
-                        let mut id = ctx.init_data.try_write().unwrap();
-                        let weight_right = id.sum - ld.weight_left;
-                        let max_imbalance = tolerance * id.sum;
-
-                        if ld.weight_left < weight_right {
-                            id.min = split_target;
-                            ld.count_left_min = ld.count_left;
-                        } else {
-                            id.max = split_target;
-                            ld.count_left_max = ld.count_left;
-                        }
-
-                        if f64::abs(ld.weight_left - weight_right) < max_imbalance
-                            || ld.count_left_min == ld.count_left_max
-                        {
-                            #[cfg(debug_assertions)]
-                            println!(
-                                "compute {}: finish computation, split_target={}",
-                                i, split_target,
-                            );
-                            ctx.run.store(false, Ordering::SeqCst);
-                            lead = true;
-                        } else {
-                            ld.weight_left = 0.0;
-                            ld.count_left = 0;
-                            ld.ttl = num_threads;
-                        }
-                    } else {
-                        ld.ttl = ttl;
-                    }
-                }
-                #[cfg(debug_assertions)]
-                println!("compute {}: waiting for barrier", i);
-                ctx.barrier.wait();
-                #[cfg(debug_assertions)]
-                println!("compute {}: woke up", i);
-
-                let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
-                let new_split_target = (min + max) / 2.0;
-                if split_target < new_split_target {
-                    median_idx = 0;
-                    additional_partial_left_weight = partial_left_weight;
-                    additional_partial_left_count = partial_left_count;
-                    item_view = partial_right;
-                } else {
-                    median_idx = partial_left.len();
-                    item_view = partial_left;
-                }
-                split_target = new_split_target;
-            }
-            let median_idx = additional_partial_left_count + median_idx;
-            if lead {
-                let ld = ctx.loop_data.try_lock().unwrap();
-                let mut left = Vec::with_capacity(ld.count_left);
-                let mut right = Vec::with_capacity(num_items - ld.count_left);
-                right.extend(thread_items.drain(median_idx..));
-                left.extend(thread_items);
-                mem::drop(t_send);
-                while let Ok((mut thread_items, median_idx)) = t_recv.recv() {
-                    right.extend(thread_items.drain(median_idx..));
-                    left.extend(thread_items);
-                }
-                let next_coord = (coord + 1) % D;
-                let (threads_left, threads_right) = {
-                    let now = num_avail_threads as f64;
-                    let left = left.len() as f64;
-                    let right = right.len() as f64;
-                    let threads_left = left / (left + right) * now;
-                    let threads_right = right / (left + right) * now;
-                    (threads_left as usize, threads_right as usize)
-                };
-                let mut lock = q.lock();
-                lock.push(
-                    usize::max(threads_left, 1),
-                    Job {
-                        items: left,
-                        num_iter: num_iter - 1,
-                        coord: next_coord,
-                    },
-                );
-                lock.push(
-                    usize::max(threads_right, 1),
-                    Job {
-                        items: right,
-                        num_iter: num_iter - 1,
-                        coord: next_coord,
-                    },
-                );
-                lock.free_threads(num_threads);
-            } else {
-                t_send.send((thread_items, median_idx)).unwrap();
-            }
-        });
-        #[cfg(debug_assertions)]
-        {
-            i += 1;
-        }
-    }
-    #[cfg(debug_assertions)]
-    assert_eq!(i, num_threads);
-
-    num_threads
-}
-
-struct Job<'p, const D: usize> {
-    items: Vec<Item<'p, D>>,
+struct Job<const D: usize> {
+    items: Items<D>,
     coord: usize,
     num_iter: usize,
 }
 
-impl<'p, const D: usize> std::fmt::Debug for Job<'p, D> {
+impl<const D: usize> std::fmt::Debug for Job<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "Job {{ item_count: {}, coord: {}, num_iter: {} }}",
-            self.items.len(),
+            self.items.points.len(),
             self.coord,
             self.num_iter,
         )
     }
 }
 
-type TodoList<'p, const D: usize> = BTreeMap<usize, Vec<Job<'p, D>>>;
+use mpi::collective::Root as _;
+use mpi::collective::SystemOperation;
+use mpi::request::StaticScope;
+use mpi::topology::Communicator as _;
 
-struct JobQueue<'p, const D: usize> {
-    available_threads: AtomicUsize,
-    cond: Condvar,
-    todo_list: Mutex<TodoList<'p, D>>,
+fn rcb_root_iter<'p, const D: usize>(items: Items<D>, coord: usize) -> (Items<D>, Items<D>) {
+    let world = mpi::topology::SystemCommunicator::world();
+    let root = world.process_at_rank(0);
+
+    println!("Ouais.");
+    let points = items.points.as_slice();
+    let points: &[f64] =
+        unsafe { std::slice::from_raw_parts(points.as_ptr() as *const f64, points.len() * D) };
+
+    let mut min = 0.0;
+    root.reduce_into_root(points, &mut min, SystemOperation::min());
+    let mut max = 0.0;
+    root.reduce_into_root(points, &mut max, SystemOperation::max());
+    let mut sum = 0.0;
+    root.reduce_into_root(&items.weights, &mut sum, SystemOperation::sum());
+    println!("Ouais!");
+
+    let a = Items {
+        points: Vec::new(),
+        weights: Vec::new(),
+    };
+    (a.clone(), a)
 }
 
-impl<'p, const D: usize> JobQueue<'p, D> {
-    pub fn new(available_threads: usize) -> Arc<JobQueue<'p, D>> {
-        Arc::new(JobQueue {
-            available_threads: AtomicUsize::new(available_threads),
-            cond: Condvar::new(),
-            todo_list: Mutex::new(BTreeMap::new()),
-        })
-    }
+fn rcb_nonroot_iter<const D: usize>() {
+    let world = mpi::topology::SystemCommunicator::world();
+    let root = world.process_at_rank(0);
 
-    pub fn lock<'q>(self: &'q Arc<JobQueue<'p, D>>) -> JobQueueLock<'p, 'q, D> {
-        JobQueueLock {
-            queue_ref: Arc::downgrade(self),
-            available_threads: &self.available_threads,
-            cond: &self.cond,
-            todo_list: Some(self.todo_list.lock().unwrap()),
-        }
-    }
+    println!("Ah.");
+    let lol: &mut [f64] = &mut [];
+    root.reduce_into(lol, SystemOperation::min());
+    root.reduce_into(lol, SystemOperation::max());
+    root.reduce_into(lol, SystemOperation::sum());
+    println!("Ah!");
 }
 
-struct JobQueueLock<'p, 'q, const D: usize> {
-    queue_ref: Weak<JobQueue<'p, D>>,
-    available_threads: &'q AtomicUsize,
-    cond: &'q Condvar,
-    todo_list: Option<MutexGuard<'q, TodoList<'p, D>>>,
-}
+fn rcb_root<'p, const D: usize>(items: Items<D>, num_iter: usize) {
+    let world = mpi::topology::SystemCommunicator::world();
+    let root = world.process_at_rank(0);
 
-impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
-    pub fn push(&mut self, job_threads: usize, job: Job<'p, D>) {
-        self.todo_list
-            .as_mut()
-            .unwrap()
-            .entry(job_threads)
-            .or_default()
-            .push(job);
-    }
-
-    pub fn pop(&mut self) -> Option<(usize, Job<'p, D>)> {
-        loop {
-            let available_threads = self.available_threads.load(Ordering::SeqCst);
-            for (num_threads, bucket) in self
-                .todo_list
-                .as_mut()
-                .unwrap()
-                .range_mut(..=available_threads)
-            {
-                if let Some(job) = bucket.pop() {
-                    return Some((*num_threads, job));
-                }
-            }
-            if self.queue_ref.strong_count() <= 1 {
-                return None;
-            }
-            let mut todo_list = mem::replace(&mut self.todo_list, None).unwrap();
-            #[cfg(debug_assertions)]
-            if !todo_list.values().all(Vec::is_empty) {
-                println!(
-                    "Queue::pop: self.todo_list={:?}, available_threads={}",
-                    todo_list,
-                    self.available_threads.load(Ordering::SeqCst),
-                );
-            }
-            todo_list = self.cond.wait(todo_list).unwrap();
-            self.todo_list = Some(todo_list);
-        }
-    }
-
-    pub fn lock_threads(&self, used_threads: usize) {
-        self.available_threads
-            .fetch_sub(used_threads, Ordering::SeqCst);
-    }
-
-    pub fn free_threads(&self, extra_threads: usize) {
-        self.available_threads
-            .fetch_add(extra_threads, Ordering::SeqCst);
-    }
-}
-
-impl<'p, 'q, const D: usize> Drop for JobQueueLock<'p, 'q, D> {
-    fn drop(&mut self) {
-        self.cond.notify_all();
-    }
-}
-
-fn rcb_recurse<'p, const D: usize>(
-    s: &rayon::Scope<'p>,
-    items: Vec<Item<'p, D>>,
-    num_iter: usize,
-    coord: usize,
-    tolerance: f64,
-    available_threads: usize,
-) {
-    let q = JobQueue::new(available_threads);
-    q.lock().push(
-        available_threads,
-        Job {
-            items,
-            coord,
-            num_iter,
-        },
-    );
-
-    let total_jobs = usize::pow(2, num_iter as u32 + 1) - 1;
-    for job_num in 0..total_jobs {
-        #[cfg(debug_assertions)]
-        println!("Waiting for job #{} on {}", job_num, total_jobs);
-        let mut lock = q.lock();
-        let (num_threads, job) = match lock.pop() {
-            Some(val) => val,
-            None => break,
-        };
-        let Job {
-            items,
-            coord,
-            num_iter,
-        } = job;
-        let used_threads = weighted_median(
-            s,
-            Arc::clone(&q),
-            items,
-            coord,
-            num_iter,
-            tolerance,
-            num_threads,
-        );
-        lock.lock_threads(used_threads);
-    }
-}
-
-pub fn rcb<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<usize> {
-    let mut partition = vec![0; points.len()];
-
-    rayon::scope(|s| {
-        let items = points
-            .par_iter()
-            .zip(weights)
-            .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut partition) })
-            .map(|((&point, &weight), part)| Item {
-                point,
-                weight,
-                part,
-            })
-            .collect();
-        rcb_recurse(s, items, n_iter, 0, 0.05, rayon::current_num_threads() - 1);
+    let mut queue = Vec::new();
+    queue.push(Job {
+        items,
+        coord: 0,
+        num_iter,
     });
 
-    partition
+    while let Some(Job {
+        items,
+        coord,
+        num_iter,
+    }) = queue.pop()
+    {
+        println!("Iteration");
+        root.broadcast_into(&mut true);
+        let (left, right) = rcb_root_iter(items, coord);
+        if num_iter == 0 {
+            continue;
+        }
+        queue.push(Job {
+            items: left,
+            coord: (coord + 1) % D,
+            num_iter: num_iter - 1,
+        });
+        queue.push(Job {
+            items: right,
+            coord: (coord + 1) % D,
+            num_iter: num_iter - 1,
+        });
+    }
+
+    root.broadcast_into(&mut false);
+}
+
+pub fn rcb<const D: usize>(points: &[PointND<D>], weights: &[f64], num_iter: usize) -> Vec<usize> {
+    let _universe = mpi::initialize();
+    let world = mpi::topology::SystemCommunicator::world();
+
+    if world.rank() == 0 {
+        let items = Items {
+            points: points.to_vec(),
+            weights: weights.to_vec(),
+        };
+
+        rcb_root(items, num_iter);
+
+        Vec::new()
+    } else {
+        let root = world.process_at_rank(0);
+        let mut run = true;
+        loop {
+            root.broadcast_into(&mut run);
+            if !run {
+                break;
+            }
+            rcb_nonroot_iter::<D>();
+        }
+        Vec::new()
+    }
 }
 
 // pub because it is also useful for multijagged and required for benchmarks

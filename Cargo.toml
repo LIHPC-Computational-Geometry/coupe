@@ -25,6 +25,7 @@ num = "0.4"
 crossbeam-utils = "0.8"
 crossbeam-channel = "0.5"
 rayon = "1.3"
+mpi = { git = "https://github.com/hhirtz/rsmpi", rev = "3696f8b88feef1ed594c6e3114ff59557bc54354", default-features = false }
 rand = "0.8"
 sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
 
