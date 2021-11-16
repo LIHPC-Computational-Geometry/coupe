@@ -20,12 +20,48 @@ use std::sync::Barrier;
 use std::sync::Condvar;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
-use std::sync::RwLock;
 use std::sync::Weak;
 
 // Needed for an exponentiation where the exponent is a usize and needs to be
 // converted to a u32.
 const _USIZE_LARGER_THAN_U32: &[()] = &[(); mem::size_of::<usize>() - mem::size_of::<u32>()];
+
+fn parallel_chunks<'a, F, T>(
+    s: &rayon::Scope<'a>,
+    items: Vec<T>,
+    thread_count: usize,
+    f: F,
+) -> usize
+where
+    T: 'a + Clone + Send + Sync,
+    F: 'a + Fn(Vec<T>) + Send + Sync,
+{
+    let items_len = items.len();
+    let chunk_size = usize::max((items_len + thread_count - 1) / thread_count, 64);
+    let used_thread_count = (items_len + chunk_size - 1) / chunk_size;
+
+    debug_assert_eq!(
+        used_thread_count,
+        (0..items_len).step_by(chunk_size).count(),
+    );
+
+    let items = Arc::new(items);
+    let f = Arc::new(f);
+
+    for chunk_start in (0..items_len).step_by(chunk_size) {
+        let items = Arc::clone(&items);
+        let f = Arc::clone(&f);
+        s.spawn(move |_| {
+            // Copy weights and coordinates into a hopefully nearer memory part.
+            let chunk_end = usize::min(items_len, chunk_start + chunk_size);
+            let thread_items: Vec<T> = items[chunk_start..chunk_end].iter().cloned().collect();
+
+            f(thread_items)
+        });
+    }
+
+    used_thread_count
+}
 
 #[derive(Clone, Debug)]
 struct Item<'p, const D: usize> {
@@ -45,29 +81,19 @@ fn weighted_median<'p, const D: usize>(
 ) -> usize {
     use std::sync::atomic::AtomicBool;
 
-    /// InitData is everything that is computed beforehand by all threads.
-    ///
-    /// It contains the bouding box (min, max) and the sum of all weights.  The
-    /// bounding box is updated at each iteration to compute the "split target".
-    struct InitData {
+    struct Locked {
         min: f64,
         max: f64,
         sum: f64,
-    }
 
-    /// LoopData is the result of each iteration.
-    ///
-    /// It is written by all threads, each threads decrements the TTL
-    /// (time-to-live). The thread that obtains ttl==0 updates InitData's min
-    /// and max, and decides whether to continue the iteration or not.
-    struct LoopData {
         /// Weight on the left of the split target.  The weight on the right can
         /// be obtained through InitData's sum.
-        weight_left: f64,
+        left_part_weight: f64, // current iteration
+        additional_left_weight: f64, // previous iterations
 
         /// The number of weights on the left of the split target.  The number
         /// on the right can be obtained through items's length.
-        count_left: usize,
+        left_part_count: usize,
 
         /// The number of weights on the left of max and min.  Used to tell
         /// whether it is impossible to find a split target that satisfy the
@@ -78,12 +104,15 @@ fn weighted_median<'p, const D: usize>(
         /// Time-to-Live, initialized to the number of threads and decreased on
         /// every write.  To know when the next iteration can begin.
         ttl: usize,
+
+        num_threads: usize,
     }
 
     /// Data shared by all threads
     struct ThreadContext {
-        init_data: RwLock<InitData>,
-        loop_data: Mutex<LoopData>,
+        c: Condvar,
+        data: Mutex<Locked>,
+
         barrier: Barrier,
         /// whether to stop the computation
         run: AtomicBool,
@@ -105,219 +134,236 @@ fn weighted_median<'p, const D: usize>(
     let num_items = items.len();
     let chunk_size = usize::max((num_items + num_avail_threads - 1) / num_avail_threads, 64);
     let num_threads = (num_items + chunk_size - 1) / chunk_size;
-    #[cfg(debug_assertions)]
-    println!(
-        "num_iter={},avail_threads={},num_threads={},num_items={},chunk_size={}",
-        num_iter, num_avail_threads, num_threads, num_items, chunk_size,
-    );
 
-    let ctx = Arc::new(ThreadContext {
-        init_data: RwLock::new(InitData {
+    let ctx = ThreadContext {
+        c: Condvar::new(),
+        data: Mutex::new(Locked {
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
             sum: 0.0,
-        }),
-        loop_data: Mutex::new(LoopData {
-            weight_left: 0.0,
-            count_left: 0,
+            left_part_weight: 0.0,
+            additional_left_weight: 0.0,
+            left_part_count: 0,
             count_left_max: items.len(),
             count_left_min: 0,
             ttl: num_threads,
+            num_threads,
         }),
         barrier: Barrier::new(num_threads),
         run: AtomicBool::new(true),
-    });
+    };
 
-    let items = Arc::new(items);
     let (t_send, t_recv) = crossbeam_channel::bounded::<(Vec<Item<'p, D>>, usize)>(num_threads - 1);
 
-    #[cfg(debug_assertions)]
-    let mut i = 0;
+    parallel_chunks(s, items, num_avail_threads, move |mut thread_items| {
+        // Compute the sum, the min and the max and merge them.
+        let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
 
-    for chunk_start in (0..num_items).step_by(chunk_size) {
-        let q = Arc::clone(&q);
-        let ctx = Arc::clone(&ctx);
-        let items = Arc::clone(&items);
-        let t_send = t_send.clone();
-        let t_recv = t_recv.clone();
-        s.spawn(move |_| {
-            #[cfg(debug_assertions)]
-            println!("compute {}: spawn", i);
+        let (partial_min, partial_max) = thread_items
+            .iter()
+            .map(|item| item.point[coord])
+            .minmax()
+            .into_option()
+            .unwrap();
 
-            // Copy weights and coordinates into a hopefully nearer memory part.
-            let chunk_end = usize::min(num_items, chunk_start + chunk_size);
-            let mut thread_items: Vec<_> = items[chunk_start..chunk_end].iter().cloned().collect();
-
-            // Compute the sum, the min and the max and merge them.
-            let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
-
-            let (partial_min, partial_max) = thread_items
-                .iter()
-                .map(|item| item.point[coord])
-                .minmax()
-                .into_option()
-                .unwrap();
-
-            {
-                #[cfg(debug_assertions)]
-                println!("compute {}: write sum/min/max", i);
-                let mut d = ctx.init_data.write().unwrap();
-                if partial_min < d.min {
-                    d.min = partial_min;
-                }
-                if d.max < partial_max {
-                    d.max = partial_max;
-                }
-                d.sum += partial_sum;
+        let mut min: f64;
+        let mut max: f64;
+        {
+            let mut d = ctx.data.lock().unwrap();
+            if partial_min < d.min {
+                d.min = partial_min;
             }
-            #[cfg(debug_assertions)]
-            println!("compute {}: waiting for barrier", i);
-            ctx.barrier.wait();
-            #[cfg(debug_assertions)]
-            println!("compute {}: woke up", i);
+            if d.max < partial_max {
+                d.max = partial_max;
+            }
+            d.sum += partial_sum;
+            min = d.min;
+            max = d.max;
+        }
+        if !ctx.barrier.wait().is_leader() {
+            let d = ctx.data.lock().unwrap();
+            min = d.min;
+            max = d.max;
+        }
 
-            let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
-            let mut split_target = (min + max) / 2.0;
+        let mut lead = false;
+        let mut item_view = &mut *thread_items;
+        let mut additional_partial_left_count = 0;
+        let mut median_idx = 0;
+        while ctx.run.load(Ordering::SeqCst) {
+            let split_target = (min + max) / 2.0;
 
-            let mut lead = false;
-            let mut item_view = &mut *thread_items;
-            let mut additional_partial_left_count = 0;
-            let mut additional_partial_left_weight = 0.0;
-            let mut median_idx = 0;
-            while ctx.run.load(Ordering::SeqCst) {
-                let partial_left_count = item_view
-                    .iter()
-                    .filter(|item| item.point[coord] < split_target)
-                    .count();
+            // Split thread items into two, separated by the split target.
 
-                let (partial_left, partial_right) = if partial_left_count == item_view.len() {
-                    let empty: &mut [Item<'p, D>] = &mut [];
-                    (item_view, empty)
-                } else {
-                    let (partial_left, _, partial_right) =
-                        item_view.select_nth_unstable_by(partial_left_count, |item1, item2| {
-                            f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
-                        });
-                    (partial_left, partial_right)
-                };
+            let partial_left_count = item_view
+                .iter()
+                .filter(|item| item.point[coord] < split_target)
+                .count();
+            let (partial_left, partial_right) = if partial_left_count == item_view.len() {
+                let empty: &mut [Item<'p, D>] = &mut [];
+                (item_view, empty)
+            } else {
+                let (partial_left, _, partial_right) =
+                    item_view.select_nth_unstable_by(partial_left_count, |item1, item2| {
+                        f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+                    });
+                (partial_left, partial_right)
+            };
+            let partial_left_weight: f64 = partial_left.iter().map(|item| item.weight).sum();
+            let partial_left_count = partial_left_count + additional_partial_left_count;
 
-                let partial_left_weight: f64 = partial_left.iter().map(|item| item.weight).sum();
-                let partial_left_weight = partial_left_weight + additional_partial_left_weight;
+            // Update shared state
 
-                let partial_left_count = partial_left_count + additional_partial_left_count;
+            let mut data = ctx.data.lock().unwrap();
 
-                {
-                    #[cfg(debug_assertions)]
-                    println!("compute {}: write weight_left/right", i);
-                    let mut ld = ctx.loop_data.lock().unwrap();
-                    ld.weight_left += partial_left_weight;
-                    ld.count_left += partial_left_count;
-                    let ttl = ld.ttl - 1;
-                    if ttl == 0 {
-                        #[cfg(debug_assertions)]
-                        println!("compute {}: last write, computing next split_target", i);
-                        let mut id = ctx.init_data.try_write().unwrap();
-                        let weight_right = id.sum - ld.weight_left;
-                        let max_imbalance = tolerance * id.sum;
-
-                        if ld.weight_left < weight_right {
-                            id.min = split_target;
-                            ld.count_left_min = ld.count_left;
-                        } else {
-                            id.max = split_target;
-                            ld.count_left_max = ld.count_left;
-                        }
-
-                        if f64::abs(ld.weight_left - weight_right) < max_imbalance
-                            || ld.count_left_min == ld.count_left_max
-                        {
-                            #[cfg(debug_assertions)]
-                            println!(
-                                "compute {}: finish computation, split_target={}",
-                                i, split_target,
-                            );
-                            ctx.run.store(false, Ordering::SeqCst);
-                            lead = true;
-                        } else {
-                            ld.weight_left = 0.0;
-                            ld.count_left = 0;
-                            ld.ttl = num_threads;
-                        }
-                    } else {
-                        ld.ttl = ttl;
-                    }
-                }
-                #[cfg(debug_assertions)]
-                println!("compute {}: waiting for barrier", i);
-                ctx.barrier.wait();
-                #[cfg(debug_assertions)]
-                println!("compute {}: woke up", i);
-
-                let InitData { min, max, .. } = *ctx.init_data.try_read().unwrap();
-                let new_split_target = (min + max) / 2.0;
-                if split_target < new_split_target {
+            if data.max - data.min != max - min {
+                // This thread is lagging behind: discard work, advance to the
+                // correct split target and restart.
+                min = data.min;
+                max = data.max;
+                if split_target <= data.min {
                     median_idx = 0;
-                    additional_partial_left_weight = partial_left_weight;
-                    additional_partial_left_count = partial_left_count;
                     item_view = partial_right;
+                    additional_partial_left_count = partial_left_count;
                 } else {
                     median_idx = partial_left.len();
                     item_view = partial_left;
                 }
-                split_target = new_split_target;
+                if item_view.is_empty() {
+                    data.num_threads -= 1;
+                    data.ttl = data.ttl.checked_sub(1).unwrap();
+                    break;
+                }
+                continue;
             }
-            let median_idx = additional_partial_left_count + median_idx;
-            if lead {
-                let ld = ctx.loop_data.try_lock().unwrap();
-                let mut left = Vec::with_capacity(ld.count_left);
-                let mut right = Vec::with_capacity(num_items - ld.count_left);
+
+            data.ttl -= 1;
+            data.left_part_count += partial_left_count;
+            data.left_part_weight += partial_left_weight;
+
+            let weight_left = data.additional_left_weight + data.left_part_weight;
+            let remaining_weight = data.sum - weight_left;
+            let max_imbalance = tolerance * data.sum;
+
+            if remaining_weight < weight_left {
+                // Weight of the items on the left is already dominating, no
+                // need to compute any further.
+                median_idx = partial_left.len();
+                item_view = partial_left;
+                max = split_target;
+                data.max = split_target;
+                if data.ttl == 0 {
+                    data.count_left_max = data.left_part_count;
+                }
+            } else if data.ttl == 0 {
+                // This thread is the last one to update the state, prepare for
+                // the next iteration.
+                median_idx = 0;
+                item_view = partial_right;
+                additional_partial_left_count = partial_left_count;
+                min = split_target;
+                data.min = split_target;
+                data.count_left_min = data.left_part_count;
+                data.additional_left_weight = weight_left;
+            } else {
+                data = ctx
+                    .c
+                    .wait_while(data, |data| data.max == max && data.min == min)
+                    .unwrap();
+                min = data.min;
+                max = data.max;
+                if split_target <= data.min {
+                    median_idx = 0;
+                    item_view = partial_right;
+                    additional_partial_left_count = partial_left_count;
+                } else {
+                    median_idx = partial_left.len();
+                    item_view = partial_left;
+                }
+                if item_view.is_empty() {
+                    data.num_threads -= 1;
+                    data.ttl = data.ttl.checked_sub(1).unwrap();
+                    break;
+                }
+                continue;
+            }
+
+            if f64::abs(weight_left - remaining_weight) < max_imbalance
+                || data.count_left_min == data.count_left_max
+            {
+                lead = ctx
+                    .run
+                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok(); // is always ok for now, since we're inside a lock
+            }
+
+            if item_view.is_empty() {
+                data.num_threads -= 1;
+            }
+
+            data.left_part_count = 0;
+            data.left_part_weight = 0.0;
+            data.ttl = data.num_threads;
+
+            ctx.c.notify_all();
+
+            if item_view.is_empty() {
+                break;
+            }
+        }
+        let median_idx = additional_partial_left_count + median_idx;
+        if !lead {
+            // run can still be true if all threads exited early
+            lead = ctx
+                .run
+                .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok();
+        }
+        if lead {
+            let mut thread_results = Vec::with_capacity(num_threads);
+            thread_results.push((thread_items, median_idx));
+            for _ in 0..num_threads - 1 {
+                thread_results.push(t_recv.recv().unwrap());
+            }
+            let data = ctx.data.try_lock().unwrap();
+            let mut left = Vec::with_capacity(data.left_part_count);
+            let mut right = Vec::with_capacity(num_items - data.left_part_count);
+            for (mut thread_items, median_idx) in thread_results {
                 right.extend(thread_items.drain(median_idx..));
                 left.extend(thread_items);
-                mem::drop(t_send);
-                while let Ok((mut thread_items, median_idx)) = t_recv.recv() {
-                    right.extend(thread_items.drain(median_idx..));
-                    left.extend(thread_items);
-                }
-                let next_coord = (coord + 1) % D;
-                let (threads_left, threads_right) = {
-                    let now = num_avail_threads as f64;
-                    let left = left.len() as f64;
-                    let right = right.len() as f64;
-                    let threads_left = left / (left + right) * now;
-                    let threads_right = right / (left + right) * now;
-                    (threads_left as usize, threads_right as usize)
-                };
-                let mut lock = q.lock();
-                lock.push(
-                    usize::max(threads_left, 1),
-                    Job {
-                        items: left,
-                        num_iter: num_iter - 1,
-                        coord: next_coord,
-                    },
-                );
-                lock.push(
-                    usize::max(threads_right, 1),
-                    Job {
-                        items: right,
-                        num_iter: num_iter - 1,
-                        coord: next_coord,
-                    },
-                );
-                lock.free_threads(num_threads);
-            } else {
-                t_send.send((thread_items, median_idx)).unwrap();
             }
-        });
-        #[cfg(debug_assertions)]
-        {
-            i += 1;
+            let next_coord = (coord + 1) % D;
+            let (threads_left, threads_right) = {
+                let now = num_avail_threads as f64;
+                let left = left.len() as f64;
+                let right = right.len() as f64;
+                let threads_left = left / (left + right) * now;
+                let threads_right = right / (left + right) * now;
+                (threads_left as usize, threads_right as usize)
+            };
+            let mut lock = q.lock();
+            lock.push(
+                usize::max(threads_left, 1),
+                Job {
+                    items: left,
+                    num_iter: num_iter - 1,
+                    coord: next_coord,
+                },
+            );
+            lock.push(
+                usize::max(threads_right, 1),
+                Job {
+                    items: right,
+                    num_iter: num_iter - 1,
+                    coord: next_coord,
+                },
+            );
+            lock.free_threads(1);
+        } else {
+            t_send.send((thread_items, median_idx)).unwrap();
+            q.lock().free_threads(1);
         }
-    }
-    #[cfg(debug_assertions)]
-    assert_eq!(i, num_threads);
-
-    num_threads
+    })
 }
 
 struct Job<'p, const D: usize> {
@@ -477,8 +523,8 @@ fn rcb_recurse<'p, const D: usize>(
 pub fn rcb<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<usize> {
     let mut partition = vec![0; points.len()];
 
-    rayon::scope(|s| {
-        let items = points
+    rayon::in_place_scope(|s| {
+        let items: Vec<_> = points
             .par_iter()
             .zip(weights)
             .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut partition) })
