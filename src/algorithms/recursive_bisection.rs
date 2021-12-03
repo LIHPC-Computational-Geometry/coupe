@@ -52,9 +52,14 @@ where
         let items = Arc::clone(&items);
         let f = Arc::clone(&f);
         s.spawn(move |_| {
+            let copy_span = tracing::trace_span!("copy items");
+            let enter = copy_span.enter();
+
             // Copy weights and coordinates into a hopefully nearer memory part.
             let chunk_end = usize::min(items_len, chunk_start + chunk_size);
             let thread_items: Vec<T> = items[chunk_start..chunk_end].iter().cloned().collect();
+
+            mem::drop(enter);
 
             f(thread_items)
         });
@@ -119,10 +124,12 @@ fn weighted_median<'p, const D: usize>(
     }
 
     if num_iter == 0 {
-        #[cfg(debug_assertions)]
-        println!("num_iter=0,num_items={}", items.len());
         s.spawn(move |_| {
             let part = crate::uid();
+
+            let span = tracing::debug_span!("apply_part_id", part_id = part);
+            let _enter = span.enter();
+
             for item in items {
                 item.part.store(part, Ordering::Relaxed);
             }
@@ -156,15 +163,23 @@ fn weighted_median<'p, const D: usize>(
     let (t_send, t_recv) = crossbeam_channel::bounded::<(Vec<Item<'p, D>>, usize)>(num_threads - 1);
 
     parallel_chunks(s, items, num_avail_threads, move |mut thread_items| {
-        // Compute the sum, the min and the max and merge them.
-        let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
+        let compute_span = tracing::trace_span!("compute");
+        let sync_span = tracing::trace_span!("sync");
+        let merge_span = tracing::trace_span!("merge");
+        let partition_span = tracing::trace_span!("make partition");
 
+        let enter = compute_span.enter();
+
+        let partial_sum: f64 = thread_items.iter().map(|item| item.weight).sum();
         let (partial_min, partial_max) = thread_items
             .iter()
             .map(|item| item.point[coord])
             .minmax()
             .into_option()
             .unwrap();
+
+        mem::drop(enter);
+        let enter = sync_span.enter();
 
         let mut min: f64;
         let mut max: f64;
@@ -186,6 +201,8 @@ fn weighted_median<'p, const D: usize>(
             max = d.max;
         }
 
+        mem::drop(enter);
+
         let initial_min = min;
         let initial_max = max;
 
@@ -194,6 +211,8 @@ fn weighted_median<'p, const D: usize>(
         let mut additional_partial_left_count = 0;
         let mut median_idx = 0;
         while ctx.run.load(Ordering::SeqCst) {
+            let enter = compute_span.enter();
+
             let split_target = (min + max) / 2.0;
 
             // Split thread items into two, separated by the split target.
@@ -217,7 +236,13 @@ fn weighted_median<'p, const D: usize>(
 
             // Update shared state
 
+            mem::drop(enter);
+            let enter = sync_span.enter();
+
             let mut data = ctx.data.lock().unwrap();
+
+            mem::drop(enter);
+            let enter = merge_span.enter();
 
             if data.max - data.min != max - min {
                 // This thread is lagging behind: discard work, advance to the
@@ -268,10 +293,17 @@ fn weighted_median<'p, const D: usize>(
                 data.count_left_min = data.left_part_count;
                 data.additional_left_weight = weight_left;
             } else {
+                mem::drop(enter);
+                let enter = sync_span.enter();
+
                 data = ctx
                     .c
                     .wait_while(data, |data| data.max == max && data.min == min)
                     .unwrap();
+
+                mem::drop(enter);
+                let _enter = merge_span.enter();
+
                 min = data.min;
                 max = data.max;
                 if split_target <= data.min {
@@ -325,10 +357,17 @@ fn weighted_median<'p, const D: usize>(
         if lead {
             let mut thread_results = Vec::with_capacity(num_threads);
             thread_results.push((thread_items, median_idx));
+
+            let enter = sync_span.enter();
+
             for _ in 0..num_threads - 1 {
                 thread_results.push(t_recv.recv().unwrap());
             }
             let data = ctx.data.try_lock().unwrap();
+
+            mem::drop(enter);
+            let enter = partition_span.enter();
+
             let mut left = Vec::with_capacity(data.left_part_count);
             let mut right = Vec::with_capacity(num_items - data.left_part_count);
             for (mut thread_items, median_idx) in thread_results {
@@ -344,6 +383,10 @@ fn weighted_median<'p, const D: usize>(
                 let threads_right = right / (left + right) * now;
                 (threads_left as usize, threads_right as usize)
             };
+
+            mem::drop(enter);
+            let _enter = sync_span.enter();
+
             let mut lock = q.lock();
             lock.push(
                 usize::max(threads_left, 1),
@@ -448,14 +491,6 @@ impl<'p, 'q, const D: usize> JobQueueLock<'p, 'q, D> {
                 return None;
             }
             let mut todo_list = mem::replace(&mut self.todo_list, None).unwrap();
-            #[cfg(debug_assertions)]
-            if !todo_list.values().all(Vec::is_empty) {
-                println!(
-                    "Queue::pop: self.todo_list={:?}, available_threads={}",
-                    todo_list,
-                    self.available_threads.load(Ordering::SeqCst),
-                );
-            }
             todo_list = self.cond.wait(todo_list).unwrap();
             self.todo_list = Some(todo_list);
         }
@@ -486,6 +521,9 @@ fn rcb_recurse<'p, const D: usize>(
     tolerance: f64,
     available_threads: usize,
 ) {
+    let wait_span = tracing::trace_span!("waiting for jobs");
+    let dispatch_span = tracing::trace_span!("dipatching job");
+
     let q = JobQueue::new(available_threads);
     q.lock().push(
         available_threads,
@@ -497,14 +535,18 @@ fn rcb_recurse<'p, const D: usize>(
     );
 
     let total_jobs = usize::pow(2, num_iter as u32 + 1) - 1;
-    for job_num in 0..total_jobs {
-        #[cfg(debug_assertions)]
-        println!("Waiting for job #{} on {}", job_num, total_jobs);
+    for _job_num in 0..total_jobs {
+        let enter = wait_span.enter();
+
         let mut lock = q.lock();
         let (num_threads, job) = match lock.pop() {
             Some(val) => val,
             None => break,
         };
+
+        mem::drop(enter);
+        let _enter = dispatch_span.enter();
+
         let Job {
             items,
             coord,
