@@ -32,12 +32,14 @@
 mod algorithms;
 mod geometry;
 pub mod imbalance;
+mod nextafter;
 mod real;
 pub mod topology;
 mod uid;
 
 pub use crate::algorithms::*;
 pub use crate::geometry::{Point2D, Point3D, PointND};
+pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
 pub use crate::uid::uid;
 

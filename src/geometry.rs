@@ -200,7 +200,7 @@ impl<const D: usize> Mbr<D> {
         &self.aabb
     }
 
-    // Transform a point with the transformation which maps the Mbr to the underlying Aabb
+    /// Transforms a point with the transformation which maps the Mbr to the underlying Aabb
     pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
         self.mbr_to_aabb * point
     }
