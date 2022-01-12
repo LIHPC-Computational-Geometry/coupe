@@ -21,13 +21,13 @@ fn hilbert_curve_partition(
     part_count: usize,
     order: usize,
 ) {
-    debug_assert!(order < 32);
+    debug_assert!(order < 64);
 
     let compute_hilbert_index = hilbert_index_computer(points, order);
     let mut permutation = (0..points.len()).into_par_iter().collect::<Vec<_>>();
     let hilbert_indices = points
         .par_iter()
-        .map(|p| compute_hilbert_index((p.x, p.y)))
+        .map(compute_hilbert_index)
         .collect::<Vec<_>>();
 
     permutation
@@ -44,16 +44,16 @@ fn hilbert_curve_partition(
         &modifiers,
     );
 
-    let mut sub_permutation =
+    let sub_permutation =
         super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
     let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
 
     sub_permutation
-        .par_iter_mut()
+        .par_iter()
         .enumerate()
         .for_each(|(part_id, slice)| {
             let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
-            for i in slice.iter_mut() {
+            for i in &**slice {
                 unsafe { std::ptr::write(ptr.add(*i), part_id) }
             }
         });
@@ -76,122 +76,156 @@ fn hilbert_curve_reorder_permu(points: &[Point2D], permutation: &mut [usize], or
     let compute_hilbert_index = hilbert_index_computer(points, order);
 
     permutation.par_sort_by_key(|idx| {
-        let p = points[*idx];
-        compute_hilbert_index((p.x, p.y))
+        let p = &points[*idx];
+        compute_hilbert_index(p)
     });
 }
 
-fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64)) -> u32 {
-    let mbr = Mbr::from_points(points);
+/// Compute a mapping from [min; max] to [0; 2**order-1]
+fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
+    debug_assert!(min <= max);
 
-    let (ax, ay) = {
-        let aabb = mbr.aabb();
-        (
-            (aabb.p_min().x, aabb.p_max().x),
-            (aabb.p_min().y, aabb.p_max().y),
-        )
-    };
+    let width = max - min;
+    let n = (1_u64 << order) as f64;
+    let mut f = n / width;
 
-    let rotate = move |p: &Point2D| mbr.mbr_to_aabb(p);
+    // Map max to (2**order-1).
+    while n <= width * f {
+        f = crate::nextafter(f, 0.0);
+    }
 
-    let x_mapping = segment_to_segment(ax.0, ax.1, 0., order as f64);
-    let y_mapping = segment_to_segment(ay.0, ay.1, 0., order as f64);
-
-    move |p| {
-        let p = rotate(&Point2D::from([p.0, p.1]));
-        encode(x_mapping(p.x) as u32, y_mapping(p.y) as u32, order)
+    move |v| {
+        debug_assert!(min <= v && v <= max, "{v} not in [{min};{max}]");
+        (f * (v - min)) as u64
     }
 }
 
-fn encode(x: u32, y: u32, order: usize) -> u32 {
-    debug_assert!(order < 32);
+fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
+    let mbr = Mbr::from_points(points);
+    let aabb = mbr.aabb();
+    let p_min = aabb.p_min();
+    let p_max = aabb.p_max();
+    let x_mapping = segment_to_segment(p_min.x, p_max.x, order);
+    let y_mapping = segment_to_segment(p_min.y, p_max.y, order);
+    move |p| {
+        let p = mbr.mbr_to_aabb(p);
+        encode(x_mapping(p.x), y_mapping(p.y), order)
+    }
+}
+
+/// Slower version of [encode], used to build the lookup table used by [encode].
+///
+/// This version takes the initial configuration as argument and also returns
+/// the final configuration.
+///
+/// Taken from Marot, Célestin. "Parallel tetrahedral mesh generation." Prom:
+/// Remacle, Jean-François <http://hdl.handle.net/2078.1/240626>.
+///
+/// TODO: once const-fn are more mature, take the "order" argument into account,
+/// though it is only set to 6 for the purpose of building the lookup table.
+const fn encode_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
+    // BASE_PATTERN[i][j] is the hilbert index given:
+    // - i: the current configuration,
+    // - j: the quadrant in row-major order.
+    const BASE_PATTERN: [[u64; 4]; 4] = [
+        [0, 1, 3, 2], // config 0 = [1,2]   )
+        [0, 3, 1, 2], // config 1 = [2,1]   n
+        [2, 3, 1, 0], // config 2 = [-1,-2] (
+        [2, 1, 3, 0], // config 3 = [-2,-1] U
+    ];
+    // CONFIGURATION[i][j] is the next configuration given:
+    // - i: the current configuration,
+    // - j: the quadrant in row-major order.
+    const CONFIGURATION: [[usize; 4]; 4] = [
+        [1, 0, 3, 0], // ) => U)
+        //                    n)
+        [0, 2, 1, 1], // n => nn
+        //                    )(
+        [2, 1, 2, 3], // ( => (U
+        //                    (n
+        [3, 3, 0, 2], // U => )(
+                      //      UU
+    ];
+
+    let mut hilbert = 0;
+
+    // TODO replace unrolled loop by "for i in (0..order).rev()" once for loops
+    // are allowed in const fns.
+    let mut i = 5;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+    i -= 1;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+    i -= 1;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+    i -= 1;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+    i -= 1;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+    i -= 1;
+    let quadrant = (zorder >> (2 * i)) as usize & 3;
+    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+    config = CONFIGURATION[config][quadrant];
+
+    (hilbert, config)
+}
+
+const HILBERT_LUT: [u16; 16_384] = {
+    let mut lut = [0; 16_384];
+    let mut i: usize = 0;
+    while i < 16_384 {
+        let zorder = (i & 0xfff) as u64;
+        let config = i >> 12;
+        let (hilbert_order, config) = encode_slow(zorder, 6, config);
+        lut[i] = (config << 12) as u16 | hilbert_order as u16;
+        i += 1;
+    }
+    lut
+};
+
+fn encode(x: u64, y: u64, order: usize) -> u64 {
+    debug_assert!(order < 64);
     debug_assert!(
-        x < 2u32.pow(order as u32),
+        x < (1 << order),
         "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
         (x, y),
         order,
     );
     debug_assert!(
-        y < 2u32.pow(order as u32),
+        y < (1 << order),
         "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
         (x, y),
         order,
     );
 
-    let mask = (1 << order) - 1;
-    let h_even = x ^ y;
-    let not_x = !x & mask;
-    let not_y = !y & mask;
-    let temp = not_x ^ y;
+    let zorder = unsafe {
+        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
+    };
 
-    let mut v0 = 0;
-    let mut v1 = 0;
-
-    for _ in 1..order {
-        v1 = ((v1 & h_even) | ((v0 ^ not_y) & temp)) >> 1;
-        v0 = ((v0 & (v1 ^ not_x)) | (!v0 & (v1 ^ not_y))) >> 1;
+    let mut config: u16 = 0;
+    let mut hilbert: u64 = 0;
+    let mut shift: i64 = 2 * order as i64 - 12;
+    while shift > 0 {
+        config = HILBERT_LUT[((config & !0xfff) | ((zorder >> shift) & 0xfff) as u16) as usize];
+        hilbert = (hilbert << 12) | (config & 0xfff) as u64;
+        shift -= 12;
     }
 
-    let h_odd = (!v0 & (v1 ^ x)) | (v0 & (v1 ^ not_y));
+    config =
+        HILBERT_LUT[((config & !0xfff) | ((zorder << (-shift) as u64) & 0xfff) as u16) as usize];
+    hilbert = (hilbert << 12) | (config & 0xfff) as u64;
 
-    interleave_bits(h_odd, h_even)
-}
-
-fn interleave_bits(odd: u32, even: u32) -> u32 {
-    let mut val = 0;
-    let mut max = odd.max(even);
-    let mut n = 0;
-    while max > 0 {
-        n += 1;
-        max >>= 1;
-    }
-
-    for i in 0..n {
-        let mask = 1 << i;
-        let a = if (even & mask) > 0 { 1 << (2 * i) } else { 0 };
-        let b = if (odd & mask) > 0 {
-            1 << (2 * i + 1)
-        } else {
-            0
-        };
-        val += a + b;
-    }
-
-    val
-}
-
-// Compute a mapping from [a_min; a_max] to [b_min; b_max]
-fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn(f64) -> f64 {
-    debug_assert!(
-        a_min <= a_max,
-        "Cannot construct a segment to segment mapping because a_max < a_min. a_min = {}, a_max = {}.",
-        a_min,
-        a_max,
-    );
-    debug_assert!(
-        b_min <= b_max,
-        "Cannot construct a segment to segment mapping because b_max < b_min. b_min = {}, b_max = {}.",
-        b_min,
-        b_max,
-    );
-
-    let da = a_min - a_max;
-    let db = b_min - b_max;
-    let alpha = db / da;
-    let beta = b_min - a_min * alpha;
-
-    move |x| {
-        debug_assert!(
-            a_min <= x && x <= a_max,
-            "Called a mapping from [{}, {}] to [{}, {}] with the invalid value {}.",
-            a_min,
-            a_max,
-            b_min,
-            b_max,
-            x,
-        );
-        alpha * x + beta
-    }
+    hilbert >> -shift
 }
 
 #[derive(Debug)]
@@ -219,11 +253,8 @@ impl std::error::Error for Error {}
 
 /// # Hilbert space-filling curve algorithm
 ///
-/// An implementation of the Hilbert curve based on
-/// "Encoding and Decoding the Hilbert Order" by XIAN LIU and GÜNTHER SCHRACK.
-///
-/// This algorithm uses space hashing to reorder points alongside the Hilbert curve ov a giver order.
-/// See [wikipedia](https://en.wikipedia.org/wiki/Hilbert_curve) for more details.
+/// Projects points on the hilbert curve and splits this curve into a given
+/// amount of parts.
 ///
 /// # Example
 ///
@@ -254,6 +285,11 @@ impl std::error::Error for Error {}
 /// assert_eq!(partition[4], partition[5]);
 /// assert_eq!(partition[6], partition[7]);
 /// ```
+///
+/// # Reference
+///
+/// Marot, Célestin. *Parallel tetrahedral mesh generation*. Prom.: Remacle,
+/// Jean-François <http://hdl.handle.net/2078.1/240626>.
 pub struct HilbertCurve {
     pub part_count: usize,
     pub order: u32,
@@ -273,9 +309,9 @@ where
         part_ids: &mut [usize],
         (points, weights): (P, W),
     ) -> Result<Self::Metadata, Self::Error> {
-        if self.order >= 32 {
+        if self.order >= 64 {
             return Err(Error::InvalidOrder {
-                max: 31,
+                max: 63,
                 actual: self.order,
             });
         }
@@ -293,38 +329,28 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::*;
 
     #[test]
     fn test_segment_to_segment() {
-        let a_min = -1.;
-        let a_max = 1.;
-        let b_min = 0.;
-        let b_max = 10.;
+        let mapping = segment_to_segment(0.0, 8.0, 3);
 
-        let mapping = segment_to_segment(a_min, a_max, b_min, b_max);
-        let inverse = segment_to_segment(b_min, b_max, a_min, a_max);
+        assert_eq!(mapping(0.0), 0);
+        assert_eq!(mapping(1.0), 0);
+        assert_eq!(mapping(2.0), 1);
+        assert_eq!(mapping(3.0), 2);
+        assert_eq!(mapping(4.0), 3);
+        assert_eq!(mapping(5.0), 4);
+        assert_eq!(mapping(6.0), 5);
+        assert_eq!(mapping(7.0), 6);
+        assert_eq!(mapping(8.0), 7);
 
-        assert_ulps_eq!(mapping(a_min), b_min);
-        assert_ulps_eq!(mapping(a_max), b_max);
-        assert_ulps_eq!(mapping(0.), 5.);
-        assert_ulps_eq!(mapping(-0.5), 2.5);
-
-        assert_ulps_eq!(inverse(b_min), a_min);
-        assert_ulps_eq!(inverse(b_max), a_max);
-        assert_ulps_eq!(inverse(5.), 0.);
-        assert_ulps_eq!(inverse(2.5), -0.5);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_segment_to_segment_wrong_input() {
-        let a_min = -1.;
-        let a_max = 1.;
-        let b_min = 0.;
-        let b_max = 10.;
-
-        let _mapping = segment_to_segment(a_max, a_min, b_min, b_max);
+        assert_eq!(mapping(crate::nextafter(1.0, f64::INFINITY)), 1);
+        assert_eq!(mapping(crate::nextafter(2.0, f64::INFINITY)), 2);
+        assert_eq!(mapping(crate::nextafter(3.0, f64::INFINITY)), 3);
+        assert_eq!(mapping(crate::nextafter(4.0, f64::INFINITY)), 4);
+        assert_eq!(mapping(crate::nextafter(5.0, f64::INFINITY)), 5);
+        assert_eq!(mapping(crate::nextafter(6.0, f64::INFINITY)), 6);
+        assert_eq!(mapping(crate::nextafter(7.0, f64::INFINITY)), 7);
     }
 
     #[test]
