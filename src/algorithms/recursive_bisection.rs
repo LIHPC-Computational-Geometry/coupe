@@ -687,7 +687,7 @@ pub fn axis_sort<const D: usize>(
     permutation: &mut [usize],
     current_coord: usize,
 ) {
-    permutation.par_sort_by(|i1, i2| {
+    permutation.par_sort_unstable_by(|i1, i2| {
         if points[*i1][current_coord] < points[*i2][current_coord] {
             cmp::Ordering::Less
         } else {
