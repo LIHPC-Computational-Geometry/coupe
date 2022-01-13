@@ -37,12 +37,8 @@ fn hilbert_curve_partition(
     // dummy modifiers to use directly the routine from multi_jagged
     let modifiers = vec![1. / part_count as f64; part_count];
 
-    let split_positions = super::multi_jagged::compute_split_positions(
-        weights,
-        &permutation,
-        part_count - 1,
-        &modifiers,
-    );
+    let split_positions =
+        super::multi_jagged::compute_split_positions(weights, &permutation, &modifiers);
 
     let sub_permutation =
         super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
