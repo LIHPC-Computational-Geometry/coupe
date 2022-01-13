@@ -184,16 +184,10 @@ fn multi_jagged_recurse<const D: usize>(
     partition_scheme: PartitionScheme,
 ) {
     if partition_scheme.num_splits != 0 {
-        let num_splits = partition_scheme.num_splits;
-
         super::recursive_bisection::axis_sort(points, permutation, current_coord);
 
-        let split_positions = compute_split_positions(
-            weights,
-            permutation,
-            num_splits,
-            &partition_scheme.modifiers,
-        );
+        let split_positions =
+            compute_split_positions(weights, permutation, &partition_scheme.modifiers);
         let mut sub_permutations = split_at_mut_many(permutation, &split_positions);
 
         sub_permutations
@@ -222,41 +216,34 @@ fn multi_jagged_recurse<const D: usize>(
 pub(crate) fn compute_split_positions(
     weights: &[f64],
     permutation: &[usize],
-    num_splits: usize,
     modifiers: &[f64],
 ) -> Vec<usize> {
+    let (_last_modifier, modifiers) = modifiers.split_last().unwrap();
+    let num_splits = modifiers.len();
+
     let total_weight = permutation.par_iter().map(|idx| weights[*idx]).sum::<f64>();
-
-    let mut modifiers = modifiers.iter();
-    let mut consumed_weight = total_weight * *modifiers.next().unwrap();
-    let mut weight_thresholds = Vec::with_capacity(num_splits);
-
-    for modifier in modifiers {
-        weight_thresholds.push(consumed_weight);
-        consumed_weight += total_weight * *modifier;
-    }
-
-    debug_assert_eq!(weight_thresholds.len(), num_splits);
-
-    let mut ret = Vec::with_capacity(num_splits);
+    let weight_thresholds: Vec<_> = modifiers
+        .iter()
+        .scan(0.0, |consumed_weight, modifier| {
+            *consumed_weight += total_weight * modifier;
+            Some(*consumed_weight)
+        })
+        .collect();
 
     let mut scan = permutation
         .par_iter()
         .enumerate()
         .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
-            if idx < low {
-                (idx, acc + weights[*val])
-            } else {
-                (low, acc + weights[*val])
-            }
+            (usize::min(idx, low), acc + weights[*val])
         })
         .collect::<Vec<_>>()
         .into_iter();
 
+    let mut ret = Vec::with_capacity(num_splits);
     let mut current_weights_sum = 0.;
     let mut current_weights_sums_cache = Vec::with_capacity(num_splits);
 
-    for threshold in weight_thresholds.iter() {
+    for threshold in &weight_thresholds {
         // if this condition is verified, it means that a block of the scan contained more than one threshold
         // and the current threshold was skipped during previous iteration. We just
         // push the last element again and skip the rest of the iteration
