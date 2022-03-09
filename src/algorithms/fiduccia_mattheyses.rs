@@ -78,9 +78,6 @@ fn fiduccia_mattheyses_impl(
         // save old cut size
         cut_size = new_cut_size;
 
-        // imbalance introduced by flipping nodes around parts
-        let imbalance;
-
         // monitors for each pass the number of subsequent flips
         // that increase cut size. It may be beneficial in some
         // situations to allow a certain amount of them. Performing bad flips can open
@@ -245,7 +242,9 @@ fn fiduccia_mattheyses_impl(
         }
 
         let (min_w, max_w) = parts_weights.values().minmax().into_option().unwrap();
-        imbalance = max_w - min_w;
+
+        // imbalance introduced by flipping nodes around parts
+        let imbalance = max_w - min_w;
         dbg!(imbalance);
     }
 
