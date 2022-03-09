@@ -1,0 +1,32 @@
+[package]
+name = "coupe-tools"
+version = "0.1.0"
+edition = "2021"
+authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
+
+
+[features]
+default = ["coupe"]
+
+
+[dependencies]
+
+# Partitioners
+coupe = { version = "0.1", optional = true, path = ".." }
+#scotch = { version = "0.1", optional = true, path = "../scotch-rs" }
+#metis = { version = "0.1", optional = true, path = "../metis-rs" }
+
+# Random number generation
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_pcg = { version = "0.3", default-features = false }
+
+# Mesh formats
+mesh-io = { path = "mesh-io", version = "0.1" }
+
+# Command-line interface
+getopts = { version = "0.2", default-features = false }
+anyhow = { version = "1", default-features = false, features = ["std"] }
+
+# Other utilities
+itertools = { version = "0.10", default-features = false }
+num = { version = "0.4", default-features = false }
