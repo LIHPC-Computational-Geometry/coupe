@@ -1,0 +1,73 @@
+ALGORITHMS
+
+    The option "-a, --algorithm" defines the algorithm chain to partition input
+    weights.  Its value must be a comma-separated list of one of the algorithm
+    names below.
+
+    Note that if a partition improving algorithm is in the begining of the
+    chain, it will be fed a default partition where all weights are in the same
+    part.
+
+    Miscellaneous partitioning algorithms:
+
+        random       Creates a random partition
+
+    Number partitioning algorithms:
+    These algorithms create partitions by only taking weights into account.
+
+        greedy       Greedy number partitioning algorithm
+        kk           Karmarkar-Karp, Least Difference Method
+        ckk          Complete Karmarkar-Karp
+
+    Number partition improving algorithms:
+    These algorithms improve a partition by only taking weights into account.
+
+        vn-first     VN First
+        vn-best      VN Best
+        vn-worst     VN Worst
+
+
+DISTRIBUTION
+
+    The option "-d, --distribution" defines how input weights are generated.  It
+    can be specified multiple times, one for each criterion.  Its value must
+    follow the following syntax:
+
+        distribution        :=  distribution-name *( "," distribution-param )
+        distribution-name   :=  one of the distributions in the following list
+        distribution-param  :=  any floating-point number (eg. "42.01")
+
+    For example, the following will generate a one-criterion number set
+    distributed uniformily between 0 and 100:
+
+        --distribution uniform,0,100
+
+    And the following example shows how to generate a two-criteria vector-of-
+    number set, which first criterion follows a normal distribution and the
+    second a beta distribution:
+
+        --distribution normal,100,2 --distribution beta,0.2,0.2
+
+
+SUPPORTED DISTRIBUTIONS
+
+    uniform LOWER_BOUND UPPER_BOUND
+        The uniform distribution. Takes two parameters: one for each bound.
+
+    normal MEAN STD_DEV
+        The normal/gaussian distribution. Takes two parameters: the first is
+        for the mean/average and the other for the standard deviation.
+
+    exp LAMBDA
+        The exponential distribution, whose density is
+        LAMBDA * exp(-LAMBDA * x)
+
+    pareto SCALE SHAPE
+        The pareto distribution, whose density is
+        SHAPE * SCALE^SHAPE / x^(SHAPE + 1)
+
+    beta ALPHA BETA [SCALE]
+        The beta distribution.  Both first parameters must be strictly greater
+        than zero.  The third "SCALE" parameter may be used to change the upper
+        bound, so that this distribution may be used with integers.  Defaults to
+        1.
