@@ -2,7 +2,6 @@
 /target
 /examples/target
 **/*.rs.bk
-Cargo.lock
 
 # ide
 .vscode/*
