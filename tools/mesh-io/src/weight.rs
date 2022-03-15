@@ -11,13 +11,14 @@
 //!     flags           = U8                   ; see Flags
 //!     criterion-count = U16                  ; Number of criteria
 //!     weight-count    = U64                  ; Number of weights
-//!     weights         = *U64 / *F64          ; criterion-count times weight-count weights
+//!     weights         = *I64 / *F64          ; criterion-count times weight-count weights
 //! ```
 //!
 //! Weights are laid out as weight-count arrays of criterion-count items.
 //!
 //! `U16` is a little-endian 2-byte unsigned integer.
 //! `U64` is a little-endian 8-byte unsigned integer.
+//! `I64` is a little-endian 8-byte signed integer.
 //! `F64` is a little-endian-encoded binary64 IEEE 754-2008 floating point.
 //!
 //! [ABNF]: https://datatracker.ietf.org/doc/html/rfc5234
@@ -41,7 +42,7 @@ const VERSION: u8 = 1;
 const FLAG_INTEGER: u8 = 1 << 0;
 
 pub enum Array {
-    Integers(Vec<Vec<u64>>),
+    Integers(Vec<Vec<i64>>),
     Floats(Vec<Vec<f64>>),
 }
 
@@ -128,7 +129,7 @@ where
     Ok(if is_integer {
         Array::Integers(read_inner(r, criterion_count, |bytes| {
             let bytes = <[u8; 8]>::try_from(bytes).unwrap();
-            u64::from_le_bytes(bytes)
+            i64::from_le_bytes(bytes)
         })?)
     } else {
         Array::Floats(read_inner(r, criterion_count, |bytes| {
@@ -148,7 +149,7 @@ where
     T: 'static,
     W: io::Write,
 {
-    let flags: u8 = if TypeId::of::<T>() == TypeId::of::<u64>() {
+    let flags: u8 = if TypeId::of::<T>() == TypeId::of::<i64>() {
         1 << FLAG_INTEGER
     } else {
         0
@@ -197,11 +198,11 @@ pub fn write_integers<I, W>(w: W, array: I) -> Result<()>
 where
     I: IntoIterator,
     I::IntoIter: ExactSizeIterator,
-    I::Item: IntoIterator<Item = u64>,
+    I::Item: IntoIterator<Item = i64>,
     <I::Item as IntoIterator>::IntoIter: ExactSizeIterator,
     W: io::Write,
 {
-    write_inner(w, array, u64::to_le_bytes)
+    write_inner(w, array, i64::to_le_bytes)
 }
 
 /// Wrapping `w` in a BufWriter is recommended.
