@@ -3,6 +3,7 @@ members = [
     ".",
     "tools",
     "tools/mesh-io",
+    "tools/mesh-io/ffi",
     "tools/num-part",
 ]
 
