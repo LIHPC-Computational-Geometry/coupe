@@ -80,7 +80,7 @@ where
 }
 
 /// Wrapping `w` in a [`BufWriter`] is recommended.
-pub fn write<I, W>(mut w: W, array: I) -> Result<()>
+pub fn write<I, W>(mut w: W, array: I) -> io::Result<()>
 where
     I: IntoIterator<Item = usize>,
     I::IntoIter: ExactSizeIterator,
