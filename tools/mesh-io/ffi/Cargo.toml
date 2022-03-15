@@ -1,0 +1,15 @@
+[package]
+name = "mesh-io-ffi"
+version = "0.1.0"
+edition = "2021"
+authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
+
+
+[lib]
+name = "meshio"
+crate-type = ["cdylib", "staticlib"]
+
+
+[dependencies]
+mesh-io = { version = "0.1", path = ".." }
+libc = "0.2"
