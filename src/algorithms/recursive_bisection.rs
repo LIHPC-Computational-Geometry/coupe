@@ -186,6 +186,9 @@ fn weighted_median<'p, const D: usize>(
             max = d.max;
         }
 
+        let initial_min = min;
+        let initial_max = max;
+
         let mut lead = false;
         let mut item_view = &mut *thread_items;
         let mut additional_partial_left_count = 0;
@@ -243,7 +246,6 @@ fn weighted_median<'p, const D: usize>(
 
             let weight_left = data.additional_left_weight + data.left_part_weight;
             let remaining_weight = data.sum - weight_left;
-            let max_imbalance = tolerance * data.sum;
 
             if remaining_weight < weight_left {
                 // Weight of the items on the left is already dominating, no
@@ -288,7 +290,8 @@ fn weighted_median<'p, const D: usize>(
                 continue;
             }
 
-            if f64::abs(weight_left - remaining_weight) < max_imbalance
+            if f64::abs(weight_left - remaining_weight) < tolerance * data.sum
+                || max - min < tolerance * (initial_max - initial_min)
                 || data.count_left_min == data.count_left_max
             {
                 lead = ctx
