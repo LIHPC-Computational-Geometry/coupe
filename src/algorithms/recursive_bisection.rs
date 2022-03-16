@@ -457,12 +457,16 @@ fn rcb_thread<const D: usize>(
     futures_lite::future::block_on(task);
 }
 
-pub fn rcb<const D: usize>(
-    partition: &mut [usize],
-    points: &[PointND<D>],
-    weights: &[f64],
-    iter_count: usize,
-) {
+pub fn rcb<const D: usize, P, W>(partition: &mut [usize], points: P, weights: W, iter_count: usize)
+where
+    P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
+    P::Iter: rayon::iter::IndexedParallelIterator,
+    W: rayon::iter::IntoParallelIterator<Item = f64>,
+    W::Iter: rayon::iter::IndexedParallelIterator,
+{
+    let points = points.into_par_iter();
+    let weights = weights.into_par_iter();
+
     assert_eq!(points.len(), weights.len());
     assert_eq!(points.len(), partition.len());
 
@@ -470,10 +474,9 @@ pub fn rcb<const D: usize>(
     let enter = init_span.enter();
 
     let mut items: Vec<_> = points
-        .par_iter()
         .zip(weights)
         .zip(unsafe { mem::transmute::<_, &[AtomicUsize]>(partition) })
-        .map(|((&point, &weight), part)| Item {
+        .map(|((point, weight), part)| Item {
             point,
             weight,
             part,
@@ -530,28 +533,29 @@ pub fn axis_sort<const D: usize>(
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib<const D: usize>(
+pub fn rib<const D: usize, W>(
     partition: &mut [usize],
     points: &[PointND<D>],
-    weights: &[f64],
+    weights: W,
     n_iter: usize,
 ) where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    W: rayon::iter::IntoParallelIterator<Item = f64>,
+    W::Iter: rayon::iter::IndexedParallelIterator,
 {
+    let weights = weights.into_par_iter();
+
     assert_eq!(points.len(), weights.len());
     assert_eq!(points.len(), partition.len());
 
     let mbr = Mbr::from_points(points);
 
-    let points = points
-        .par_iter()
-        .map(|p| mbr.mbr_to_aabb(p))
-        .collect::<Vec<_>>();
+    let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
 
     // When the rotation is done, we just apply RCB
-    rcb(partition, &points, weights, n_iter)
+    rcb(partition, points, weights, n_iter)
 }
 
 #[cfg(test)]
@@ -610,7 +614,7 @@ mod tests {
             .num_threads(1) // make the test deterministic
             .build()
             .unwrap()
-            .install(|| rcb(&mut partition, &points, &weights, 2));
+            .install(|| rcb(&mut partition, points, weights, 2));
 
         assert_eq!(partition[0], partition[6]);
         assert_eq!(partition[1], partition[7]);
@@ -640,7 +644,7 @@ mod tests {
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
 
         let mut partition = vec![0; points.len()];
-        rcb(&mut partition, &points, &weights, 3);
+        rcb(&mut partition, points, weights.par_iter().cloned(), 3);
 
         let mut loads: HashMap<usize, f64> = HashMap::new();
         let mut sizes: HashMap<usize, usize> = HashMap::new();

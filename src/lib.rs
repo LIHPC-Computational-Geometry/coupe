@@ -56,6 +56,8 @@ use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use ndarray::ArrayView1;
 use ndarray::ArrayView2;
+use rayon::iter::IntoParallelIterator as _;
+use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
 
 use crate::partition::*;
@@ -205,7 +207,9 @@ impl<const D: usize> Partitioner<D> for Rcb {
     ) -> Partition<'a, PointND<D>, f64> {
         let points = points.to_points_nd();
         let mut ids = vec![0; points.len()];
-        crate::algorithms::recursive_bisection::rcb(&mut ids, points, weights, self.num_iter);
+        let p = points.into_par_iter().cloned();
+        let w = weights.into_par_iter().cloned();
+        crate::algorithms::recursive_bisection::rcb(&mut ids, p, w, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
 }
@@ -274,7 +278,8 @@ where
     ) -> Partition<'a, PointND<D>, f64> {
         let points = points.to_points_nd();
         let mut ids = vec![0; points.len()];
-        crate::algorithms::recursive_bisection::rib(&mut ids, points, weights, self.num_iter);
+        let w = weights.into_par_iter().cloned();
+        crate::algorithms::recursive_bisection::rib(&mut ids, points, w, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
 }
