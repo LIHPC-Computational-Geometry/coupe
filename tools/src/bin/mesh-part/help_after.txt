@@ -11,25 +11,33 @@ ALGORITHMS
 
     Miscellaneous partitioning algorithms:
 
-        random       Creates a random partition (coupe)
+        random,PART_COUNT,[SEED]
+            Creates a random partition (coupe)
 
     Number partitioning algorithms:
     These algorithms create partitions by only taking weights into account.
 
-        greedy       Greedy number partitioning algorithm (coupe)
-        kk           Karmarkar-Karp, Least Difference Method (coupe)
-        ckk          Complete Karmarkar-Karp (coupe)
+        greedy,PART_COUNT
+            Greedy number partitioning algorithm (coupe)
+
+        kk,PART_COUNT
+            Karmarkar-Karp, Least Difference Method (coupe)
+
+        ckk,TOLERANCE
+            Complete Karmarkar-Karp (coupe)
 
     Number partition improving algorithms:
     These algorithms improve a partition by only taking weights into account.
 
-        vn-first     VN First (coupe)
-        vn-best      VN Best (coupe)
-        vn-worst     VN Worst (coupe)
+        vn-best,PART_COUNT
+            VN Best (coupe)
 
     Geometric partitioning algorithms:
     These algorithms create partitions by taking weights and coordinates into
     account.
 
-        rcb          Recursive Coordinate Biscection (coupe)
-        hilbert      Hilbert Curve (coupe)
+        rcb,PART_COUNT
+            Recursive Coordinate Biscection (coupe)
+
+        hilbert,PART_COUNT,[ORDER]
+            Hilbert Curve (coupe)
