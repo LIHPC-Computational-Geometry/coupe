@@ -204,7 +204,8 @@ impl<const D: usize> Partitioner<D> for Rcb {
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
         let points = points.to_points_nd();
-        let ids = crate::algorithms::recursive_bisection::rcb(points, weights, self.num_iter);
+        let mut ids = vec![0; points.len()];
+        crate::algorithms::recursive_bisection::rcb(&mut ids, points, weights, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
 }
@@ -272,7 +273,8 @@ where
         weights: &'a [f64],
     ) -> Partition<'a, PointND<D>, f64> {
         let points = points.to_points_nd();
-        let ids = crate::algorithms::recursive_bisection::rib(points, weights, self.num_iter);
+        let mut ids = vec![0; points.len()];
+        crate::algorithms::recursive_bisection::rib(&mut ids, points, weights, self.num_iter);
         Partition::from_ids(points, weights, ids)
     }
 }

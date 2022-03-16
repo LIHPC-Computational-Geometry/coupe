@@ -458,19 +458,21 @@ fn rcb_thread<const D: usize>(
 }
 
 pub fn rcb<const D: usize>(
+    partition: &mut [usize],
     points: &[PointND<D>],
     weights: &[f64],
     iter_count: usize,
-) -> Vec<usize> {
+) {
+    assert_eq!(points.len(), weights.len());
+    assert_eq!(points.len(), partition.len());
+
     let init_span = tracing::info_span!("convert input and make initial data structures");
     let enter = init_span.enter();
-
-    let mut partition = vec![0; points.len()];
 
     let mut items: Vec<_> = points
         .par_iter()
         .zip(weights)
-        .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut partition) })
+        .zip(unsafe { mem::transmute::<_, &[AtomicUsize]>(partition) })
         .map(|((&point, &weight), part)| Item {
             point,
             weight,
@@ -493,8 +495,6 @@ pub fn rcb<const D: usize>(
             s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, 0.05));
         }
     });
-
-    partition
 }
 
 // pub because it is also useful for multijagged and required for benchmarks
@@ -530,12 +530,19 @@ pub fn axis_sort<const D: usize>(
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib<const D: usize>(points: &[PointND<D>], weights: &[f64], n_iter: usize) -> Vec<usize>
-where
+pub fn rib<const D: usize>(
+    partition: &mut [usize],
+    points: &[PointND<D>],
+    weights: &[f64],
+    n_iter: usize,
+) where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
+    assert_eq!(points.len(), weights.len());
+    assert_eq!(points.len(), partition.len());
+
     let mbr = Mbr::from_points(points);
 
     let points = points
@@ -544,7 +551,7 @@ where
         .collect::<Vec<_>>();
 
     // When the rotation is done, we just apply RCB
-    rcb(&points, weights, n_iter)
+    rcb(partition, &points, weights, n_iter)
 }
 
 #[cfg(test)]
@@ -586,8 +593,8 @@ mod tests {
 
     #[test]
     fn test_rcb_basic() {
-        let weights = vec![1.; 8];
-        let points = vec![
+        let weights = [1.; 8];
+        let points = [
             Point2D::from([-1.3, 6.]),
             Point2D::from([2., -4.]),
             Point2D::from([1., 1.]),
@@ -598,11 +605,12 @@ mod tests {
             Point2D::from([1.3, -2.]),
         ];
 
-        let partition = rayon::ThreadPoolBuilder::new()
+        let mut partition = [0; 8];
+        rayon::ThreadPoolBuilder::new()
             .num_threads(1) // make the test deterministic
             .build()
             .unwrap()
-            .install(|| rcb(&points, &weights, 2));
+            .install(|| rcb(&mut partition, &points, &weights, 2));
 
         assert_eq!(partition[0], partition[6]);
         assert_eq!(partition[1], partition[7]);
@@ -631,7 +639,8 @@ mod tests {
             .collect();
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
 
-        let partition = rcb(&points, &weights, 3);
+        let mut partition = vec![0; points.len()];
+        rcb(&mut partition, &points, &weights, 3);
 
         let mut loads: HashMap<usize, f64> = HashMap::new();
         let mut sizes: HashMap<usize, usize> = HashMap::new();
