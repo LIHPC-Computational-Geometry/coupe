@@ -112,7 +112,14 @@ fn bench_rcb_random(c: &mut Criterion) {
             );
             let weights = vec![1.0; sample_points.len()];
             let mut ids = vec![0; sample_points.len()];
-            b.iter(|| rcb(&mut ids, &sample_points, &weights, NUM_ITER))
+            b.iter(|| {
+                use rayon::iter::IntoParallelRefIterator as _;
+                use rayon::iter::ParallelIterator as _;
+
+                let p = sample_points.par_iter().cloned();
+                let w = weights.par_iter().cloned();
+                rcb(&mut ids, p, w, NUM_ITER)
+            })
         });
 }
 
