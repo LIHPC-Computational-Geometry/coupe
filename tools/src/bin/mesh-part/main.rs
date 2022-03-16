@@ -48,10 +48,7 @@ fn parse_algorithm(spec: String) -> Result<Algorithm> {
             let mut rng = rand_pcg::Pcg64::from_seed(seed);
             Box::new(move |partition, problem| {
                 let algo = coupe::Random::new(&mut rng, part_count);
-                let weights: Vec<f64> = match &problem.weights {
-                    weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => panic!("random not wired up for integers"),
-                };
+                let weights = vec![0.0; problem.points.len()];
                 let res = match problem.dimension {
                     2 => coupe::Partitioner::<2>::partition(
                         &algo,
