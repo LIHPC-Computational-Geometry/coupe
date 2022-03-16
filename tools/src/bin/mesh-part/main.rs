@@ -6,6 +6,61 @@ use std::env;
 use std::fs;
 use std::io;
 
+macro_rules! coupe_part {
+    ( $algo:expr, $dimension:expr, $points:expr, $weights:expr ) => {{
+        match $dimension {
+            2 => {
+                coupe::Partitioner::<2>::partition(&$algo, $points.as_slice(), $weights).into_ids()
+            }
+            3 => {
+                coupe::Partitioner::<3>::partition(&$algo, $points.as_slice(), $weights).into_ids()
+            }
+            _ => anyhow::bail!("only 2D and 3D meshes are supported"),
+        }
+    }};
+    ( $algo:expr, $problem:expr ) => {{
+        let weights: Vec<f64> = match &$problem.weights {
+            weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
+            weight::Array::Integers(_) => anyhow::bail!("integers are not supported by coupe yet"),
+        };
+        coupe_part!($algo, $problem.dimension, $problem.points, &weights)
+    }};
+}
+
+macro_rules! coupe_part_improve {
+    ( $algo:expr, $partition:expr, $dimension:expr, $points:expr, $weights:expr ) => {{
+        let ids = match $dimension {
+            2 => {
+                let points = coupe::PointsView::to_points_nd($points.as_slice());
+                let partition =
+                    coupe::partition::Partition::from_ids(points, $weights, $partition.to_vec());
+                coupe::PartitionImprover::<2>::improve_partition(&$algo, partition).into_ids()
+            }
+            3 => {
+                let points = coupe::PointsView::to_points_nd($points.as_slice());
+                let partition =
+                    coupe::partition::Partition::from_ids(points, $weights, $partition.to_vec());
+                coupe::PartitionImprover::<3>::improve_partition(&$algo, partition).into_ids()
+            }
+            _ => anyhow::bail!("only 2D and 3D meshes are supported"),
+        };
+        $partition.copy_from_slice(&ids);
+    }};
+    ( $algo:expr, $partition:expr, $problem:expr ) => {{
+        let weights: Vec<f64> = match &$problem.weights {
+            weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
+            weight::Array::Integers(_) => anyhow::bail!("integers are not supported by coupe yet"),
+        };
+        coupe_part_improve!(
+            $algo,
+            $partition,
+            $problem.dimension,
+            $problem.points,
+            &weights
+        )
+    }};
+}
+
 struct Problem {
     dimension: usize,
     points: Vec<f64>,
@@ -49,103 +104,39 @@ fn parse_algorithm(spec: String) -> Result<Algorithm> {
             Box::new(move |partition, problem| {
                 let algo = coupe::Random::new(&mut rng, part_count);
                 let weights = vec![0.0; problem.points.len()];
-                let res = match problem.dimension {
-                    2 => coupe::Partitioner::<2>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    3 => coupe::Partitioner::<3>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    _ => anyhow::bail!("random is only wired up for 2D and 3D"),
-                };
-                partition.copy_from_slice(&res);
+                let ids = coupe_part!(algo, problem.dimension, problem.points, &weights);
+                partition.copy_from_slice(&ids);
                 Ok(RunInfo::default())
             })
         }
         "greedy" => {
             let part_count = required(usize_arg(args.next()))?;
             Box::new(move |partition, problem| {
-                let algo = coupe::Greedy::new(part_count);
-                let weights: Vec<f64> = match &problem.weights {
-                    weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => panic!("greedy not wired up for integers"),
-                };
-                let res = match problem.dimension {
-                    2 => coupe::Partitioner::<2>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    3 => coupe::Partitioner::<3>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    _ => anyhow::bail!("greedy is only wired up for 2D and 3D"),
-                };
-                partition.copy_from_slice(&res);
+                let ids = coupe_part!(coupe::Greedy::new(part_count), problem);
+                partition.copy_from_slice(&ids);
                 Ok(RunInfo::default())
             })
         }
         "kk" => {
             let part_count = required(usize_arg(args.next()))?;
             Box::new(move |partition, problem| {
-                let algo = coupe::KarmarkarKarp::new(part_count);
-                let weights: Vec<f64> = match &problem.weights {
-                    weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => panic!("kk not wired up for integers"),
-                };
-                let res = match problem.dimension {
-                    2 => coupe::Partitioner::<2>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    3 => coupe::Partitioner::<3>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    _ => anyhow::bail!("kk is only wired up for 2D and 3D"),
-                };
-                partition.copy_from_slice(&res);
+                let ids = coupe_part!(coupe::KarmarkarKarp::new(part_count), problem);
+                partition.copy_from_slice(&ids);
+                Ok(RunInfo::default())
+            })
+        }
+        "vn-best" => {
+            let part_count = required(usize_arg(args.next()))?;
+            Box::new(move |partition, problem| {
+                coupe_part_improve!(coupe::VnBest::new(part_count), partition, problem);
                 Ok(RunInfo::default())
             })
         }
         "rcb" => {
             let iter_count = required(usize_arg(args.next()))?;
             Box::new(move |partition, problem| {
-                let algo = coupe::Rcb::new(iter_count);
-                let weights: Vec<f64> = match &problem.weights {
-                    weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => panic!("rcb not implemented for integers"),
-                };
-                let res = match problem.dimension {
-                    2 => coupe::Partitioner::<2>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    3 => coupe::Partitioner::<3>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    _ => anyhow::bail!("rcb is only wired up for 2D and 3D"),
-                };
-                partition.copy_from_slice(&res);
+                let ids = coupe_part!(coupe::Rcb::new(iter_count), problem);
+                partition.copy_from_slice(&ids);
                 Ok(RunInfo::default())
             })
         }
@@ -159,7 +150,9 @@ fn parse_algorithm(spec: String) -> Result<Algorithm> {
                 };
                 let weights: Vec<f64> = match &problem.weights {
                     weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => anyhow::bail!("rcb not implemented for integers"),
+                    weight::Array::Integers(_) => {
+                        anyhow::bail!("hilbert is not implemented for integers")
+                    }
                 };
                 let res = match problem.dimension {
                     2 => coupe::Partitioner::<2>::partition(
