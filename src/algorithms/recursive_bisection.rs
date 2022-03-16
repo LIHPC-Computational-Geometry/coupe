@@ -1,6 +1,7 @@
 use crate::geometry::Mbr;
 use crate::geometry::PointND;
-
+use async_lock::Mutex;
+use async_lock::MutexGuard;
 use itertools::Itertools as _;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
@@ -9,11 +10,14 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use rayon::prelude::*;
-
-use async_lock::Mutex;
-use async_lock::MutexGuard;
 use std::cmp;
+use std::future::Future;
+use std::iter::Sum;
 use std::mem;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Sub;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -38,22 +42,22 @@ impl Condvar {
 }
 
 #[derive(Clone, Debug)]
-struct Item<'p, const D: usize> {
+struct Item<'p, const D: usize, W> {
     point: PointND<D>,
-    weight: f64,
+    weight: W,
     part: &'p AtomicUsize,
 }
 
 #[derive(Debug, Default)]
-struct IterationData {
+struct IterationData<W> {
     min: f64,
     max: f64,
-    sum: f64,
+    sum: W,
 
     /// Weight on the left of the split target.  The weight on the right can
     /// be obtained through InitData's sum.
-    left_part_weight: f64, // current iteration
-    additional_left_weight: f64, // previous iterations
+    left_part_weight: W, // current iteration
+    additional_left_weight: W, // previous iterations
 
     /// The number of weights on the left of the split target.  The number
     /// on the right can be obtained through items's length.
@@ -72,7 +76,10 @@ struct IterationData {
     ttl: usize,
 }
 
-impl IterationData {
+impl<W> IterationData<W>
+where
+    W: Default,
+{
     pub fn new(thread_count: usize) -> Self {
         Self {
             ttl_min_max_sum: thread_count,
@@ -82,16 +89,19 @@ impl IterationData {
 }
 
 /// Data shared by all threads
-struct IterationState {
+struct IterationState<W> {
     c: Condvar,
-    data: Mutex<IterationData>,
+    data: Mutex<IterationData<W>>,
 
     /// whether to stop the computation
     run: AtomicBool,
     thread_count: AtomicUsize,
 }
 
-impl IterationState {
+impl<W> IterationState<W>
+where
+    W: Default,
+{
     fn new(thread_count: usize) -> Self {
         Self {
             c: Condvar::default(),
@@ -103,43 +113,49 @@ impl IterationState {
 }
 
 #[tracing::instrument(skip(items))]
-fn apply_part_id<const D: usize>(items: &[Item<'_, D>], part_id: usize) {
+fn apply_part_id<const D: usize, W>(items: &[Item<'_, D, W>], part_id: usize) {
     for item in items {
         item.part.store(part_id, Ordering::Relaxed);
     }
 }
 
 #[tracing::instrument(skip(iter_ctxs))]
-async fn cancel_iterations<const D: usize>(
-    iter_ctxs: &[IterationState],
-    iter_count: usize,
-    iter_id: usize,
-) {
-    let cancel_task = async {
-        let ctx = &iter_ctxs[iter_id];
-        let mut d = ctx.data.lock().await;
-        d.ttl_min_max_sum = d.ttl_min_max_sum.checked_sub(1).unwrap();
-        // We won't participate in the iteration.
-        ctx.thread_count.fetch_sub(1, Ordering::Relaxed);
-        ctx.c.notify_all();
-    };
-    let left_task = rcb_iter::<D>(iter_ctxs, &mut [], iter_count - 1, iter_id * 2 + 1, 0, 0.0);
-    let right_task = rcb_iter::<D>(iter_ctxs, &mut [], iter_count - 1, iter_id * 2 + 2, 0, 0.0);
-
-    let left_right_tasks = futures_lite::future::zip(left_task, right_task);
-    futures_lite::future::zip(cancel_task, left_right_tasks).await;
+async fn cancel_iterations<W>(iter_ctxs: &[IterationState<W>], iter_count: usize, iter_id: usize) {
+    // We start with iteration `iter_id` and visit all its transitive children,
+    // breadth-first style.
+    // `iter_ctxs` is ordered in such manner that the children of iteration N
+    // are iterations 2N+1 and 2N+2.  Thus, its 2nd-level children are
+    // iterations 4N+3, 4N+4, 4N+5 and 4N+6.  In general, its p-level children
+    // are iterations [2^p*N + 2^p-1; 2^p*N + 2^(p+1)-1[.
+    let mut i = 0; // offset value, ranging from 2^1-1 to 2^((iter_count-1)+1)-1
+    let mut iter_level = 1; // 2^p
+    for _ in 0..iter_count {
+        for _ in 0..iter_level {
+            let ctx = &iter_ctxs[iter_id * iter_level + i];
+            let mut d = ctx.data.lock().await;
+            d.ttl_min_max_sum = d.ttl_min_max_sum.checked_sub(1).unwrap();
+            // We won't participate in the iteration.
+            ctx.thread_count.fetch_sub(1, Ordering::Relaxed);
+            ctx.c.notify_all();
+            i += 1;
+        }
+        iter_level *= 2;
+    }
 }
 
 #[tracing::instrument(skip(ctx, items), ret)]
-async fn compute_min_max<const D: usize>(
-    ctx: &IterationState,
-    items: &[Item<'_, D>],
+async fn compute_min_max<const D: usize, W>(
+    ctx: &IterationState<W>,
+    items: &[Item<'_, D, W>],
     coord: usize,
-) -> (f64, f64) {
+) -> (f64, f64)
+where
+    W: Copy + AddAssign + Sum,
+{
     let min_max_span = tracing::info_span!("compute");
     let enter = min_max_span.enter();
 
-    let partial_sum: f64 = items.iter().map(|item| item.weight).sum();
+    let partial_sum: W = items.iter().map(|item| item.weight).sum();
     let (partial_min, partial_max) = items
         .iter()
         .map(|item| item.point[coord])
@@ -173,18 +189,21 @@ async fn compute_min_max<const D: usize>(
     (d.min, d.max)
 }
 
-struct SplitResult<'a, 'p, const D: usize> {
-    left: &'a mut [Item<'p, D>],
-    right: &'a mut [Item<'p, D>],
-    left_weight: f64,
+struct SplitResult<'a, 'p, const D: usize, W> {
+    left: &'a mut [Item<'p, D, W>],
+    right: &'a mut [Item<'p, D, W>],
+    left_weight: W,
 }
 
 #[tracing::instrument(skip(items))]
-fn try_split_items<'a, 'p, const D: usize>(
-    items: &'a mut [Item<'p, D>],
+fn try_split_items<'a, 'p, const D: usize, W>(
+    items: &'a mut [Item<'p, D, W>],
     coord: usize,
     split_target: f64,
-) -> SplitResult<'a, 'p, D> {
+) -> SplitResult<'a, 'p, D, W>
+where
+    W: Copy + Sum,
+{
     let left_count = items
         .iter()
         .filter(|item| item.point[coord] < split_target)
@@ -201,7 +220,7 @@ fn try_split_items<'a, 'p, const D: usize>(
         items.split_at_mut(left_len)
     };
 
-    let left_weight: f64 = left.iter().map(|item| item.weight).sum();
+    let left_weight: W = left.iter().map(|item| item.weight).sum();
 
     SplitResult {
         left,
@@ -217,21 +236,25 @@ enum Direction {
 }
 
 #[derive(Debug)]
-struct SyncItemResult {
+struct SyncItemResult<W> {
     goto: Direction,
-    left_weight: f64,
-    right_weight: f64,
+    left_weight: W,
+    right_weight: W,
 }
 
 #[tracing::instrument(skip(ctx), ret)]
-async fn sync_item_split<'d, 'p>(
-    ctx: &IterationState,
-    mut data: MutexGuard<'d, IterationData>,
+async fn sync_item_split<'d, 'p, W>(
+    ctx: &IterationState<W>,
+    mut data: MutexGuard<'d, IterationData<W>>,
     min: f64,
     max: f64,
     thread_left_count: usize,
-    thread_left_weight: f64,
-) -> (MutexGuard<'d, IterationData>, Option<SyncItemResult>) {
+    thread_left_weight: W,
+) -> (MutexGuard<'d, IterationData<W>>, Option<SyncItemResult<W>>)
+where
+    W: Copy + std::fmt::Debug,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + PartialOrd,
+{
     if max != data.max || min != data.min {
         // This thread is lagging behind: discard work, advance to the
         // correct split target and restart.
@@ -282,19 +305,24 @@ async fn sync_item_split<'d, 'p>(
 }
 
 #[tracing::instrument(skip(ctx, items), ret)]
-async fn item_split_idx<'p, const D: usize>(
-    ctx: &IterationState,
-    items: &mut [Item<'p, D>],
+async fn item_split_idx<'p, const D: usize, W>(
+    ctx: &IterationState<W>,
+    items: &mut [Item<'p, D, W>],
     coord: usize,
     tolerance: f64,
-) -> usize {
+) -> usize
+where
+    W: Copy + std::fmt::Debug + Default,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
+    W: num::ToPrimitive,
+{
     let (mut min, mut max) = compute_min_max(ctx, items, coord).await;
 
     let min_search_space = (max - min) * tolerance;
     let mut item_view = &mut *items;
     let mut median_idx = 0;
     let mut cached_thread_left_count = 0;
-    let mut cached_thread_left_weight = 0.0;
+    let mut cached_thread_left_weight = W::default();
 
     while ctx.run.load(Ordering::Relaxed) {
         let split_target = (min + max) / 2.0;
@@ -354,8 +382,14 @@ async fn item_split_idx<'p, const D: usize>(
                         data.additional_left_weight = sync.left_weight;
                     }
                 }
-                let respect_tolerance =
-                    f64::abs(sync.left_weight - sync.right_weight) < tolerance * data.sum;
+                let respect_tolerance = {
+                    let imbalance = (sync.left_weight - sync.right_weight)
+                        .to_f64()
+                        .unwrap()
+                        .abs();
+                    let max_imbalance = tolerance * data.sum.to_f64().unwrap();
+                    imbalance < max_imbalance
+                };
                 let small_search_space = max - min < min_search_space;
                 let empty_search_space = data.count_left_min == data.count_left_max;
                 if respect_tolerance || small_search_space || empty_search_space {
@@ -369,7 +403,7 @@ async fn item_split_idx<'p, const D: usize>(
                 }
 
                 data.left_part_count = 0;
-                data.left_part_weight = 0.0;
+                data.left_part_weight = W::default();
                 data.ttl = ctx.thread_count.load(Ordering::Relaxed);
                 ctx.c.notify_all();
                 if item_view.is_empty() {
@@ -389,14 +423,19 @@ async fn item_split_idx<'p, const D: usize>(
     median_idx + cached_thread_left_count
 }
 
-fn rcb_iter<'p, const D: usize>(
-    iter_ctxs: &'p [IterationState],
-    items: &'p mut [Item<'p, D>],
+fn rcb_iter<'p, const D: usize, W>(
+    iter_ctxs: &'p [IterationState<W>],
+    items: &'p mut [Item<'p, D, W>],
     iter_count: usize,
     iter_id: usize,
     coord: usize,
     tolerance: f64,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'p>> {
+) -> Pin<Box<dyn Future<Output = ()> + 'p>>
+where
+    W: Copy + std::fmt::Debug + Default,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
+    W: num::ToPrimitive,
+{
     use tracing::Instrument as _;
 
     let fut = async move {
@@ -407,7 +446,7 @@ fn rcb_iter<'p, const D: usize>(
         }
         if items.is_empty() {
             // No items left in this thread, remove it from global state.
-            cancel_iterations::<D>(iter_ctxs, iter_count, iter_id).await;
+            cancel_iterations(iter_ctxs, iter_count, iter_id).await;
             return;
         }
 
@@ -440,12 +479,16 @@ fn rcb_iter<'p, const D: usize>(
     Box::pin(fut.instrument(span))
 }
 
-fn rcb_thread<const D: usize>(
-    iter_ctxs: &[IterationState],
-    items: &[Item<'_, D>],
+fn rcb_thread<const D: usize, W>(
+    iter_ctxs: &[IterationState<W>],
+    items: &[Item<'_, D, W>],
     iter_count: usize,
     tolerance: f64,
-) {
+) where
+    W: Copy + std::fmt::Debug + Default,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
+    W: num::ToPrimitive,
+{
     let copy_span = tracing::info_span!("copy items");
     let enter = copy_span.enter();
 
@@ -461,7 +504,10 @@ pub fn rcb<const D: usize, P, W>(partition: &mut [usize], points: P, weights: W,
 where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
-    W: rayon::iter::IntoParallelIterator<Item = f64>,
+    W: rayon::iter::IntoParallelIterator,
+    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
+    W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let points = points.into_par_iter();
@@ -542,7 +588,10 @@ pub fn rib<const D: usize, W>(
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
-    W: rayon::iter::IntoParallelIterator<Item = f64>,
+    W: rayon::iter::IntoParallelIterator,
+    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
+    W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let weights = weights.into_par_iter();
