@@ -13,12 +13,13 @@
 use crate::geometry::{Mbr, Point2D};
 use rayon::prelude::*;
 
-pub fn hilbert_curve_partition(
+fn hilbert_curve_partition(
+    partition: &mut [usize],
     points: &[Point2D],
     weights: &[f64],
-    num_partitions: usize,
+    part_count: usize,
     order: usize,
-) -> Vec<usize> {
+) {
     assert!(
         order < 32,
         "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
@@ -36,14 +37,12 @@ pub fn hilbert_curve_partition(
         .par_sort_by_key(|idx| hilbert_indices[*idx]);
 
     // dummy modifiers to use directly the routine from multi_jagged
-    let modifiers = vec![1. / num_partitions as f64; num_partitions];
-
-    let mut partition = vec![0; points.len()];
+    let modifiers = vec![1. / part_count as f64; part_count];
 
     let split_positions = super::multi_jagged::compute_split_positions(
         weights,
         &permutation,
-        num_partitions - 1,
+        part_count - 1,
         &modifiers,
     );
 
@@ -60,8 +59,6 @@ pub fn hilbert_curve_partition(
                 unsafe { std::ptr::write(ptr.add(*i), part_id) }
             }
         });
-
-    partition
 }
 
 #[allow(unused)]
@@ -206,6 +203,73 @@ fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn
             x,
         );
         alpha * x + beta
+    }
+}
+
+/// # Hilbert space-filling curve algorithm
+///
+/// An implementation of the Hilbert curve based on
+/// "Encoding and Decoding the Hilbert Order" by XIAN LIU and GÜNTHER SCHRACK.
+///
+/// This algorithm uses space hashing to reorder points alongside the Hilbert curve ov a giver order.
+/// See [wikipedia](https://en.wikipedia.org/wiki/Hilbert_curve) for more details.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = [
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 9.),
+///     Point2D::new(9., 1.),
+///     Point2D::new(10., 0.),
+///     Point2D::new(10., 10.),
+///     Point2D::new(9., 9.),
+/// ];
+/// let weights = [1.0; 8];
+/// let mut partition = [0; 8];
+///
+/// // generate a partition of 4 parts
+/// coupe::HilbertCurve { part_count: 4, order: 5 }
+///     .partition(&mut partition, (points, weights))
+///     .unwrap();
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(partition[4], partition[5]);
+/// assert_eq!(partition[6], partition[7]);
+/// ```
+pub struct HilbertCurve {
+    pub part_count: usize,
+    pub order: u32,
+}
+
+// hilbert curve is only implemented in 2d for now
+impl<P, W> crate::Partition<(P, W)> for HilbertCurve
+where
+    P: AsRef<[Point2D]>,
+    W: AsRef<[f64]>,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (P, W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        hilbert_curve_partition(
+            part_ids,
+            points.as_ref(),
+            weights.as_ref(),
+            self.part_count,
+            self.order as usize,
+        );
+        Ok(())
     }
 }
 

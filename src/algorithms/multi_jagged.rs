@@ -145,35 +145,34 @@ fn compute_modifiers(
         .collect()
 }
 
-pub fn multi_jagged<const D: usize>(
+fn multi_jagged<const D: usize>(
+    partition: &mut [usize],
     points: &[PointND<D>],
     weights: &[f64],
     num_parts: usize,
     max_iter: usize,
-) -> Vec<usize> {
+) {
     let partition_scheme = partition_scheme(num_parts, max_iter);
-    multi_jagged_with_scheme(points, weights, partition_scheme)
+    multi_jagged_with_scheme(partition, points, weights, partition_scheme);
 }
 
 fn multi_jagged_with_scheme<const D: usize>(
+    partition: &mut [usize],
     points: &[PointND<D>],
     weights: &[f64],
     partition_scheme: PartitionScheme,
-) -> Vec<usize> {
+) {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
-    let mut initial_partition = vec![0; points.len()];
 
     multi_jagged_recurse(
         points,
         weights,
         &mut permutation,
-        &AtomicPtr::new(initial_partition.as_mut_ptr()),
+        &AtomicPtr::new(partition.as_mut_ptr()),
         0,
         partition_scheme,
     );
-
-    initial_partition
 }
 
 fn multi_jagged_recurse<const D: usize>(
@@ -320,6 +319,73 @@ pub(crate) fn split_at_mut_many<'a, T>(
 
     head.push(tail);
     head
+}
+
+/// # Multi-Jagged algorithm
+///
+/// This algorithm is inspired by Multi-Jagged: A Scalable Parallel Spatial Partitioning Algorithm"
+/// by Mehmet Deveci, Sivasankaran Rajamanickam, Karen D. Devine, Umit V. Catalyurek.
+///
+/// It improves over [RCB](struct.Rcb.html) by following the same idea but by creating more than two subparts
+/// in each iteration which leads to decreasing recursion depth. It also allows to generate a partition
+/// of any number of parts.
+///
+/// More precisely, given a number of parts, the algorithm will generate a "partition scheme", which describes how
+/// to perform splits at each iteration, such that the total number of iteration is less than `max_iter`.
+///
+/// More iteration does not necessarily result in a better partition.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = vec![
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 0.),
+///     Point2D::new(2., 0.),   
+///     Point2D::new(0., 1.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(2., 1.),
+///     Point2D::new(0., 2.),
+///     Point2D::new(1., 2.),
+///     Point2D::new(2., 2.),
+/// ];
+/// let weights = [4.2; 9];
+/// let mut partition = [0; 9];
+///
+/// // generate a partition of 4 parts
+/// coupe::MultiJagged { part_count: 9, max_iter: 4 }
+///     .partition(&mut partition, (&points, &weights))
+///     .unwrap();
+///
+/// for i in 0..9 {
+///     for j in 0..9 {
+///         if j == i {
+///             continue    
+///         }
+///         assert_ne!(partition[i], partition[j])
+///     }
+/// }
+/// ```
+pub struct MultiJagged {
+    pub part_count: usize,
+    pub max_iter: usize,
+}
+
+impl<'a, const D: usize> crate::Partition<(&'a [PointND<D>], &'a [f64])> for MultiJagged {
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&'a [PointND<D>], &'a [f64]),
+    ) -> Result<Self::Metadata, Self::Error> {
+        multi_jagged(part_ids, points, weights, self.part_count, self.max_iter);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

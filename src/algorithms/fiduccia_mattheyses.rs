@@ -1,12 +1,11 @@
 use itertools::Itertools;
 use sprs::CsMatView;
 
-use crate::partition::Partition;
-use crate::PointND;
 use std::collections::HashMap;
 
-pub fn fiduccia_mattheyses<'a, const D: usize>(
-    initial_partition: &mut Partition<'a, PointND<D>, f64>,
+fn fiduccia_mattheyses(
+    part_ids: &mut [usize],
+    weights: &[f64],
     adjacency: CsMatView<f64>,
     max_passes: impl Into<Option<usize>>,
     max_flips_per_pass: impl Into<Option<usize>>,
@@ -16,12 +15,11 @@ pub fn fiduccia_mattheyses<'a, const D: usize>(
     let max_passes = max_passes.into();
     let max_flips_per_pass = max_flips_per_pass.into();
     let max_imbalance_per_flip = max_imbalance_per_flip.into();
-    let (_points, weights, ids) = initial_partition.as_raw_mut();
 
     fiduccia_mattheyses_impl(
+        part_ids,
         weights,
-        adjacency.view(),
-        ids,
+        adjacency,
         max_passes,
         max_flips_per_pass,
         max_imbalance_per_flip,
@@ -30,9 +28,9 @@ pub fn fiduccia_mattheyses<'a, const D: usize>(
 }
 
 fn fiduccia_mattheyses_impl(
+    initial_partition: &mut [usize],
     weights: &[f64],
     adjacency: CsMatView<f64>,
-    initial_partition: &mut [usize],
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     max_imbalance_per_flip: Option<f64>,
@@ -249,4 +247,108 @@ fn fiduccia_mattheyses_impl(
     }
 
     println!("final cut size: {}", new_cut_size);
+}
+
+/// FiducciaMattheyses
+///
+/// An implementation of the Fiduccia Mattheyses topologic algorithm
+/// for graph partitioning. This implementation is an extension of the
+/// original algorithm to handle partitioning into more than two parts.
+///
+/// This algorithm repeats an iterative pass during which a set of graph nodes are assigned to
+/// a new part, reducing the overall cutsize of the partition. As opposed to the
+/// Kernighan-Lin algorithm, during each pass iteration, only one node is flipped at a time.
+/// The algorithm thus does not preserve partition weights balance and may produce an unbalanced
+/// partition.
+///
+/// Original algorithm from "A Linear-Time Heuristic for Improving Network Partitions"
+/// by C.M. Fiduccia and R.M. Mattheyses.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+/// use sprs::CsMat;
+///
+/// //    swap
+/// // 0  1  0  1
+/// // +--+--+--+
+/// // |  |  |  |
+/// // +--+--+--+
+/// // 0  0  1  1
+/// let points = [
+///      Point2D::new(0., 0.),
+///      Point2D::new(1., 0.),
+///      Point2D::new(2., 0.),
+///      Point2D::new(3., 0.),
+///      Point2D::new(0., 1.),
+///      Point2D::new(1., 1.),
+///      Point2D::new(2., 1.),
+///      Point2D::new(3., 1.),
+///  ];
+///  let weights = [1.0; 8];
+///  let mut partition = [0, 0, 1, 1, 0, 1, 0, 1];
+///
+///  let mut adjacency = CsMat::empty(sprs::CSR, 8);
+///  adjacency.reserve_outer_dim(8);
+///  eprintln!("shape: {:?}", adjacency.shape());
+///  adjacency.insert(0, 1, 1.);
+///  adjacency.insert(1, 2, 1.);
+///  adjacency.insert(2, 3, 1.);
+///  adjacency.insert(4, 5, 1.);
+///  adjacency.insert(5, 6, 1.);
+///  adjacency.insert(6, 7, 1.);
+///  adjacency.insert(0, 4, 1.);
+///  adjacency.insert(1, 5, 1.);
+///  adjacency.insert(2, 6, 1.);
+///  adjacency.insert(3, 7, 1.);
+///  
+///  // symmetry
+///  adjacency.insert(1, 0, 1.);
+///  adjacency.insert(2, 1, 1.);
+///  adjacency.insert(3, 2, 1.);
+///  adjacency.insert(5, 4, 1.);
+///  adjacency.insert(6, 5, 1.);
+///  adjacency.insert(7, 6, 1.);
+///  adjacency.insert(4, 0, 1.);
+///  adjacency.insert(5, 1, 1.);
+///  adjacency.insert(6, 2, 1.);
+///  adjacency.insert(7, 3, 1.);
+///
+/// coupe::FiducciaMattheyses { max_bad_move_in_a_row: 1, ..Default::default() }
+///     .partition(&mut partition, (adjacency.view(), &weights))
+///     .unwrap();
+///
+/// assert_eq!(partition[5], 0);
+/// assert_eq!(partition[6], 1);
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FiducciaMattheyses {
+    pub max_passes: Option<usize>,
+    pub max_flips_per_pass: Option<usize>,
+    pub max_imbalance_per_flip: Option<f64>,
+    pub max_bad_move_in_a_row: usize,
+}
+
+impl<'a> crate::Partition<(CsMatView<'a, f64>, &'a [f64])> for FiducciaMattheyses {
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (adjacency, weights): (CsMatView<f64>, &'a [f64]),
+    ) -> Result<Self::Metadata, Self::Error> {
+        fiduccia_mattheyses(
+            part_ids,
+            weights,
+            adjacency,
+            self.max_passes,
+            self.max_flips_per_pass,
+            self.max_imbalance_per_flip,
+            self.max_bad_move_in_a_row,
+        );
+        Ok(())
+    }
 }

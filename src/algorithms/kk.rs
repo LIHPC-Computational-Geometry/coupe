@@ -51,7 +51,7 @@ where
 }
 
 /// Implementation of the Karmarkar-Karp algorithm
-pub fn kk<T, I>(partition: &mut [usize], weights: I, num_parts: usize)
+fn kk<T, I>(partition: &mut [usize], weights: I, num_parts: usize)
 where
     T: Zero + Ord + Sub<Output = T> + SubAssign + Copy,
     I: IntoIterator<Item = T>,
@@ -133,4 +133,41 @@ where
 
     parts.truncate(partition.len());
     partition.copy_from_slice(&parts);
+}
+
+/// The Karmarkar-Karp algorithm, also called the Largest Differencing Method.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+///
+/// let weights = [3, 5, 3, 9];
+/// let mut partition = [0; 4];
+///
+/// coupe::KarmarkarKarp { part_count: 3 }
+///     .partition(&mut partition, weights)
+///     .unwrap();
+/// ```
+pub struct KarmarkarKarp {
+    pub part_count: usize,
+}
+
+impl<W> crate::Partition<W> for KarmarkarKarp
+where
+    W: IntoIterator,
+    W::IntoIter: ExactSizeIterator,
+    W::Item: Zero + Ord + Sub<Output = W::Item> + SubAssign + Copy,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        weights: W,
+    ) -> Result<Self::Metadata, Self::Error> {
+        kk(part_ids, weights, self.part_count);
+        Ok(())
+    }
 }

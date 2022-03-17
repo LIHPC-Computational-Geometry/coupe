@@ -1,5 +1,4 @@
 use crate::imbalance::compute_parts_load;
-use crate::RunInfo;
 use itertools::Itertools;
 use num::One;
 use num::Zero;
@@ -8,10 +7,10 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 
-pub fn vn_best_mono<T>(partition: &mut [usize], criterion: &[T], nb_parts: usize) -> RunInfo
+fn vn_best_mono<W, T>(partition: &mut [usize], criterion: W, nb_parts: usize) -> usize
 where
+    W: IntoIterator<Item = T>,
     T: AddAssign + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
-    for<'a> &'a T: Sub<Output = T>,
     T: Zero + One,
     T: Ord + Copy,
 {
@@ -21,22 +20,31 @@ where
         two
     };
 
+    let mut criterion: Vec<(T, usize)> = criterion.into_iter().zip(0..).collect();
+
     assert_eq!(partition.len(), criterion.len());
 
     // We expect weights to be non-negative values
-    assert!(criterion.iter().all(|weight| *weight >= T::zero()));
+    assert!(criterion
+        .iter()
+        .all(|(weight, _weight_id)| *weight >= T::zero()));
     // We check if all weights are 0 because this screw the gain table
     // initialization and a quick fix could interfere with the algorithm.
     if partition.is_empty()
         || criterion.is_empty()
-        || criterion.iter().all(|item| item.is_zero())
+        || criterion
+            .iter()
+            .all(|(weight, _weight_id)| weight.is_zero())
         || nb_parts < 2
     {
-        return RunInfo::skip();
+        return 0;
     }
 
-    let mut part_loads = compute_parts_load(partition, nb_parts, criterion);
-    let mut criterion: Vec<(T, usize)> = criterion.iter().copied().zip(0..).collect();
+    let mut part_loads = compute_parts_load(
+        partition,
+        nb_parts,
+        criterion.iter().map(|(weight, _weight_id)| *weight),
+    );
     criterion.sort_unstable();
 
     let mut algo_iterations = 0;
@@ -109,8 +117,52 @@ where
         algo_iterations += 1;
     }
 
-    RunInfo {
-        algo_iterations: Some(algo_iterations),
+    algo_iterations
+}
+
+/// Greedy Vector-of-Numbers algorithms.
+///
+/// This algorithm greedily moves weights from parts to parts in such a way that
+/// the imbalance gain is maximized on each step.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use rand;
+///
+/// let part_count = 2;
+/// let mut partition = [0; 4];
+/// let weights = [4, 6, 2, 9];
+///
+/// coupe::Random { rng: rand::thread_rng(), part_count }
+///     .partition(&mut partition, ())
+///     .unwrap();
+/// coupe::VnBest { part_count }
+///     .partition(&mut partition, weights)
+///     .unwrap();
+/// ```
+pub struct VnBest {
+    pub part_count: usize,
+}
+
+impl<W> crate::Partition<W> for VnBest
+where
+    W: IntoIterator,
+    W::Item: AddAssign + Sub<Output = W::Item> + Div<Output = W::Item> + Mul<Output = W::Item>,
+    W::Item: Zero + One,
+    W::Item: Ord + Copy,
+{
+    type Metadata = usize;
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        weights: W,
+    ) -> Result<Self::Metadata, Self::Error> {
+        let algo_iterations = vn_best_mono(part_ids, weights, self.part_count);
+        Ok(algo_iterations)
     }
 }
 
@@ -126,7 +178,7 @@ mod tests {
         let w = [1, 2, 3, 4, 5, 6];
         let mut part = vec![0; w.len()];
         let imb_ini = imbalance::imbalance(2, &part, &w);
-        vn_best_mono::<u32>(&mut part, &w, 2);
+        vn_best_mono(&mut part, w, 2);
         let imb_end = imbalance::imbalance(2, &part, &w);
         assert!(imb_end < imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -144,9 +196,9 @@ mod tests {
                         prop::collection::vec(0..1usize, num_weights))
                 })
         ) {
-            let imb_ini = imbalance::max_imbalance(2, &partition, &weights);
-            vn_best_mono::<u64>(&mut partition, &weights, 2);
-            let imb_end = imbalance::max_imbalance(2, &partition, &weights);
+            let imb_ini = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
+            vn_best_mono::<_, u64>(&mut partition, weights.iter().cloned(), 2);
+            let imb_end = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini, "{} < {}", imb_ini, imb_end);
         }

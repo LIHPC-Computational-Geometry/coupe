@@ -1,6 +1,5 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use coupe::RunInfo;
 use rand::SeedableRng as _;
 use std::env;
 use std::path::PathBuf;
@@ -73,7 +72,7 @@ where
 /// - `Err(msg)`, where `msg` is the reason the algorithm cannot be run with the given arguments
 ///   (e.g. it's a bi-partitioning algorithm but the caller passed a number of parts that is
 ///   different than 2).
-type Algorithm = Box<dyn Fn(&mut [usize], &[f64], usize, usize) -> Result<RunInfo>>;
+type Algorithm = Box<dyn Fn(&mut [usize], &[f64], usize, usize) -> Result<()>>;
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();

@@ -9,6 +9,7 @@ use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
+use nalgebra::ToTypenum;
 use rayon::prelude::*;
 use std::cmp;
 use std::future::Future;
@@ -500,7 +501,7 @@ fn rcb_thread<const D: usize, W>(
     futures_lite::future::block_on(task);
 }
 
-pub fn rcb<const D: usize, P, W>(partition: &mut [usize], points: P, weights: W, iter_count: usize)
+fn rcb<const D: usize, P, W>(partition: &mut [usize], points: P, weights: W, iter_count: usize)
 where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
@@ -547,6 +548,72 @@ where
     });
 }
 
+/// # Recursive Coordinate Bisection algorithm
+///
+/// Partitions a mesh based on the nodes coordinates and coresponding weights.
+///
+/// This is the most simple and straightforward geometric algorithm. It operates as follows for a N-dimensional set of points:
+///
+/// At each iteration, select a vector `n` of the canonical basis `(e_0, ..., e_{n-1})`. Then, split the set of points with an hyperplane orthogonal
+/// to `n`, such that the two parts of the splits are evenly weighted. Finally, recurse by reapplying the algorithm to the two parts with an other
+/// normal vector selection.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = [
+///     Point2D::new(1., 1.),
+///     Point2D::new(-1., 1.),
+///     Point2D::new(1., -1.),
+///     Point2D::new(-1., -1.),
+/// ];
+/// let weights = [1; 4];
+/// let mut partition = [0; 4];
+///
+/// // generate a partition of 4 parts
+/// coupe::Rcb { iter_count: 2 }
+///     .partition(&mut partition, (points, weights))
+///     .unwrap();
+///
+/// for i in 0..4 {
+///     for j in 0..4 {
+///         if j == i {
+///             continue
+///         }
+///         assert_ne!(partition[i], partition[j])
+///     }
+/// }
+/// ```
+pub struct Rcb {
+    pub iter_count: usize,
+}
+
+impl<const D: usize, P, W> crate::Partition<(P, W)> for Rcb
+where
+    P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
+    P::Iter: rayon::iter::IndexedParallelIterator,
+    W: rayon::iter::IntoParallelIterator,
+    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
+    W::Item: num::ToPrimitive,
+    W::Iter: rayon::iter::IndexedParallelIterator,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (P, W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        rcb(part_ids, points, weights, self.iter_count);
+        Ok(())
+    }
+}
+
 // pub because it is also useful for multijagged and required for benchmarks
 pub fn axis_sort<const D: usize>(
     points: &[PointND<D>],
@@ -580,12 +647,8 @@ pub fn axis_sort<const D: usize>(
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-pub fn rib<const D: usize, W>(
-    partition: &mut [usize],
-    points: &[PointND<D>],
-    weights: W,
-    n_iter: usize,
-) where
+fn rib<const D: usize, W>(partition: &mut [usize], points: &[PointND<D>], weights: W, n_iter: usize)
+where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
@@ -606,6 +669,74 @@ pub fn rib<const D: usize, W>(
 
     // When the rotation is done, we just apply RCB
     rcb(partition, points, weights, n_iter)
+}
+
+/// # Recursive Inertial Bisection algorithm
+///
+/// Partitions a mesh based on the nodes coordinates and coresponding weights
+///
+/// This is a variant of the [`Rcb`](struct.Rcb.html) algorithm, where a basis change is performed beforehand so that
+/// the first coordinate of the new basis is colinear to the inertia axis of the set of points. This has the goal
+/// of producing better shaped partition than [Rcb](struct.Rcb.html).
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// // Here, the inertia axis is the y axis.
+/// // We thus expect Rib to split horizontally first.
+/// let points = [
+///     Point2D::new(1., 10.),
+///     Point2D::new(-1., 10.),
+///     Point2D::new(1., -10.),
+///     Point2D::new(-1., -10.),
+/// ];
+/// let weights = [1; 4];
+/// let mut partition = [0; 4];
+///
+/// // generate a partition of 2 parts (1 split)
+/// coupe::Rib { iter_count: 1 }
+///     .partition(&mut partition, (&points, weights))
+///     .unwrap();
+///
+/// // the two points at the top are in the same part
+/// assert_eq!(partition[0], partition[1]);
+///
+/// // the two points at the bottom are in the same part
+/// assert_eq!(partition[2], partition[3]);
+///
+/// // there are two different parts
+/// assert_ne!(partition[1], partition[2]);
+/// ```
+pub struct Rib {
+    /// The number of iterations of the algorithm. This will yield a partition of `2^num_iter` parts.
+    pub iter_count: usize,
+}
+
+impl<'a, const D: usize, W> crate::Partition<(&'a [PointND<D>], W)> for Rib
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    W: rayon::iter::IntoParallelIterator,
+    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
+    W::Item: num::ToPrimitive,
+    W::Iter: rayon::iter::IndexedParallelIterator,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&'a [PointND<D>], W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        rib(part_ids, points, weights, self.iter_count);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use super::Error;
 use num::FromPrimitive;
 use num::ToPrimitive;
 use std::iter::Sum;
@@ -92,7 +93,7 @@ where
     false
 }
 
-pub fn ckk_bipart<I, T>(partition: &mut [usize], weights: I, tolerance: f64) -> bool
+fn ckk_bipart<I, T>(partition: &mut [usize], weights: I, tolerance: f64) -> Result<(), Error>
 where
     I: IntoIterator<Item = T>,
     T: Sum + Add<Output = T> + Sub<Output = T>,
@@ -100,9 +101,14 @@ where
     T: Ord + Default + Copy,
 {
     let mut weights: Vec<(T, usize)> = weights.into_iter().zip(0..).collect();
-    debug_assert_eq!(weights.len(), partition.len());
+    if weights.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
     if weights.is_empty() {
-        return true;
+        return Ok(());
     }
     weights.sort_unstable();
 
@@ -111,7 +117,48 @@ where
 
     let mut steps = Vec::new();
 
-    ckk_bipart_rec(partition, &mut weights, tolerance, &mut steps)
+    if ckk_bipart_rec(partition, &mut weights, tolerance, &mut steps) {
+        Ok(())
+    } else {
+        Err(Error::NotFound)
+    }
+}
+
+/// The exact variant of the [Karmarkar-Karp][crate::KarmarkarKarp] algorithm.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+///
+/// let weights: [i32; 4] = [3, 5, 3, 9];
+/// let mut partition = [0; 4];
+///
+/// coupe::CompleteKarmarkarKarp { tolerance: 0.1 }
+///     .partition(&mut partition, weights)
+///     .unwrap();
+/// ```
+pub struct CompleteKarmarkarKarp {
+    pub tolerance: f64,
+}
+
+impl<W> crate::Partition<W> for CompleteKarmarkarKarp
+where
+    W: IntoIterator,
+    W::Item: Sum + Add<Output = W::Item> + Sub<Output = W::Item>,
+    W::Item: FromPrimitive + ToPrimitive,
+    W::Item: Ord + Default + Copy,
+{
+    type Metadata = ();
+    type Error = Error;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        weights: W,
+    ) -> Result<Self::Metadata, Self::Error> {
+        ckk_bipart(part_ids, weights, self.tolerance)
+    }
 }
 
 // TODO tests

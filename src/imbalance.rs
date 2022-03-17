@@ -12,14 +12,14 @@ use num::Zero;
 pub fn compute_parts_load<T: Zero + Clone + AddAssign>(
     partition: &[usize],
     num_parts: usize,
-    weights: &[T],
+    weights: impl IntoIterator<Item = T>,
 ) -> Vec<T> {
     debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
     partition
         .iter()
         .zip(weights)
         .fold(vec![T::zero(); num_parts], |mut acc, (&part, w)| {
-            acc[part] += w.clone();
+            acc[part] += w;
             acc
         })
 }
@@ -64,7 +64,7 @@ where
 pub fn imbalance_target<T: Zero + Sum + Clone + AddAssign + Sub<Output = T> + PartialOrd + Copy>(
     targets: &[T],
     partition: &[usize],
-    weights: &[T],
+    weights: impl IntoIterator<Item = T>,
 ) -> T {
     let num_parts = targets.len();
     debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
@@ -81,7 +81,7 @@ pub fn imbalance_target<T: Zero + Sum + Clone + AddAssign + Sub<Output = T> + Pa
 pub fn max_imbalance<T: Zero + Clone + Copy + AddAssign + Sum + PartialOrd + Sub<Output = T>>(
     num_parts: usize,
     partition: &[usize],
-    weights: &[T],
+    weights: impl IntoIterator<Item = T>,
 ) -> T {
     compute_parts_load(partition, num_parts, weights)
         .iter()
