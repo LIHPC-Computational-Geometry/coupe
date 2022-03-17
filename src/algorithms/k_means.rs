@@ -15,9 +15,6 @@ use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-// use super::hilbert_curve;
-use super::z_curve;
-
 use itertools::iproduct;
 use itertools::Itertools;
 
@@ -25,143 +22,6 @@ use itertools::Itertools;
 /// to enforce that it represents temporary ids
 /// for the k-means algorithm and not a partition id
 type ClusterId = usize;
-
-/// A simplified implementation of the algorithm described in the paper
-/// by Moritz von Looz et al. that follows the same idea but without the small
-/// optimizations that would improve the efficiency of the algorithm. In particular,
-/// this version shows some noticeable oscillations when imposing a restrictive balance constraint.
-/// It also skips the bounding boxes optimization which would slightly reduce the complexity of the
-/// algorithm.
-pub fn simplified_k_means<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    num_partitions: usize,
-    imbalance_tol: f64,
-    mut n_iter: isize,
-    hilbert: bool,
-) -> Vec<usize>
-where
-    Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
-{
-    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D as u32))) as u32;
-    let permu = if hilbert {
-        unimplemented!("hilbert curve currently not implemented for n-dimension");
-    // hilbert_curve::hilbert_curve_reorder(points, 15)
-    } else {
-        z_curve::z_curve_reorder(points, sfc_order)
-    };
-
-    let points_per_center = points.len() / num_partitions;
-
-    let mut centers: Vec<_> = permu
-        .iter()
-        .cloned()
-        .skip(points_per_center / 2)
-        .step_by(points_per_center)
-        .map(|idx| points[idx])
-        .collect();
-
-    let center_ids: Vec<ClusterId> = centers.par_iter().map(|_| crate::uid()).collect();
-
-    let mut influences = centers.par_iter().map(|_| 1.).collect::<Vec<_>>();
-
-    let dummy_id = crate::uid();
-    let mut assignments: Vec<ClusterId> = permu.par_iter().map(|_| dummy_id).collect();
-    let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
-    permu
-        .par_chunks(points_per_center)
-        .zip(center_ids.par_iter())
-        .for_each(|(chunk, id)| {
-            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
-            for idx in chunk {
-                unsafe { std::ptr::write(ptr.add(*idx), *id) }
-            }
-        });
-
-    let mut imbalance = std::f64::MAX;
-
-    let target_weight = weights.par_iter().sum::<f64>() / num_partitions as f64;
-
-    while imbalance > imbalance_tol && n_iter > 0 {
-        n_iter -= 1;
-
-        // find new assignments
-        permu.par_iter().for_each(|&idx| {
-            // find closest center
-            let mut distances = ::std::iter::repeat(points[idx])
-                .zip(centers.iter())
-                .zip(center_ids.iter())
-                .zip(influences.iter())
-                .map(|(((p, center), id), influence)| (*id, (p - center).norm() * influence))
-                .collect::<Vec<_>>();
-
-            distances
-                .as_mut_slice()
-                .sort_unstable_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
-
-            // update assignment with closest center found
-
-            let new_assignment = distances.into_iter().next().unwrap().0;
-            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
-            unsafe { std::ptr::write(ptr.add(idx), new_assignment) }
-        });
-
-        // update centers position from new assignments
-        centers
-            .par_iter_mut()
-            .zip(center_ids.par_iter())
-            .for_each(|(center, id)| {
-                let new_center = geometry::center(
-                    &permu
-                        .iter()
-                        // TODO: maybe cloning is avoidable here
-                        .map(|&idx| (points[idx], assignments[idx]))
-                        .filter(|(_, point_id)| *id == *point_id)
-                        .map(|(p, _)| p)
-                        .collect::<Vec<_>>(),
-                );
-
-                *center = new_center;
-            });
-
-        // compute cluster weights
-        let cluster_weights = center_ids
-            .par_iter()
-            .map(|id| {
-                assignments
-                    .iter()
-                    .zip(weights.iter())
-                    .filter(|(point_id, _)| *id == **point_id)
-                    .fold(0., |acc, (_, weight)| acc + weight)
-            })
-            .collect::<Vec<_>>();
-
-        // update influence
-        cluster_weights
-            .par_iter()
-            .zip(influences.par_iter_mut())
-            .for_each(|(cluster_weight, influence)| {
-                let ratio = target_weight / *cluster_weight as f64;
-
-                let new_influence = *influence / ratio.sqrt();
-                let max_diff = 0.05 * *influence;
-                if (*influence - new_influence).abs() < max_diff {
-                    *influence = new_influence;
-                } else if new_influence > *influence {
-                    *influence += max_diff;
-                } else {
-                    *influence -= max_diff;
-                }
-            });
-
-        // update imbalance
-        imbalance = self::imbalance(&cluster_weights);
-    }
-
-    assignments
-}
 
 fn imbalance(weights: &[f64]) -> f64 {
     match (
@@ -216,89 +76,7 @@ impl Default for BalancedKmeansSettings {
     }
 }
 
-pub fn balanced_k_means<const D: usize>(
-    points: &[PointND<D>],
-    weights: &[f64],
-    settings: impl Into<Option<BalancedKmeansSettings>>,
-) -> Vec<usize>
-where
-    Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
-{
-    let settings = settings.into().unwrap_or_default();
-
-    // sort points with space filling curve
-    let sfc_order = (f64::from(std::u32::MAX)).log(f64::from(2u32.pow(D as u32))) as u32;
-    let mut permu = if settings.hilbert {
-        unimplemented!("hilbert curve currently not implemented for n-dimension");
-    // hilbert_curve::hilbert_curve_reorder(points, 15)
-    } else {
-        z_curve::z_curve_reorder(points, sfc_order)
-    };
-
-    // Compute how many points will be initially assigned to each cluster
-    let points_per_center = points.len() / settings.num_partitions;
-
-    // select num_partitions initial centers from the ordered points
-    let centers: Vec<_> = permu
-        .iter()
-        // for each partition yielded by the Z-curve reordering
-        // we select the median point to be the initial cluster center
-        // because it is in most cases in the middle of the partition
-        .skip(points_per_center / 2)
-        .step_by(points_per_center)
-        .par_bridge()
-        .map(|&idx| points[idx])
-        .collect();
-
-    // generate unique ids for each initial partition that will live throughout
-    // the algorithm (no new id is generated afterwards)
-    let center_ids: Vec<ClusterId> = centers.par_iter().map(|_| crate::uid()).collect();
-
-    let dummy_id = crate::uid();
-    let mut assignments: Vec<_> = permu.par_iter().map(|_| dummy_id).collect();
-    let atomic_handle = AtomicPtr::from(assignments.as_mut_ptr());
-    permu
-        .par_chunks(points_per_center)
-        .zip(center_ids.par_iter())
-        .for_each(|(chunk, id)| {
-            let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
-            for idx in chunk {
-                unsafe { std::ptr::write(ptr.add(*idx), *id) }
-            }
-        });
-
-    debug_assert_eq!(assignments.len(), points.len());
-
-    // Generate initial influences (to 1)
-    let mut influences: Vec<_> = centers.par_iter().map(|_| 1.).collect();
-
-    // Generate initial lower and upper bounds. These two variables represent bounds on
-    // the effective distance between an point and the cluster it is assigned to.
-    let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
-    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
-
-    balanced_k_means_iter(
-        Inputs { points, weights },
-        Clusters {
-            centers,
-            center_ids: &center_ids,
-        },
-        &mut permu,
-        AlgorithmState {
-            assignments: &mut assignments,
-            influences: &mut influences,
-            lbs: &mut lbs,
-            ubs: &mut ubs,
-        },
-        &settings,
-        settings.max_iter,
-    );
-    assignments
-}
-
-pub fn balanced_k_means_with_initial_partition<const D: usize>(
+fn balanced_k_means_with_initial_partition<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
@@ -736,4 +514,108 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
         .map(|(p1, p2)| (p1 - p2).norm())
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap()
+}
+
+/// K-means algorithm
+///
+/// An implementation of the balanced k-means algorithm inspired from
+/// "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
+/// Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne).
+///
+/// From an initial partition, the K-means algorithm will generate points clusters that will,
+/// at each iteration, exchage points with other clusters that are "closer", and move by recomputing the clusters position (defined as
+/// the centroid of the points assigned to the cluster). Eventually the clusters will stop moving, yielding a new partition.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = [
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 0.),
+///     Point2D::new(2., 0.),
+///     Point2D::new(0., 5.),
+///     Point2D::new(1., 5.),
+///     Point2D::new(2., 5.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 10.),
+///     Point2D::new(2., 10.),
+/// ];
+/// let weights = [1.; 9];
+///
+/// // create an unbalanced partition:
+/// //  - p1: total weight = 1
+/// //  - p2: total weight = 7
+/// //  - p3: total weight = 1
+/// let mut partition = [1, 2, 2, 2, 2, 2, 2, 2, 3];
+///
+/// coupe::KMeans { part_count: 3, delta_threshold: 0.0, ..Default::default() }
+///     .partition(&mut partition, (&points, &weights))
+///     .unwrap();
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[0], partition[2]);
+///
+/// assert_eq!(partition[3], partition[4]);
+/// assert_eq!(partition[3], partition[5]);
+///
+/// assert_eq!(partition[6], partition[7]);
+/// assert_eq!(partition[6], partition[8]);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct KMeans {
+    pub part_count: usize,
+    pub imbalance_tol: f64,
+    pub delta_threshold: f64,
+    pub max_iter: usize,
+    pub max_balance_iter: usize,
+    pub erode: bool,
+    pub hilbert: bool,
+    pub mbr_early_break: bool,
+}
+
+impl Default for KMeans {
+    fn default() -> Self {
+        Self {
+            part_count: 7,
+            imbalance_tol: 5.,
+            delta_threshold: 0.01,
+            max_iter: 500,
+            max_balance_iter: 20, // for now, `max_balance_iter > 1` yields poor convergence time
+            erode: false,         // for now, `erode` yields` enabled yields wrong results
+            hilbert: true,
+            mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
+        }
+    }
+}
+
+impl<'a, const D: usize> crate::Partition<(&'a [PointND<D>], &'a [f64])> for KMeans
+where
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&'a [PointND<D>], &'a [f64]),
+    ) -> Result<Self::Metadata, Self::Error> {
+        let settings = BalancedKmeansSettings {
+            num_partitions: self.part_count,
+            imbalance_tol: self.imbalance_tol,
+            delta_threshold: self.delta_threshold,
+            max_iter: self.max_iter,
+            max_balance_iter: self.max_balance_iter,
+            erode: self.erode,
+            hilbert: self.hilbert,
+            mbr_early_break: self.mbr_early_break,
+        };
+        balanced_k_means_with_initial_partition(points, weights, settings, part_ids);
+        Ok(())
+    }
 }

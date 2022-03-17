@@ -25,6 +25,7 @@ use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
+use nalgebra::ToTypenum;
 use rayon::prelude::*;
 
 use std::cmp::Ordering;
@@ -36,13 +37,13 @@ use std::sync::atomic::{self, AtomicPtr};
 type HashType = u128;
 const HASH_TYPE_MAX: HashType = std::u128::MAX;
 
-pub fn z_curve_partition<const D: usize>(
+fn z_curve_partition<const D: usize>(
+    partition: &mut [usize],
     points: &[PointND<D>],
-    num_partitions: usize,
+    part_count: usize,
     order: u32,
-) -> Vec<usize>
-where
-    Const<D>: DimSub<Const<1>>,
+) where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
@@ -58,15 +59,13 @@ where
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
-    let mut ininial_partition = vec![0; points.len()];
-
     // reorder points
     z_curve_partition_recurse(points, order, &mbr, &mut permutation);
 
-    let points_per_partition = points.len() / num_partitions;
-    let remainder = points.len() % num_partitions;
+    let points_per_partition = points.len() / part_count;
+    let remainder = points.len() % part_count;
 
-    let atomic_handle = AtomicPtr::from(ininial_partition.as_mut_ptr());
+    let atomic_handle = AtomicPtr::from(partition.as_mut_ptr());
 
     // give an id to each partition
     //
@@ -85,8 +84,6 @@ where
                 unsafe { std::ptr::write(ptr.add(*idx), id) }
             }
         });
-
-    ininial_partition
 }
 
 // reorders `permu` to sort points by increasing z-curve hash
@@ -189,6 +186,63 @@ fn compute_hash<const D: usize>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) ->
     }
 }
 
+/// # Z space-filling curve algorithm
+///
+/// The Z-curve uses space hashing to partition points. The points in the same part of a partition
+/// have the same Z-hash. This hash is computed by recursively constructing a N-dimensional region tree.
+///
+/// # Example
+///
+/// ```rust
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = [
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 9.),
+///     Point2D::new(9., 1.),
+///     Point2D::new(10., 0.),
+///     Point2D::new(10., 10.),
+///     Point2D::new(9., 9.),
+/// ];
+/// let mut partition = [0; 8];
+///
+/// // generate a partition of 4 parts
+/// coupe::ZCurve { part_count: 4, order: 5 }
+///     .partition(&mut partition, &points)
+///     .unwrap();
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(partition[4], partition[5]);
+/// assert_eq!(partition[6], partition[7]);
+/// ```  
+pub struct ZCurve {
+    pub part_count: usize,
+    pub order: u32,
+}
+
+impl<'a, const D: usize> crate::Partition<&'a [PointND<D>]> for ZCurve
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        points: &'a [PointND<D>],
+    ) -> Result<Self::Metadata, Self::Error> {
+        z_curve_partition(part_ids, points, self.part_count, self.order);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_partition() {
-        let points = vec![
+        let points = [
             Point2D::from([0., 0.]),
             Point2D::from([20., 10.]),
             Point2D::from([0., 10.]),
@@ -207,8 +261,9 @@ mod tests {
             Point2D::from([4., 2.]),
         ];
 
-        let ids = z_curve_partition(&points, 4, 1);
-        for id in ids.iter() {
+        let mut ids = [0; 8];
+        z_curve_partition(&mut ids, &points, 4, 1);
+        for id in ids {
             println!("{}", id);
         }
         assert_eq!(ids[0], ids[7]);

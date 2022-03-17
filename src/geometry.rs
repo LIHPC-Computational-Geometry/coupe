@@ -1,7 +1,6 @@
 //! A few useful geometric types
 
 use approx::Ulps;
-use itertools::Itertools;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -125,24 +124,6 @@ impl<const D: usize> Aabb<D> {
         Self { p_min, p_max }
     }
 
-    pub fn aspect_ratio(&self) -> f64 {
-        use itertools::MinMaxResult::*;
-
-        let (min, max) = match self
-            .p_min()
-            .iter()
-            .zip(self.p_max().iter())
-            .map(|(min, max)| (max - min).abs())
-            .minmax()
-        {
-            MinMax(min, max) => (min, max),
-            _ => unimplemented!(),
-        };
-
-        // TODO: What if min == 0.0 ?
-        max / min
-    }
-
     pub fn contains(&self, point: &PointND<D>) -> bool {
         let eps = 10. * std::f64::EPSILON;
         self.p_min
@@ -261,14 +242,6 @@ impl<const D: usize> Mbr<D> {
         }
     }
 
-    /// Computes the aspect ratio of the Mbr.
-    ///
-    /// It is defined as follows:
-    /// `ratio = long_side / short_side`
-    pub fn aspect_ratio(&self) -> f64 {
-        self.aabb.aspect_ratio()
-    }
-
     /// Computes the distance between a point and the current mbr.
     pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
         self.aabb.distance_to_point(&(self.mbr_to_aabb * point))
@@ -377,6 +350,7 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     use approx::assert_ulps_eq;
+    use itertools::Itertools as _;
     use nalgebra::Matrix2;
 
     #[test]
@@ -390,11 +364,9 @@ mod tests {
         ];
 
         let aabb = Aabb::from_points(&points);
-        let aspect_ratio = aabb.aspect_ratio();
 
         assert_ulps_eq!(aabb.p_min, Point2D::from([0., 0.]));
         assert_ulps_eq!(aabb.p_max, Point2D::from([5., 5.]));
-        assert_ulps_eq!(aspect_ratio, 1.);
     }
 
     #[test]
@@ -409,21 +381,6 @@ mod tests {
     fn test_aabb2d_invalid_input_2() {
         let points = vec![Point2D::from([5., -9.2])];
         let _aabb = Aabb::from_points(&points);
-    }
-
-    #[test]
-    fn test_mbr_2d() {
-        let points = vec![
-            Point2D::from([5., 3.]),
-            Point2D::from([0., 0.]),
-            Point2D::from([1., -1.]),
-            Point2D::from([4., 4.]),
-        ];
-
-        let mbr = Mbr::from_points(&points);
-        let aspect_ratio = mbr.aspect_ratio();
-
-        assert_relative_eq!(aspect_ratio, 4., epsilon = 1e-14);
     }
 
     #[test]
@@ -567,31 +524,9 @@ mod tests {
         ];
 
         let aabb = Aabb::from_points(&points);
-        let aspect_ratio = aabb.aspect_ratio();
 
         assert_ulps_eq!(aabb.p_min, Point3D::from([0., 0., -2.]));
         assert_ulps_eq!(aabb.p_max, Point3D::from([5., 5., 5.]));
-        assert_ulps_eq!(aspect_ratio, 7. / 5.);
-    }
-
-    #[test]
-    fn test_mbr_3d() {
-        let points = vec![
-            Point3D::from([5., 3., 0.]),
-            Point3D::from([0., 0., 0.]),
-            Point3D::from([1., -1., 0.]),
-            Point3D::from([4., 4., 0.]),
-            Point3D::from([5., 3., 2.]),
-            Point3D::from([0., 0., 2.]),
-            Point3D::from([1., -1., 2.]),
-            Point3D::from([4., 4., 2.]),
-        ];
-
-        let mbr = Mbr::from_points(&points);
-        println!("mbr = {:?}", mbr);
-        let aspect_ratio = mbr.aspect_ratio();
-
-        assert_relative_eq!(aspect_ratio, 4., epsilon = 1e-14);
     }
 
     #[test]

@@ -1,29 +1,13 @@
 mod generator;
 
-use coupe::algorithms::k_means::simplified_k_means;
-use coupe::algorithms::recursive_bisection::{axis_sort, rcb};
 use coupe::geometry::Point2D;
+use coupe::Partition as _;
 use criterion::{criterion_group, criterion_main};
 use criterion::{Criterion, Throughput};
 use rayon::prelude::*;
 
 const SAMPLE_SIZE: usize = 5000;
 const NUM_ITER: usize = 2;
-
-fn bench_axis_sort_random(c: &mut Criterion) {
-    c.benchmark_group("axis_sort_random")
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u64))
-        .bench_function("axis_sort_random", move |b| {
-            let sample_points = generator::uniform_rectangle(
-                Point2D::from([0., 0.]),
-                Point2D::from([30., 10.]),
-                SAMPLE_SIZE,
-            );
-            let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
-
-            b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
-        });
-}
 
 fn bench_raw_pdqsort_random(c: &mut Criterion) {
     c.benchmark_group("raw_pdqsort_random")
@@ -87,20 +71,6 @@ fn bench_parallel_raw_pdqsort_sorted(c: &mut Criterion) {
         });
 }
 
-fn bench_axis_sort_sorted(c: &mut Criterion) {
-    c.benchmark_group("axis_sort_sorted")
-        .throughput(Throughput::Elements(SAMPLE_SIZE as u64))
-        .bench_function("axis_sort_sorted", move |b| {
-            let sample_points = generator::already_x_sorted_rectangle(
-                Point2D::from([0., 0.]),
-                Point2D::from([30., 10.]),
-                SAMPLE_SIZE,
-            );
-            let mut permutation: Vec<_> = (0..SAMPLE_SIZE).collect();
-            b.iter(|| axis_sort(&sample_points, &mut permutation, 0))
-        });
-}
-
 fn bench_rcb_random(c: &mut Criterion) {
     c.benchmark_group("rcb_random")
         .throughput(Throughput::Elements(SAMPLE_SIZE as u64))
@@ -110,52 +80,54 @@ fn bench_rcb_random(c: &mut Criterion) {
                 Point2D::from([30., 10.]),
                 SAMPLE_SIZE,
             );
-            let weights = vec![1.0; sample_points.len()];
-            let mut ids = vec![0; sample_points.len()];
+            let weights = vec![1; SAMPLE_SIZE];
+            let mut ids = vec![0; SAMPLE_SIZE];
             b.iter(|| {
                 use rayon::iter::IntoParallelRefIterator as _;
                 use rayon::iter::ParallelIterator as _;
 
                 let p = sample_points.par_iter().cloned();
                 let w = weights.par_iter().cloned();
-                rcb(&mut ids, p, w, NUM_ITER)
+                coupe::Rcb {
+                    iter_count: NUM_ITER,
+                }
+                .partition(&mut ids, (p, w))
+                .unwrap()
             })
         });
 }
 
-fn bench_simplified_k_means(c: &mut Criterion) {
-    c.benchmark_group("simplified_k_means")
+fn bench_k_means(c: &mut Criterion) {
+    c.benchmark_group("k_means")
         .throughput(Throughput::Elements(SAMPLE_SIZE as u64))
-        .bench_function("simplified_k_means", move |b| {
+        .bench_function("k_means", move |b| {
             let sample_points = generator::uniform_rectangle(
                 Point2D::new(0., 0.),
                 Point2D::new(30., 10.),
                 SAMPLE_SIZE,
             );
-            let ids: Vec<_> = (0..SAMPLE_SIZE).collect();
-            let weights: Vec<_> = ids.iter().map(|_| 1.).collect();
+            let weights = vec![1.0; SAMPLE_SIZE];
             b.iter(|| {
-                simplified_k_means(
-                    &sample_points,
-                    &weights,
-                    2usize.pow(NUM_ITER as u32),
-                    5.,
-                    1000,
-                    true,
-                )
+                coupe::KMeans {
+                    part_count: 2_usize.pow(NUM_ITER as u32),
+                    imbalance_tol: 5.0,
+                    delta_threshold: 0.0,
+                    hilbert: true,
+                    ..Default::default()
+                }
+                .partition(&mut [0; SAMPLE_SIZE], (&sample_points, &weights))
+                .unwrap()
             })
         });
 }
 
 criterion_group!(
     benches,
-    bench_axis_sort_random,
-    bench_axis_sort_sorted,
     bench_raw_pdqsort_random,
     bench_parallel_raw_pdqsort_random,
     bench_raw_pdqsort_sorted,
     bench_parallel_raw_pdqsort_sorted,
     bench_rcb_random,
-    bench_simplified_k_means
+    bench_k_means
 );
 criterion_main!(benches);

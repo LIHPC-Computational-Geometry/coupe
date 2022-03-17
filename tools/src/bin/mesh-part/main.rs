@@ -1,77 +1,127 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use coupe::RunInfo;
+use coupe::Partition as _;
+use coupe::PointND;
+use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::env;
 use std::fs;
 use std::io;
+use std::mem;
 
-macro_rules! coupe_part {
-    ( $algo:expr, $dimension:expr, $points:expr, $weights:expr ) => {{
-        match $dimension {
-            2 => {
-                coupe::Partitioner::<2>::partition(&$algo, $points.as_slice(), $weights).into_ids()
-            }
-            3 => {
-                coupe::Partitioner::<3>::partition(&$algo, $points.as_slice(), $weights).into_ids()
-            }
-            _ => anyhow::bail!("only 2D and 3D meshes are supported"),
-        }
-    }};
-    ( $algo:expr, $problem:expr ) => {{
-        let weights: Vec<f64> = match &$problem.weights {
-            weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-            weight::Array::Integers(_) => anyhow::bail!("integers are not supported by coupe yet"),
-        };
-        coupe_part!($algo, $problem.dimension, $problem.points, &weights)
-    }};
-}
-
-macro_rules! coupe_part_improve {
-    ( $algo:expr, $partition:expr, $dimension:expr, $points:expr, $weights:expr ) => {{
-        let ids = match $dimension {
-            2 => {
-                let points = coupe::PointsView::to_points_nd($points.as_slice());
-                let partition =
-                    coupe::partition::Partition::from_ids(points, $weights, $partition.to_vec());
-                coupe::PartitionImprover::<2>::improve_partition(&$algo, partition).into_ids()
-            }
-            3 => {
-                let points = coupe::PointsView::to_points_nd($points.as_slice());
-                let partition =
-                    coupe::partition::Partition::from_ids(points, $weights, $partition.to_vec());
-                coupe::PartitionImprover::<3>::improve_partition(&$algo, partition).into_ids()
-            }
-            _ => anyhow::bail!("only 2D and 3D meshes are supported"),
-        };
-        $partition.copy_from_slice(&ids);
-    }};
-    ( $algo:expr, $partition:expr, $problem:expr ) => {{
-        let weights: Vec<f64> = match &$problem.weights {
-            weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-            weight::Array::Integers(_) => anyhow::bail!("integers are not supported by coupe yet"),
-        };
-        coupe_part_improve!(
-            $algo,
-            $partition,
-            $problem.dimension,
-            $problem.points,
-            &weights
-        )
-    }};
-}
-
-struct Problem {
-    dimension: usize,
-    points: Vec<f64>,
+struct Problem<const D: usize> {
+    points: Vec<PointND<D>>,
     weights: weight::Array,
 }
 
-type Algorithm = Box<dyn FnMut(&mut [usize], &Problem) -> Result<RunInfo>>;
+trait Algorithm<const D: usize> {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()>;
+}
 
-fn parse_algorithm(spec: String) -> Result<Algorithm> {
+impl<const D: usize, R> Algorithm<D> for coupe::Random<R>
+where
+    R: rand::Rng,
+{
+    fn run(&mut self, partition: &mut [usize], _: &Problem<D>) -> Result<()> {
+        self.partition(partition, ())?;
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::Greedy {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights = is.iter().map(|weight| weight[0]);
+                self.partition(partition, weights)?;
+            }
+            Floats(fs) => {
+                let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                self.partition(partition, weights)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::KarmarkarKarp {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights = is.iter().map(|weight| weight[0]);
+                self.partition(partition, weights)?;
+            }
+            Floats(fs) => {
+                let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                self.partition(partition, weights)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::VnBest {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights = is.iter().map(|weight| weight[0]);
+                self.partition(partition, weights)?;
+            }
+            Floats(fs) => {
+                let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                self.partition(partition, weights)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::Rcb {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        let points = problem.points.par_iter().cloned();
+        match &problem.weights {
+            Integers(is) => {
+                let weights = is.par_iter().map(|weight| weight[0]);
+                self.partition(partition, (points, weights))?;
+            }
+            Floats(fs) => {
+                let weights = fs.par_iter().map(|weight| weight[0]);
+                self.partition(partition, (points, weights))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::HilbertCurve {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        if D != 2 {
+            anyhow::bail!("hilbert is only implemented for 2D meshes");
+        }
+        // SAFETY: is a noop since D == 2
+        let points =
+            unsafe { mem::transmute::<&Vec<PointND<D>>, &Vec<PointND<2>>>(&problem.points) };
+        match &problem.weights {
+            Integers(_) => anyhow::bail!("hilbert is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, (points, weights))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> {
     let mut args = spec.split(',');
-    let name = args.next().context("empty algorithm spec")?;
+    let name = args.next().context("it's empty")?;
 
     fn optional<T>(maybe_arg: Option<Result<T>>, default: T) -> Result<T> {
         Ok(maybe_arg.transpose()?.unwrap_or(default))
@@ -100,75 +150,73 @@ fn parse_algorithm(spec: String) -> Result<Algorithm> {
                 bytes.resize(32_usize, 0_u8);
                 bytes.try_into().unwrap()
             };
-            let mut rng = rand_pcg::Pcg64::from_seed(seed);
-            Box::new(move |partition, problem| {
-                let algo = coupe::Random::new(&mut rng, part_count);
-                let weights = vec![0.0; problem.points.len()];
-                let ids = coupe_part!(algo, problem.dimension, problem.points, &weights);
-                partition.copy_from_slice(&ids);
-                Ok(RunInfo::default())
-            })
+            let rng = rand_pcg::Pcg64::from_seed(seed);
+            Box::new(coupe::Random { rng, part_count })
         }
-        "greedy" => {
-            let part_count = required(usize_arg(args.next()))?;
-            Box::new(move |partition, problem| {
-                let ids = coupe_part!(coupe::Greedy::new(part_count), problem);
-                partition.copy_from_slice(&ids);
-                Ok(RunInfo::default())
-            })
-        }
-        "kk" => {
-            let part_count = required(usize_arg(args.next()))?;
-            Box::new(move |partition, problem| {
-                let ids = coupe_part!(coupe::KarmarkarKarp::new(part_count), problem);
-                partition.copy_from_slice(&ids);
-                Ok(RunInfo::default())
-            })
-        }
-        "vn-best" => {
-            let part_count = required(usize_arg(args.next()))?;
-            Box::new(move |partition, problem| {
-                coupe_part_improve!(coupe::VnBest::new(part_count), partition, problem);
-                Ok(RunInfo::default())
-            })
-        }
-        "rcb" => {
-            let iter_count = required(usize_arg(args.next()))?;
-            Box::new(move |partition, problem| {
-                let ids = coupe_part!(coupe::Rcb::new(iter_count), problem);
-                partition.copy_from_slice(&ids);
-                Ok(RunInfo::default())
-            })
-        }
-        "hilbert" => {
-            let num_partitions = required(usize_arg(args.next()))?;
-            let order = optional(usize_arg(args.next()), 12)? as u32;
-            Box::new(move |partition, problem| {
-                let algo = coupe::HilbertCurve {
-                    num_partitions,
-                    order,
-                };
-                let weights: Vec<f64> = match &problem.weights {
-                    weight::Array::Floats(ws) => ws.iter().map(|weight| weight[0]).collect(),
-                    weight::Array::Integers(_) => {
-                        anyhow::bail!("hilbert is not implemented for integers")
-                    }
-                };
-                let res = match problem.dimension {
-                    2 => coupe::Partitioner::<2>::partition(
-                        &algo,
-                        problem.points.as_slice(),
-                        &weights,
-                    )
-                    .into_ids(),
-                    _ => anyhow::bail!("hilbert is only implemented in 2D"),
-                };
-                partition.copy_from_slice(&res);
-                Ok(RunInfo::default())
-            })
-        }
+        "greedy" => Box::new(coupe::Greedy {
+            part_count: required(usize_arg(args.next()))?,
+        }),
+        "kk" => Box::new(coupe::KarmarkarKarp {
+            part_count: required(usize_arg(args.next()))?,
+        }),
+        "vn-best" => Box::new(coupe::VnBest {
+            part_count: required(usize_arg(args.next()))?,
+        }),
+        "rcb" => Box::new(coupe::Rcb {
+            iter_count: required(usize_arg(args.next()))?,
+        }),
+        "hilbert" => Box::new(coupe::HilbertCurve {
+            part_count: required(usize_arg(args.next()))?,
+            order: optional(usize_arg(args.next()), 12)? as u32,
+        }),
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
+}
+
+fn main_d<const D: usize>(
+    matches: getopts::Matches,
+    mesh: Mesh,
+    weights: weight::Array,
+) -> Result<Vec<usize>> {
+    let points: Vec<_> = mesh
+        .elements()
+        .filter_map(|(element_type, nodes, _element_ref)| {
+            if element_type.dimension() != mesh.dimension() {
+                return None;
+            }
+            let mut barycentre = [0.0; D];
+            for node_idx in nodes {
+                let node_coordinates = mesh.node(*node_idx);
+                for (bc_coord, node_coord) in barycentre.iter_mut().zip(node_coordinates) {
+                    *bc_coord += node_coord;
+                }
+            }
+            for bc_coord in &mut barycentre {
+                *bc_coord /= nodes.len() as f64;
+            }
+            Some(PointND::from(barycentre))
+        })
+        .collect();
+
+    let mut partition = vec![0; points.len()];
+    let problem = Problem { points, weights };
+
+    let algorithms: Vec<_> = matches
+        .opt_strs("a")
+        .into_iter()
+        .map(|algorithm_spec| {
+            parse_algorithm(&algorithm_spec)
+                .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
+        })
+        .collect::<Result<_>>()?;
+
+    for mut algorithm in algorithms {
+        algorithm
+            .run(&mut partition, &problem)
+            .context("failed to apply algorithm")?;
+    }
+
+    Ok(partition)
 }
 
 fn main() -> Result<()> {
@@ -191,37 +239,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let algorithms: Vec<_> = matches
-        .opt_strs("a")
-        .into_iter()
-        .map(parse_algorithm)
-        .collect::<Result<_>>()?;
-
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
-    let mesh = mesh_io::medit::Mesh::from_file(mesh_file).context("failed to read mesh file")?;
-
-    let points: Vec<_> = mesh
-        .elements()
-        .filter_map(|(element_type, nodes, _element_ref)| {
-            if element_type.dimension() != mesh.dimension() {
-                return None;
-            }
-            let mut barycentre = vec![0.0; mesh.dimension()];
-            for node_idx in nodes {
-                let node_coordinates = mesh.node(*node_idx);
-                for (bc_coord, node_coord) in barycentre.iter_mut().zip(node_coordinates) {
-                    *bc_coord += node_coord;
-                }
-            }
-            for bc_coord in &mut barycentre {
-                *bc_coord /= nodes.len() as f64;
-            }
-            Some(barycentre)
-        })
-        .flatten()
-        .collect();
+    let mesh = Mesh::from_file(mesh_file).context("failed to read mesh file")?;
 
     let weight_file = matches
         .opt_str("w")
@@ -230,16 +251,11 @@ fn main() -> Result<()> {
     let weight_file = io::BufReader::new(weight_file);
     let weights = weight::read(weight_file).context("failed to read weight file")?;
 
-    let problem = Problem {
-        dimension: mesh.dimension(),
-        points,
-        weights,
+    let partition = match mesh.dimension() {
+        2 => main_d::<2>(matches, mesh, weights)?,
+        3 => main_d::<3>(matches, mesh, weights)?,
+        n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
-    let mut partition = vec![0; problem.points.len() / problem.dimension];
-
-    for mut algorithm in algorithms {
-        algorithm(&mut partition, &problem).context("failed to apply algorithm")?;
-    }
 
     let stdout = io::stdout();
     let stdout = stdout.lock();
