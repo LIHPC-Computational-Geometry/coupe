@@ -72,11 +72,6 @@ fn edge_cut(mesh: &Mesh, parts: &[usize]) -> f64 {
     cut as f64 / 2.0
 }
 
-fn lambda_cut(mesh: &Mesh) -> f64 {
-    // TODO
-    todo!()
-}
-
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");

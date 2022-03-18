@@ -460,33 +460,6 @@ mod tests {
         assert_ulps_eq!(expected.cross(&vec).norm(), 0.);
     }
 
-    //#[test] // TODO
-    fn test_mbr_distance_to_point_2d() {
-        let points = vec![
-            Point2D::from([0., 1.]),
-            Point2D::from([1., 0.]),
-            Point2D::from([5., 6.]),
-            Point2D::from([6., 5.]),
-        ];
-
-        let mbr = Mbr::from_points(&points);
-
-        let test_points = vec![
-            Point2D::from([2., 2.]),
-            Point2D::from([0., 0.]),
-            Point2D::from([5., 7.]),
-        ];
-
-        let distances: Vec<_> = test_points
-            .iter()
-            .map(|p| mbr.distance_to_point(p))
-            .collect();
-
-        assert_relative_eq!(distances[0], 0.5);
-        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[2], 1.);
-    }
-
     #[test]
     fn test_mbr_center() {
         let points = vec![
@@ -632,43 +605,6 @@ mod tests {
         eprintln!("{}", vec);
 
         assert_relative_eq!(expected.cross(&vec).norm(), 0.);
-    }
-
-    //#[test] // TODO
-    fn test_mbr_distance_to_point_3d() {
-        let points = vec![
-            Point3D::from([0., 1., 0.]),
-            Point3D::from([1., 0., 0.]),
-            Point3D::from([5., 6., 0.]),
-            Point3D::from([6., 5., 0.]),
-            Point3D::from([0., 1., 4.]),
-            Point3D::from([1., 0., 4.]),
-            Point3D::from([5., 6., 4.]),
-            Point3D::from([6., 5., 4.]),
-        ];
-
-        let mbr = Mbr::from_points(&points);
-
-        let test_points = vec![
-            Point3D::from([2., 2., 1.]),
-            Point3D::from([0., 0., 1.]),
-            Point3D::from([5., 7., 1.]),
-            Point3D::from([2., 2., 3.]),
-            Point3D::from([0., 0., 3.]),
-            Point3D::from([5., 7., 3.]),
-        ];
-
-        let distances: Vec<_> = test_points
-            .iter()
-            .map(|p| mbr.distance_to_point(p))
-            .collect();
-
-        assert_relative_eq!(distances[0], 0.5);
-        assert_relative_eq!(distances[1], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[2], 1.);
-        assert_relative_eq!(distances[3], 0.5);
-        assert_relative_eq!(distances[4], 2_f64.sqrt() / 2.);
-        assert_relative_eq!(distances[5], 1.);
     }
 
     #[test]
