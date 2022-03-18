@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn small() {
         let w = [1, 2, 3, 4, 5, 6];
-        let mut part = vec![0 as usize; w.len()];
+        let mut part = vec![0; w.len()];
         let imb_ini = imbalance::imbalance(2, &part, &w);
         vn_best_mono::<u32>(&mut part, &w, 2);
         let imb_end = imbalance::imbalance(2, &part, &w);
@@ -140,7 +140,7 @@ mod tests {
         fn improve(
             (weights, mut partition) in
                 (2..2000usize).prop_flat_map(|num_weights| {
-                    (prop::collection::vec(0..1000_000u64, num_weights),
+                    (prop::collection::vec(0..1_000_000_u64, num_weights),
                         prop::collection::vec(0..1usize, num_weights))
                 })
         ) {

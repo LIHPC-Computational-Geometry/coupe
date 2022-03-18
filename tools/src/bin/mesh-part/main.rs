@@ -216,7 +216,7 @@ fn main() -> Result<()> {
                 }
             }
             for bc_coord in &mut barycentre {
-                *bc_coord = *bc_coord / nodes.len() as f64;
+                *bc_coord /= nodes.len() as f64;
             }
             Some(barycentre)
         })

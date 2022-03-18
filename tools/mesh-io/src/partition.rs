@@ -87,7 +87,7 @@ where
     let array = array.into_iter();
 
     write!(w, "MePe")?;
-    w.write(&u64::to_le_bytes(array.len() as u64))?;
+    w.write_all(&u64::to_le_bytes(array.len() as u64))?;
 
     for id in array {
         w.write_all(&u64::to_le_bytes(id as u64))?;

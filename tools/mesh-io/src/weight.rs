@@ -185,8 +185,7 @@ where
     write_weight(first)?;
     array
         .map(IntoIterator::into_iter)
-        .map(write_weight)
-        .collect::<Result<()>>()
+        .try_for_each(write_weight)
 }
 
 /// Wrapping `w` in a [`BufWriter`] is recommended.
