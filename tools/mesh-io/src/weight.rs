@@ -4,6 +4,7 @@
 //!
 //! Following is the [ABNF] definition of a weight file:
 //!
+//! ```abnf
 //!     file            = header version flags criterion-count weight-count weights
 //!     header          = %x4d %x65 %x57 %x65  ; "MeWe"
 //!     version         = %x01                 ; Version 1
@@ -11,6 +12,7 @@
 //!     criterion-count = U16                  ; Number of criteria
 //!     weight-count    = U64                  ; Number of weights
 //!     weights         = *U64 / *F64          ; criterion-count times weight-count weights
+//! ```
 //!
 //! Weights are laid out as weight-count arrays of criterion-count items.
 //!

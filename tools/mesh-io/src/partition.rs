@@ -4,10 +4,12 @@
 //!
 //! Following is the [ABNF] definition of a partition file:
 //!
+//! ```abnf
 //!     file     = header id-count ids
 //!     header   = %x4d %x65 %x50 %x65  ; "MePe"
 //!     id-count = U64                  ; Number of weights
 //!     ids      = *U64                 ; id-count weights
+//! ```
 //!
 //! `U64` is a little-endian 8-byte unsigned integer.
 //!
