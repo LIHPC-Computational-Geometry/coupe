@@ -529,14 +529,15 @@ where
         })
         .collect();
 
+    let thread_count = usize::min(items.len(), rayon::current_num_threads());
+
     let iteration_ctxs: Vec<_> = (0..usize::pow(2, iter_count as u32 + 1) - 1)
-        .map(|_| IterationState::new(rayon::current_num_threads()))
+        .map(|_| IterationState::new(thread_count))
         .collect();
 
     mem::drop(enter);
 
     rayon::in_place_scope(|s| {
-        let thread_count = rayon::current_num_threads();
         let items_per_thread = (items.len() + thread_count - 1) / thread_count;
 
         for chunk in items.chunks_mut(items_per_thread) {
