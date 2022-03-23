@@ -29,7 +29,7 @@
 //! - [Kernighan-Lin][KernighanLin]
 
 mod algorithms;
-pub mod geometry;
+mod geometry;
 pub mod imbalance;
 mod real;
 pub mod topology;
