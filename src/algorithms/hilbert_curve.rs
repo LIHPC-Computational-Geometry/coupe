@@ -12,6 +12,7 @@
 
 use crate::geometry::{Mbr, Point2D};
 use rayon::prelude::*;
+use std::fmt;
 
 fn hilbert_curve_partition(
     partition: &mut [usize],
@@ -20,10 +21,7 @@ fn hilbert_curve_partition(
     part_count: usize,
     order: usize,
 ) {
-    assert!(
-        order < 32,
-        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
-    );
+    debug_assert!(order < 32);
 
     let compute_hilbert_index = hilbert_index_computer(points, order);
     let mut permutation = (0..points.len()).into_par_iter().collect::<Vec<_>>();
@@ -72,15 +70,8 @@ pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usi
 /// First, the minimal bounding rectangle of the set of points is computed and local
 /// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
 /// Then the hilbert curve is computed from those local coordinates.
-pub(crate) fn hilbert_curve_reorder_permu(
-    points: &[Point2D],
-    permutation: &mut [usize],
-    order: usize,
-) {
-    assert!(
-        order < 32,
-        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
-    );
+fn hilbert_curve_reorder_permu(points: &[Point2D], permutation: &mut [usize], order: usize) {
+    debug_assert!(order < 32);
 
     let compute_hilbert_index = hilbert_index_computer(points, order);
 
@@ -113,17 +104,14 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn((f64, f64
 }
 
 fn encode(x: u32, y: u32, order: usize) -> u32 {
-    assert!(
-        order < 32,
-        "Cannot construct a Hilbert curve of order >= 32 because 2^32 would overflow u32 capacity."
-    );
-    assert!(
+    debug_assert!(order < 32);
+    debug_assert!(
         x < 2u32.pow(order as u32),
         "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
         (x, y),
         order,
     );
-    assert!(
+    debug_assert!(
         y < 2u32.pow(order as u32),
         "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
         (x, y),
@@ -174,13 +162,13 @@ fn interleave_bits(odd: u32, even: u32) -> u32 {
 
 // Compute a mapping from [a_min; a_max] to [b_min; b_max]
 fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn(f64) -> f64 {
-    assert!(
+    debug_assert!(
         a_min <= a_max,
         "Cannot construct a segment to segment mapping because a_max < a_min. a_min = {}, a_max = {}.",
         a_min,
         a_max,
     );
-    assert!(
+    debug_assert!(
         b_min <= b_max,
         "Cannot construct a segment to segment mapping because b_max < b_min. b_min = {}, b_max = {}.",
         b_min,
@@ -193,7 +181,7 @@ fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn
     let beta = b_min - a_min * alpha;
 
     move |x| {
-        assert!(
+        debug_assert!(
             a_min <= x && x <= a_max,
             "Called a mapping from [{}, {}] to [{}, {}] with the invalid value {}.",
             a_min,
@@ -205,6 +193,29 @@ fn segment_to_segment(a_min: f64, a_max: f64, b_min: f64, b_max: f64) -> impl Fn
         alpha * x + beta
     }
 }
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Error {
+    /// Invalid space filling curve order.
+    InvalidOrder { max: u32, actual: u32 },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidOrder { max, actual } => {
+                write!(
+                    f,
+                    "given hilbert curve order too high. Got {}, max={}.",
+                    actual, max
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 /// # Hilbert space-filling curve algorithm
 ///
@@ -255,13 +266,19 @@ where
     W: AsRef<[f64]>,
 {
     type Metadata = ();
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         (points, weights): (P, W),
     ) -> Result<Self::Metadata, Self::Error> {
+        if self.order >= 32 {
+            return Err(Error::InvalidOrder {
+                max: 31,
+                actual: self.order,
+            });
+        }
         hilbert_curve_partition(
             part_ids,
             points.as_ref(),

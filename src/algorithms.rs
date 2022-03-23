@@ -17,6 +17,7 @@ pub use ckk::CompleteKarmarkarKarp;
 pub use fiduccia_mattheyses::FiducciaMattheyses;
 pub use graph_growth::GraphGrowth;
 pub use greedy::Greedy;
+pub use hilbert_curve::Error as HilbertCurveError;
 pub use hilbert_curve::HilbertCurve;
 pub use k_means::KMeans;
 pub use kernighan_lin::KernighanLin;
