@@ -7,3 +7,12 @@
 .vscode/*
 *.iml
 .idea/*
+
+# mesh files
+*.vtk
+*.vtu
+*.mesh
+*.meshb
+*.part
+*.weight
+*.weights
