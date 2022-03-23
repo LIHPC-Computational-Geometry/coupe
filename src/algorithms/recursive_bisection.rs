@@ -145,6 +145,9 @@ async fn cancel_iterations<W>(iter_ctxs: &[IterationState<W>], iter_count: usize
     }
 }
 
+/// # Panics
+///
+/// This function panics if `items` is empty.
 #[tracing::instrument(skip(ctx, items), ret)]
 async fn compute_min_max<const D: usize, W>(
     ctx: &IterationState<W>,
@@ -163,7 +166,7 @@ where
         .map(|item| item.point[coord])
         .minmax()
         .into_option()
-        .unwrap(); // Won't panic because items has at least two elements.
+        .unwrap(); // Won't panic because items has at least one element.
 
     mem::drop(enter);
 
@@ -306,6 +309,9 @@ where
     (data, Some(res))
 }
 
+/// # Panics
+///
+/// This function panics if `items` is empty.
 #[tracing::instrument(skip(ctx, items), ret)]
 async fn item_split_idx<'p, const D: usize, W>(
     ctx: &IterationState<W>,
