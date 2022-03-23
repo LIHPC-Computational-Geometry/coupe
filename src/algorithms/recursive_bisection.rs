@@ -1,3 +1,4 @@
+use super::Error;
 use crate::geometry::Mbr;
 use crate::geometry::PointND;
 use async_lock::Mutex;
@@ -162,7 +163,7 @@ where
         .map(|item| item.point[coord])
         .minmax()
         .into_option()
-        .unwrap();
+        .unwrap(); // Won't panic because items has at least two elements.
 
     mem::drop(enter);
 
@@ -501,7 +502,12 @@ fn rcb_thread<const D: usize, W>(
     futures_lite::future::block_on(task);
 }
 
-fn rcb<const D: usize, P, W>(partition: &mut [usize], points: P, weights: W, iter_count: usize)
+fn rcb<const D: usize, P, W>(
+    partition: &mut [usize],
+    points: P,
+    weights: W,
+    iter_count: usize,
+) -> Result<(), Error>
 where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
@@ -514,8 +520,18 @@ where
     let points = points.into_par_iter();
     let weights = weights.into_par_iter();
 
-    assert_eq!(points.len(), weights.len());
-    assert_eq!(points.len(), partition.len());
+    if weights.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
+    if points.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: points.len(),
+        });
+    }
 
     let init_span = tracing::info_span!("convert input and make initial data structures");
     let enter = init_span.enter();
@@ -546,6 +562,8 @@ where
             s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, 0.05));
         }
     });
+
+    Ok(())
 }
 
 /// # Recursive Coordinate Bisection algorithm
@@ -602,15 +620,18 @@ where
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         (points, weights): (P, W),
     ) -> Result<Self::Metadata, Self::Error> {
-        rcb(part_ids, points, weights, self.iter_count);
-        Ok(())
+        if part_ids.len() < 2 {
+            // Would make Itertools::minmax().into_option() return None.
+            return Ok(());
+        }
+        rcb(part_ids, points, weights, self.iter_count)
     }
 }
 
@@ -647,7 +668,12 @@ pub fn axis_sort<const D: usize>(
 /// The global shape of the data is first considered and the separator is computed to
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
-fn rib<const D: usize, W>(partition: &mut [usize], points: &[PointND<D>], weights: W, n_iter: usize)
+fn rib<const D: usize, W>(
+    partition: &mut [usize],
+    points: &[PointND<D>],
+    weights: W,
+    n_iter: usize,
+) -> Result<(), Error>
 where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -658,15 +684,8 @@ where
     W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
-    let weights = weights.into_par_iter();
-
-    assert_eq!(points.len(), weights.len());
-    assert_eq!(points.len(), partition.len());
-
     let mbr = Mbr::from_points(points);
-
     let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
-
     // When the rotation is done, we just apply RCB
     rcb(partition, points, weights, n_iter)
 }
@@ -727,15 +746,14 @@ where
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         (points, weights): (&'a [PointND<D>], W),
     ) -> Result<Self::Metadata, Self::Error> {
-        rib(part_ids, points, weights, self.iter_count);
-        Ok(())
+        rib(part_ids, points, weights, self.iter_count)
     }
 }
 
@@ -795,7 +813,8 @@ mod tests {
             .num_threads(1) // make the test deterministic
             .build()
             .unwrap()
-            .install(|| rcb(&mut partition, points, weights, 2));
+            .install(|| rcb(&mut partition, points, weights, 2))
+            .unwrap();
 
         assert_eq!(partition[0], partition[6]);
         assert_eq!(partition[1], partition[7]);
@@ -825,7 +844,7 @@ mod tests {
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
 
         let mut partition = vec![0; points.len()];
-        rcb(&mut partition, points, weights.par_iter().cloned(), 3);
+        rcb(&mut partition, points, weights.par_iter().cloned(), 3).unwrap();
 
         let mut loads: HashMap<usize, f64> = HashMap::new();
         let mut sizes: HashMap<usize, usize> = HashMap::new();
