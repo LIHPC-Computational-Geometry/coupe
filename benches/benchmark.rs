@@ -1,7 +1,7 @@
 mod generator;
 
-use coupe::geometry::Point2D;
 use coupe::Partition as _;
+use coupe::Point2D;
 use criterion::{criterion_group, criterion_main};
 use criterion::{Criterion, Throughput};
 use rayon::prelude::*;

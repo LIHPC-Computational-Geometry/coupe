@@ -1,4 +1,4 @@
-use coupe::geometry::Point2D;
+use coupe::Point2D;
 use rand::{self, Rng};
 
 pub fn uniform_f64(min: f64, max: f64, num_vals: usize) -> Vec<f64> {
