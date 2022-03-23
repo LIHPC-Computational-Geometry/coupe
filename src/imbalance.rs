@@ -1,17 +1,16 @@
+use crate::PartId;
+use itertools::Itertools;
+use num::FromPrimitive;
+use num::ToPrimitive;
+use num::Zero;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Sub;
 
-use itertools::Itertools;
-
-use num::FromPrimitive;
-use num::ToPrimitive;
-use num::Zero;
-
 pub fn compute_parts_load<T: Zero + Clone + AddAssign>(
-    partition: &[usize],
-    num_parts: usize,
+    partition: &[PartId],
+    num_parts: PartId,
     weights: impl IntoIterator<Item = T>,
 ) -> Vec<T> {
     debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
@@ -25,7 +24,7 @@ pub fn compute_parts_load<T: Zero + Clone + AddAssign>(
 }
 
 /// Compute the imbalance of the given partition.
-pub fn imbalance<T>(num_parts: usize, partition: &[usize], weights: &[T]) -> f64
+pub fn imbalance<T>(num_parts: usize, partition: &[PartId], weights: &[T]) -> f64
 where
     T: Clone
         + FromPrimitive
@@ -63,7 +62,7 @@ where
 
 pub fn imbalance_target<T: Zero + Sum + Clone + AddAssign + Sub<Output = T> + PartialOrd + Copy>(
     targets: &[T],
-    partition: &[usize],
+    partition: &[PartId],
     weights: impl IntoIterator<Item = T>,
 ) -> T {
     let num_parts = targets.len();
@@ -80,7 +79,7 @@ pub fn imbalance_target<T: Zero + Sum + Clone + AddAssign + Sub<Output = T> + Pa
 
 pub fn max_imbalance<T: Zero + Clone + Copy + AddAssign + Sum + PartialOrd + Sub<Output = T>>(
     num_parts: usize,
-    partition: &[usize],
+    partition: &[PartId],
     weights: impl IntoIterator<Item = T>,
 ) -> T {
     compute_parts_load(partition, num_parts, weights)

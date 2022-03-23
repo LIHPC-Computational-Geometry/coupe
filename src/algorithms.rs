@@ -1,3 +1,4 @@
+use crate::PartId;
 use std::fmt;
 
 mod ckk;
@@ -69,7 +70,7 @@ impl std::error::Error for Error {}
 /// ```
 pub struct Random<R> {
     pub rng: R,
-    pub part_count: usize,
+    pub part_count: PartId,
 }
 
 impl<R> crate::Partition<()> for Random<R>
@@ -79,7 +80,7 @@ where
     type Metadata = ();
     type Error = std::convert::Infallible;
 
-    fn partition(&mut self, part_ids: &mut [usize], _: ()) -> Result<Self::Metadata, Self::Error> {
+    fn partition(&mut self, part_ids: &mut [PartId], _: ()) -> Result<Self::Metadata, Self::Error> {
         for part_id in part_ids {
             *part_id = self.rng.gen_range(0..self.part_count);
         }

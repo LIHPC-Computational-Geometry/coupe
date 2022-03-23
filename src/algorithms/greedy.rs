@@ -1,10 +1,11 @@
 use super::Error;
+use crate::PartId;
 use num::Zero;
 use std::ops::AddAssign;
 
 /// Implementation of the greedy algorithm.
 fn greedy<T: Ord + Zero + Clone + AddAssign>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     weights: impl IntoIterator<Item = T>,
     part_count: usize,
 ) -> Result<(), Error> {
@@ -36,7 +37,7 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
             .enumerate()
             .min_by_key(|(_idx, part_weight)| *part_weight)
             .unwrap(); // Will not panic because !part_weights.is_empty()
-        partition[weight_id] = min_part_weight_idx;
+        partition[weight_id] = min_part_weight_idx as PartId;
         part_weights[min_part_weight_idx] += weight;
     }
 
@@ -72,7 +73,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
         greedy(part_ids, weights, self.part_count)

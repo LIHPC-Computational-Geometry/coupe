@@ -1,8 +1,9 @@
+use crate::PartId;
 use rand::seq::SliceRandom;
 use sprs::CsMatView;
 
 fn graph_growth(
-    initial_ids: &mut [usize],
+    initial_ids: &mut [PartId],
     weights: &[f64],
     adjacency: CsMatView<f64>,
     num_parts: usize,
@@ -124,7 +125,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (adjacency, weights): (CsMatView<f64>, W),
     ) -> Result<Self::Metadata, Self::Error> {
         graph_growth(

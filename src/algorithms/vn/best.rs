@@ -1,4 +1,5 @@
 use crate::imbalance::compute_parts_load;
+use crate::PartId;
 use itertools::Itertools;
 use num::One;
 use num::Zero;
@@ -7,7 +8,7 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 
-fn vn_best_mono<W, T>(partition: &mut [usize], criterion: W, nb_parts: usize) -> usize
+fn vn_best_mono<W, T>(partition: &mut [PartId], criterion: W, nb_parts: usize) -> usize
 where
     W: IntoIterator<Item = T>,
     T: AddAssign + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
@@ -158,7 +159,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
         let algo_iterations = vn_best_mono(part_ids, weights, self.part_count);

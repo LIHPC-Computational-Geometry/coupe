@@ -5,9 +5,9 @@
 //! It improves over RCB by following the same idea but by creating more than two subparts
 //! in each iteration which leads to decreasing recursion depth.
 
-use approx::Ulps;
-
 use crate::geometry::*;
+use crate::PartId;
+use approx::Ulps;
 use rayon::prelude::*;
 
 use std::sync::atomic::{self, AtomicPtr};
@@ -146,7 +146,7 @@ fn compute_modifiers(
 }
 
 fn multi_jagged<const D: usize>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: &[PointND<D>],
     weights: &[f64],
     num_parts: usize,
@@ -157,7 +157,7 @@ fn multi_jagged<const D: usize>(
 }
 
 fn multi_jagged_with_scheme<const D: usize>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: &[PointND<D>],
     weights: &[f64],
     partition_scheme: PartitionScheme,
@@ -178,7 +178,7 @@ fn multi_jagged_with_scheme<const D: usize>(
 fn multi_jagged_recurse<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
-    permutation: &mut [usize],
+    permutation: &mut [PartId],
     partition: &AtomicPtr<usize>,
     current_coord: usize,
     partition_scheme: PartitionScheme,
@@ -221,7 +221,7 @@ fn multi_jagged_recurse<const D: usize>(
 // This is pub(crate) because it's also used in the hilbert_curve module
 pub(crate) fn compute_split_positions(
     weights: &[f64],
-    permutation: &[usize],
+    permutation: &[PartId],
     num_splits: usize,
     modifiers: &[f64],
 ) -> Vec<usize> {
@@ -380,7 +380,7 @@ impl<'a, const D: usize> crate::Partition<(&'a [PointND<D>], &'a [f64])> for Mul
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (points, weights): (&'a [PointND<D>], &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         multi_jagged(part_ids, points, weights, self.part_count, self.max_iter);

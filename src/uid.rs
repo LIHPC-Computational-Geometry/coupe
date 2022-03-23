@@ -1,9 +1,9 @@
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
-static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-pub fn uid() -> usize {
+pub fn uid() -> crate::PartId {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
@@ -17,7 +17,7 @@ mod tests {
 
         const NUM_UIDS: usize = 10000;
 
-        let mut uids: Vec<usize> = rayon::iter::repeatn((), NUM_UIDS).map(|_| uid()).collect();
+        let mut uids: Vec<_> = rayon::iter::repeatn((), NUM_UIDS).map(|_| uid()).collect();
 
         uids.sort_unstable();
         uids.dedup();

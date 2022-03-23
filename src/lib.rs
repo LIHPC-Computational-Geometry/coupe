@@ -40,6 +40,8 @@ pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::real::Real;
 pub use crate::uid::uid;
 
+type PartId = u32;
+
 /// The `Partition` trait allows for partitioning data.
 ///
 /// Partitioning algorithms implement this trait.
@@ -58,6 +60,9 @@ pub trait Partition<M> {
 
     /// Partition the given data and output the part ID of each element in
     /// `part_ids`.
-    fn partition(&mut self, part_ids: &mut [usize], data: M)
-        -> Result<Self::Metadata, Self::Error>;
+    fn partition(
+        &mut self,
+        part_ids: &mut [PartId],
+        data: M,
+    ) -> Result<Self::Metadata, Self::Error>;
 }

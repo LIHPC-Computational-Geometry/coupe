@@ -1,10 +1,11 @@
+use crate::PartId;
 use itertools::Itertools;
 use sprs::CsMatView;
 
 use std::collections::HashMap;
 
 fn fiduccia_mattheyses(
-    part_ids: &mut [usize],
+    part_ids: &mut [PartId],
     weights: &[f64],
     adjacency: CsMatView<f64>,
     max_passes: impl Into<Option<usize>>,
@@ -28,7 +29,7 @@ fn fiduccia_mattheyses(
 }
 
 fn fiduccia_mattheyses_impl(
-    initial_partition: &mut [usize],
+    initial_partition: &mut [PartId],
     weights: &[f64],
     adjacency: CsMatView<f64>,
     max_passes: Option<usize>,
@@ -43,7 +44,7 @@ fn fiduccia_mattheyses_impl(
         .collect::<Vec<_>>();
 
     // store weights of each part to update imbalance easily
-    let mut parts_weights: HashMap<usize, f64> = unique_ids
+    let mut parts_weights: HashMap<PartId, f64> = unique_ids
         .iter()
         .cloned()
         .map(|id| {
@@ -101,7 +102,7 @@ fn fiduccia_mattheyses_impl(
         //
         // note that the current part in wich a node is is still considered as a potential target part
         // with a gain 0.
-        let mut gains: Vec<Vec<(usize, f64)>> = (0..initial_partition.len())
+        let mut gains: Vec<Vec<(PartId, f64)>> = (0..initial_partition.len())
             .map(|_idx| unique_ids.iter().cloned().map(|id2| (id2, 0.)).collect())
             .collect();
 
@@ -337,7 +338,7 @@ impl<'a> crate::Partition<(CsMatView<'a, f64>, &'a [f64])> for FiducciaMattheyse
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (adjacency, weights): (CsMatView<f64>, &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         fiduccia_mattheyses(

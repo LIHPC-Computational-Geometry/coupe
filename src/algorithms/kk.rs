@@ -1,16 +1,16 @@
 use super::Error;
+use crate::PartId;
+use num::Zero;
 use std::collections::BinaryHeap;
 use std::ops::Sub;
 use std::ops::SubAssign;
-
-use num::Zero;
 
 /// Implementation of the Karmarkar-Karp algorithm (bi-partitioning case).
 ///
 /// # Differences with the k-partitioning implementation
 ///
 /// This function has better performance than [kk] called with `num_parts == 2`.
-fn kk_bipart<T>(partition: &mut [usize], weights: impl Iterator<Item = T>)
+fn kk_bipart<T>(partition: &mut [PartId], weights: impl Iterator<Item = T>)
 where
     T: Ord + Sub<Output = T>,
 {
@@ -48,7 +48,7 @@ where
 }
 
 /// Implementation of the Karmarkar-Karp algorithm
-fn kk<T, I>(partition: &mut [usize], weights: I, num_parts: usize)
+fn kk<T, I>(partition: &mut [PartId], weights: I, num_parts: usize)
 where
     T: Zero + Ord + Sub<Output = T> + SubAssign + Copy,
     I: Iterator<Item = T> + ExactSizeIterator,
@@ -101,11 +101,11 @@ where
     // Backtracking. Same as the bi-partitioning case.
 
     // parts = [ [m0i] for m0i in m[0] ]
-    let mut parts: Vec<usize> = vec![0; num_parts * weight_count];
+    let mut parts = vec![0; num_parts * weight_count];
     let imbalance = m.pop().unwrap(); // first and last element of "m".
     for (i, w) in imbalance.into_iter().enumerate() {
         // Put each remaining element in a different part.
-        parts[w.1] = i;
+        parts[w.1] = i as PartId;
     }
     for tuples in opposites.into_iter().rev() {
         for (a, b) in tuples {
@@ -146,7 +146,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
         if self.part_count < 2 || part_ids.len() < 2 {

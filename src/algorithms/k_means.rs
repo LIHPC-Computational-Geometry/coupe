@@ -4,6 +4,7 @@
 
 use crate::geometry::Mbr;
 use crate::geometry::{self, PointND};
+use crate::PartId;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -80,7 +81,7 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     settings: impl Into<Option<BalancedKmeansSettings>>,
-    initial_partition: &mut [usize],
+    initial_partition: &mut [PartId],
 ) where
     Const<D>: DimSub<Const<1>>,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -161,7 +162,7 @@ struct Clusters<T, U> {
 }
 
 struct AlgorithmState<'a> {
-    assignments: &'a mut [usize],
+    assignments: &'a mut [PartId],
     influences: &'a mut [f64],
     lbs: &'a mut [f64],
     ubs: &'a mut [f64],
@@ -175,7 +176,7 @@ struct AlgorithmState<'a> {
 fn balanced_k_means_iter<const D: usize>(
     inputs: Inputs<D>,
     clusters: Clusters<Vec<PointND<D>>, &[ClusterId]>,
-    permutation: &mut [usize],
+    permutation: &mut [PartId],
     state: AlgorithmState,
     settings: &BalancedKmeansSettings,
     current_iter: usize,
@@ -294,7 +295,7 @@ fn balanced_k_means_iter<const D: usize>(
 fn assign_and_balance<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
-    permutation: &mut [usize],
+    permutation: &mut [PartId],
     state: AlgorithmState,
     clusters: Clusters<&[PointND<D>], &[ClusterId]>,
     settings: &BalancedKmeansSettings,
@@ -602,7 +603,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (points, weights): (&'a [PointND<D>], &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         let settings = BalancedKmeansSettings {

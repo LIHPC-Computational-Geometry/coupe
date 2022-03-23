@@ -11,11 +11,12 @@
 //! The complexity of encoding a point is O(order)
 
 use crate::geometry::{Mbr, Point2D};
+use crate::PartId;
 use rayon::prelude::*;
 use std::fmt;
 
 fn hilbert_curve_partition(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: &[Point2D],
     weights: &[f64],
     part_count: usize,
@@ -270,7 +271,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (points, weights): (P, W),
     ) -> Result<Self::Metadata, Self::Error> {
         if self.order >= 32 {

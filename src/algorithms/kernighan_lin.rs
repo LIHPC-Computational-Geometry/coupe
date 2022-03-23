@@ -3,11 +3,12 @@
 //! At each iteration, two nodes of different partition will be swapped, decreasing the overall cutsize
 //! of the partition. The swap is performed in such a way that the added partition imbalanced is controlled.
 
+use crate::PartId;
 use itertools::Itertools;
 use sprs::CsMatView;
 
 fn kernighan_lin(
-    part_ids: &mut [usize],
+    part_ids: &mut [PartId],
     weights: &[f64],
     adjacency: CsMatView<f64>,
     max_passes: Option<usize>,
@@ -32,7 +33,7 @@ fn kernighan_lin(
 }
 
 fn kernighan_lin_2_impl(
-    initial_partition: &mut [usize],
+    initial_partition: &mut [PartId],
     weights: &[f64],
     adjacency: CsMatView<f64>,
     max_passes: Option<usize>,
@@ -264,7 +265,7 @@ impl<'a> crate::Partition<(CsMatView<'a, f64>, &'a [f64])> for KernighanLin {
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (adjacency, weights): (CsMatView<f64>, &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         kernighan_lin(

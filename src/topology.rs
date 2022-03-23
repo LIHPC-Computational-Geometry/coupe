@@ -1,5 +1,6 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
+use crate::PartId;
 use sprs::{CsMat, CsMatView, TriMat};
 
 /// Computes the cutsize of a partition.
@@ -20,7 +21,7 @@ use sprs::{CsMat, CsMatView, TriMat};
 ///    1*  ┆╲ ╱            
 ///          * 0
 /// ```
-pub fn cut_size(adjacency: CsMatView<f64>, partition: &[usize]) -> f64 {
+pub fn cut_size(adjacency: CsMatView<f64>, partition: &[PartId]) -> f64 {
     let mut cut_size = 0.;
     for (i, row) in adjacency.outer_iterator().enumerate() {
         for (j, w) in row.iter() {

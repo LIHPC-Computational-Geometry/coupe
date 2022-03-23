@@ -1,4 +1,5 @@
 use super::Error;
+use crate::PartId;
 use num::FromPrimitive;
 use num::ToPrimitive;
 use std::iter::Sum;
@@ -27,7 +28,7 @@ struct Step {
     separate: bool,
 }
 
-fn ckk_bipart_build(partition: &mut [usize], last_weight: usize, steps: &[Step]) {
+fn ckk_bipart_build(partition: &mut [PartId], last_weight: usize, steps: &[Step]) {
     partition[last_weight] = 0;
     for Step { a, b, separate } in steps.iter().rev() {
         if *separate {
@@ -39,7 +40,7 @@ fn ckk_bipart_build(partition: &mut [usize], last_weight: usize, steps: &[Step])
 }
 
 fn ckk_bipart_rec<T>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     weights: &mut Vec<(T, usize)>,
     tolerance: T,
     steps: &mut Vec<Step>,
@@ -93,7 +94,7 @@ where
     false
 }
 
-fn ckk_bipart<I, T>(partition: &mut [usize], weights: I, tolerance: f64) -> Result<(), Error>
+fn ckk_bipart<I, T>(partition: &mut [PartId], weights: I, tolerance: f64) -> Result<(), Error>
 where
     I: IntoIterator<Item = T>,
     T: Sum + Add<Output = T> + Sub<Output = T>,
@@ -154,7 +155,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
         ckk_bipart(part_ids, weights, self.tolerance)

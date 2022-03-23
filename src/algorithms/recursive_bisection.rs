@@ -1,6 +1,7 @@
 use super::Error;
 use crate::geometry::Mbr;
 use crate::geometry::PointND;
+use crate::PartId;
 use async_lock::Mutex;
 use async_lock::MutexGuard;
 use itertools::Itertools as _;
@@ -503,7 +504,7 @@ fn rcb_thread<const D: usize, W>(
 }
 
 fn rcb<const D: usize, P, W>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: P,
     weights: W,
     iter_count: usize,
@@ -624,7 +625,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (points, weights): (P, W),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.len() < 2 {
@@ -638,7 +639,7 @@ where
 // pub because it is also useful for multijagged and required for benchmarks
 pub fn axis_sort<const D: usize>(
     points: &[PointND<D>],
-    permutation: &mut [usize],
+    permutation: &mut [PartId],
     current_coord: usize,
 ) {
     permutation.par_sort_by(|i1, i2| {
@@ -669,7 +670,7 @@ pub fn axis_sort<const D: usize>(
 /// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
 /// partitions.
 fn rib<const D: usize, W>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: &[PointND<D>],
     weights: W,
     n_iter: usize,
@@ -750,7 +751,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         (points, weights): (&'a [PointND<D>], W),
     ) -> Result<Self::Metadata, Self::Error> {
         rib(part_ids, points, weights, self.iter_count)

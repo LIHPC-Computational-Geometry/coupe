@@ -19,6 +19,7 @@
 use super::multi_jagged::split_at_mut_many;
 use crate::geometry::{Mbr, PointND};
 
+use crate::PartId;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -38,7 +39,7 @@ type HashType = u128;
 const HASH_TYPE_MAX: HashType = std::u128::MAX;
 
 fn z_curve_partition<const D: usize>(
-    partition: &mut [usize],
+    partition: &mut [PartId],
     points: &[PointND<D>],
     part_count: usize,
     order: u32,
@@ -81,7 +82,7 @@ fn z_curve_partition<const D: usize>(
         .for_each(|(id, chunk)| {
             let ptr = atomic_handle.load(atomic::Ordering::Relaxed);
             for idx in chunk {
-                unsafe { std::ptr::write(ptr.add(*idx), id) }
+                unsafe { std::ptr::write(ptr.add(*idx), id as PartId) }
             }
         });
 }
@@ -235,7 +236,7 @@ where
 
     fn partition(
         &mut self,
-        part_ids: &mut [usize],
+        part_ids: &mut [PartId],
         points: &'a [PointND<D>],
     ) -> Result<Self::Metadata, Self::Error> {
         z_curve_partition(part_ids, points, self.part_count, self.order);
