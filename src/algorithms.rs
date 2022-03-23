@@ -26,6 +26,7 @@ pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::Rib;
 pub use vn::VnBest;
+pub use vn::VnFirst;
 pub use z_curve::ZCurve;
 
 /// Common errors thrown by algorithms.

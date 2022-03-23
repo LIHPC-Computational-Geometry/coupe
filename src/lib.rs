@@ -25,6 +25,7 @@
 //! - [K-means][KMeans]
 //! - Number partitioning:
 //!   + [VN-Best][VnBest]
+//!   + [VN-First][VnFirst]
 //! - [Fiduccia-Mattheyses][FiducciaMattheyses]
 //! - [Kernighan-Lin][KernighanLin]
 
