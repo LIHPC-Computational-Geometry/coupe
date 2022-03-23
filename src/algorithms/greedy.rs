@@ -1,3 +1,4 @@
+use super::Error;
 use num::Zero;
 use std::ops::AddAssign;
 
@@ -5,10 +6,11 @@ use std::ops::AddAssign;
 fn greedy<T: Ord + Zero + Clone + AddAssign>(
     partition: &mut [usize],
     weights: impl IntoIterator<Item = T>,
-    num_parts: usize,
-) {
-    if num_parts < 2 {
-        return;
+    part_count: usize,
+) -> Result<(), Error> {
+    if part_count < 2 {
+        partition.fill(0);
+        return Ok(());
     }
 
     // Initialization: make the partition and record the weight of each part in another vector.
@@ -16,9 +18,16 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
         .into_iter()
         .zip(0..) // Keep track of the weights' indicies
         .collect();
-    assert_eq!(partition.len(), weights.len());
+
+    if weights.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
+
     weights.sort_unstable();
-    let mut part_weights = vec![T::zero(); num_parts];
+    let mut part_weights = vec![T::zero(); part_count];
 
     // Put each weight in the lightweightest part.
     for (weight, weight_id) in weights.into_iter().rev() {
@@ -26,10 +35,12 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
             .iter()
             .enumerate()
             .min_by_key(|(_idx, part_weight)| *part_weight)
-            .unwrap();
+            .unwrap(); // Will not panic because !part_weights.is_empty()
         partition[weight_id] = min_part_weight_idx;
         part_weights[min_part_weight_idx] += weight;
     }
+
+    Ok(())
 }
 
 /// Greedily assign weights to each part.
@@ -57,14 +68,13 @@ where
     W::Item: Ord + Zero + Clone + AddAssign,
 {
     type Metadata = ();
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
-        greedy(part_ids, weights, self.part_count);
-        Ok(())
+        greedy(part_ids, weights, self.part_count)
     }
 }
