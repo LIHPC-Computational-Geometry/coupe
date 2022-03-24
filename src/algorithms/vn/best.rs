@@ -120,10 +120,10 @@ where
     algo_iterations
 }
 
-/// Greedy Vector-of-Numbers algorithms.
+/// # Steepest descent Vector-of-Numbers algorithm
 ///
 /// This algorithm greedily moves weights from parts to parts in such a way that
-/// the imbalance gain is maximized on each step.
+/// the balance gain is maximized on each step.
 ///
 /// # Example
 ///
@@ -142,6 +142,12 @@ where
 ///     .partition(&mut partition, weights)
 ///     .unwrap();
 /// ```
+///
+/// # Reference
+///
+/// Remi Barat. Load Balancing of Multi-physics Simulation by Multi-criteria
+/// Graph Partitioning. Other [cs.OH]. Université de Bordeaux, 2017. English.
+/// NNT : 2017BORD0961. tel-01713977
 pub struct VnBest {
     pub part_count: usize,
 }
