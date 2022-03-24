@@ -124,7 +124,14 @@ where
     }
 }
 
-/// The exact variant of the [Karmarkar-Karp][crate::KarmarkarKarp] algorithm.
+/// # Complete Karmarkar-Karp algorithm
+///
+/// Extension of the
+/// [Karmarkar-Karp number partitioning algorithm][crate::KarmarkarKarp] that
+/// explores all possible solutions until the `tolerance` constraint is
+/// respected.
+///
+/// This algorithm is currently implemented in the bi-partitioning case only.
 ///
 /// # Example
 ///
@@ -138,7 +145,14 @@ where
 ///     .partition(&mut partition, weights)
 ///     .unwrap();
 /// ```
+///
+/// # Reference
+///
+/// Korf, Richard E., 1998. A complete anytime algorithm for number
+/// partitioning. *Artificial Intelligence*, 106(2):181 – 203.
+/// <doi:10.1016/S0004-3702(98)00086-1>.
 pub struct CompleteKarmarkarKarp {
+    /// Constraint on the normalized imbalance between the two parts.
     pub tolerance: f64,
 }
 
