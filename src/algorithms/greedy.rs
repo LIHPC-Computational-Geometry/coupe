@@ -43,6 +43,8 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
     Ok(())
 }
 
+/// # Greedy number partitioning algorithm
+///
 /// Greedily assign weights to each part.
 ///
 /// # Example
@@ -58,6 +60,12 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
 ///     .partition(&mut partition, weights)
 ///     .unwrap();
 /// ```
+///
+/// # Reference
+///
+/// Horowitz, Ellis and Sahni, Sartaj, 1974. Computing partitions with
+/// applications to the knapsack problem. *J. ACM*, 21(2):277–292.
+/// <doi:10.1145/321812.321823>.
 pub struct Greedy {
     pub part_count: usize,
 }
