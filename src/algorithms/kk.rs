@@ -47,7 +47,7 @@ where
     }
 }
 
-/// Implementation of the Karmarkar-Karp algorithm
+/// Implementation of the Karmarkar-Karp algorithm (general case).
 fn kk<T, I>(partition: &mut [usize], weights: I, num_parts: usize)
 where
     T: Zero + Ord + Sub<Output = T> + SubAssign + Copy,
@@ -117,7 +117,13 @@ where
     partition.copy_from_slice(&parts);
 }
 
-/// The Karmarkar-Karp algorithm, also called the Largest Differencing Method.
+/// # Karmarkar-Karp algorithm
+///
+/// Also called the Largest Differencing Method.
+///
+/// Similar to the [greedy number partitioning algorithm][crate::Greedy], but
+/// instead of puting the highest weight in the lowest part, it puts the two
+/// highest weights in two different parts and keep their difference.
 ///
 /// # Example
 ///
@@ -131,6 +137,11 @@ where
 ///     .partition(&mut partition, weights)
 ///     .unwrap();
 /// ```
+///
+/// # Reference
+///
+/// Karmarkar, Narenda and Karp, Richard M., 1983. The differencing method of
+/// set partitioning. Technical report, Berkeley, CA, USA.
 pub struct KarmarkarKarp {
     pub part_count: usize,
 }
