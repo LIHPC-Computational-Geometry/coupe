@@ -510,7 +510,7 @@ mod tests {
         // check that first column is parallel to el
         let unit_el = el / el.norm();
         let fst_col = mat.column(0).clone_owned();
-        assert_relative_eq!(unit_el * unit_el.dot(&fst_col), fst_col);
+        assert_relative_eq!(unit_el * unit_el.dot(&fst_col), fst_col, epsilon = 1e-14);
     }
 
     #[test]
