@@ -570,11 +570,14 @@ where
 ///
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
 ///
-/// This is the most simple and straightforward geometric algorithm. It operates as follows for a N-dimensional set of points:
+/// This is the most simple and straightforward geometric algorithm. It operates
+/// as follows for a N-dimensional set of points:
 ///
-/// At each iteration, select a vector `n` of the canonical basis `(e_0, ..., e_{n-1})`. Then, split the set of points with an hyperplane orthogonal
-/// to `n`, such that the two parts of the splits are evenly weighted. Finally, recurse by reapplying the algorithm to the two parts with an other
-/// normal vector selection.
+/// At each iteration, select a vector `n` of the canonical basis
+/// `(e_0, ..., e_{n-1})`. Then, split the set of points with an hyperplane
+/// orthogonal to `n`, such that the two parts of the splits are evenly
+/// weighted. Finally, recurse by reapplying the algorithm to the two parts with
+/// an other normal vector selection.
 ///
 /// # Example
 ///
@@ -591,11 +594,12 @@ where
 /// let weights = [1; 4];
 /// let mut partition = [0; 4];
 ///
-/// // generate a partition of 4 parts
+/// // Generate a partition of 4 parts (2 splits).
 /// coupe::Rcb { iter_count: 2 }
 ///     .partition(&mut partition, (points, weights))
 ///     .unwrap();
 ///
+/// // All points are in different parts.
 /// for i in 0..4 {
 ///     for j in 0..4 {
 ///         if j == i {
@@ -605,7 +609,15 @@ where
 ///     }
 /// }
 /// ```
+///
+/// # Reference
+///
+/// Berger, M. J. and Bokhari, S. H., 1987. A partitioning strategy for
+/// nonuniform problems on multiprocessors. *IEEE Transactions on Computers*,
+/// C-36(5):570–580. <doi:10.1109/TC.1987.1676942>.
 pub struct Rcb {
+    /// The number of iterations of the algorithm. This will yield a partition
+    /// of at most `2^num_iter` parts.
     pub iter_count: usize,
 }
 
@@ -650,24 +662,6 @@ pub fn axis_sort<const D: usize>(
     })
 }
 
-/// # Recursive Inertia Bisection algorithm
-/// Partitions a mesh based on the nodes coordinates and coresponding weights.
-/// ## Inputs
-/// - `ids`: global identifiers of the objects to partition
-/// - `weights`: weights corsponding to a cost relative to the objects
-/// - `coordinates`: the 2D coordinates of the objects to partition
-///
-/// ## Output
-/// A Vec of couples `(usize, ProcessUniqueId)`
-///
-/// the first component of each couple is the id of an object and
-/// the second component is the id of the partition to which that object was assigned
-///
-/// The main difference with the RCB algorithm is that, in RCB, points are split
-/// with a separator which is parallel to either the x axis or the y axis. With RIB,
-/// The global shape of the data is first considered and the separator is computed to
-/// be parallel to the inertia axis of the global shape, which aims to lead to better shaped
-/// partitions.
 fn rib<const D: usize, W>(
     partition: &mut [usize],
     points: &[PointND<D>],
@@ -692,11 +686,12 @@ where
 
 /// # Recursive Inertial Bisection algorithm
 ///
-/// Partitions a mesh based on the nodes coordinates and coresponding weights
+/// Partitions a mesh based on the nodes coordinates and coresponding weights.
 ///
-/// This is a variant of the [`Rcb`](struct.Rcb.html) algorithm, where a basis change is performed beforehand so that
-/// the first coordinate of the new basis is colinear to the inertia axis of the set of points. This has the goal
-/// of producing better shaped partition than [Rcb](struct.Rcb.html).
+/// A variant of the [Recursive Coordinate Bisection algorithm][crate::Rcb]
+/// where a basis change is performed beforehand so that the first coordinate of
+/// the new basis is colinear to the inertia axis of the set of points. This has
+/// the goal of producing better shaped partition than [RCB][crate::Rcb].
 ///
 /// # Example
 ///
@@ -715,22 +710,29 @@ where
 /// let weights = [1; 4];
 /// let mut partition = [0; 4];
 ///
-/// // generate a partition of 2 parts (1 split)
+/// // Generate a partition of 2 parts (1 split).
 /// coupe::Rib { iter_count: 1 }
 ///     .partition(&mut partition, (&points, weights))
 ///     .unwrap();
 ///
-/// // the two points at the top are in the same part
+/// // The two points at the top are in the same part.
 /// assert_eq!(partition[0], partition[1]);
 ///
-/// // the two points at the bottom are in the same part
+/// // The two points at the bottom are in the same part.
 /// assert_eq!(partition[2], partition[3]);
 ///
-/// // there are two different parts
+/// // There are two different parts.
 /// assert_ne!(partition[1], partition[2]);
 /// ```
+///
+/// # Reference
+///
+/// Williams, Roy D., 1991. Performance of dynamic load balancing algorithms for
+/// unstructured mesh calculations. *Concurrency: Practice and Experience*,
+/// 3(5):457–481. <doi:10.1002/cpe.4330030502>.
 pub struct Rib {
-    /// The number of iterations of the algorithm. This will yield a partition of `2^num_iter` parts.
+    /// The number of iterations of the algorithm. This will yield a partition
+    /// of at most `2^num_iter` parts.
     pub iter_count: usize,
 }
 
