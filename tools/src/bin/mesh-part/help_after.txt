@@ -30,7 +30,10 @@ ALGORITHMS
     These algorithms improve a partition by only taking weights into account.
 
         vn-best,PART_COUNT
-            VN Best (coupe)
+            Steepest descent Vector of Numbers algorithm (coupe)
+
+        vn-first,PART_COUNT
+            Descent Vector of Numbers algorithm (coupe)
 
     Geometric partitioning algorithms:
     These algorithms create partitions by taking weights and coordinates into

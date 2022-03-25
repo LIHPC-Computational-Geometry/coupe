@@ -99,6 +99,23 @@ impl<const D: usize> Algorithm<D> for coupe::VnBest {
     }
 }
 
+impl<const D: usize> Algorithm<D> for coupe::VnFirst {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights: Vec<_> = is.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, &weights)?;
+            }
+            Floats(fs) => {
+                let weights: Vec<_> = fs.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, &weights)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<const D: usize> Algorithm<D> for coupe::Rcb {
     fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
         use weight::Array::*;
@@ -185,6 +202,9 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             tolerance: require(parse(args.next()))?,
         }),
         "vn-best" => Box::new(coupe::VnBest {
+            part_count: require(parse(args.next()))?,
+        }),
+        "vn-first" => Box::new(coupe::VnFirst {
             part_count: require(parse(args.next()))?,
         }),
         "rcb" => Box::new(coupe::Rcb {
