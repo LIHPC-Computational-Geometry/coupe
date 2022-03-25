@@ -162,6 +162,7 @@ dependencies = [
  "rand",
  "rand_pcg",
  "rayon",
+ "sprs",
  "tracing-chrome",
  "tracing-subscriber",
  "tracing-tree",
