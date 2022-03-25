@@ -6,6 +6,7 @@ use mesh_io::medit::Mesh;
 use mesh_io::weight;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
+use std::any;
 use std::env;
 use std::fs;
 use std::io;
@@ -48,6 +49,23 @@ impl<const D: usize> Algorithm<D> for coupe::Greedy {
 }
 
 impl<const D: usize> Algorithm<D> for coupe::KarmarkarKarp {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights = is.iter().map(|weight| weight[0]);
+                self.partition(partition, weights)?;
+            }
+            Floats(fs) => {
+                let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                self.partition(partition, weights)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<const D: usize> Algorithm<D> for coupe::CompleteKarmarkarKarp {
     fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
         use weight::Array::*;
         match &problem.weights {
@@ -127,15 +145,19 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
         Ok(maybe_arg.transpose()?.unwrap_or(default))
     }
 
-    fn required<T>(maybe_arg: Option<Result<T>>) -> Result<T> {
+    fn require<T>(maybe_arg: Option<Result<T>>) -> Result<T> {
         maybe_arg.context("not enough arguments")?
     }
 
-    fn usize_arg(arg: Option<&str>) -> Option<Result<usize>> {
+    fn parse<T>(arg: Option<&str>) -> Option<Result<T>>
+    where
+        T: std::str::FromStr + any::Any,
+        T::Err: std::error::Error + Send + Sync + 'static,
+    {
         arg.map(|arg| {
-            let f = arg
-                .parse::<usize>()
-                .with_context(|| format!("arg {:?} is not a valid positive integer", arg))?;
+            let f = arg.parse::<T>().with_context(|| {
+                format!("arg {:?} is not a valid {}", arg, any::type_name::<T>())
+            })?;
             Ok(f)
         })
     }
@@ -144,7 +166,7 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
         "random" => {
             use rand::SeedableRng as _;
 
-            let part_count = required(usize_arg(args.next()))?;
+            let part_count = require(parse(args.next()))?;
             let seed: [u8; 32] = {
                 let mut bytes = args.next().unwrap_or("").as_bytes().to_vec();
                 bytes.resize(32_usize, 0_u8);
@@ -154,20 +176,23 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             Box::new(coupe::Random { rng, part_count })
         }
         "greedy" => Box::new(coupe::Greedy {
-            part_count: required(usize_arg(args.next()))?,
+            part_count: require(parse(args.next()))?,
         }),
         "kk" => Box::new(coupe::KarmarkarKarp {
-            part_count: required(usize_arg(args.next()))?,
+            part_count: require(parse(args.next()))?,
+        }),
+        "ckk" => Box::new(coupe::CompleteKarmarkarKarp {
+            tolerance: require(parse(args.next()))?,
         }),
         "vn-best" => Box::new(coupe::VnBest {
-            part_count: required(usize_arg(args.next()))?,
+            part_count: require(parse(args.next()))?,
         }),
         "rcb" => Box::new(coupe::Rcb {
-            iter_count: required(usize_arg(args.next()))?,
+            iter_count: require(parse(args.next()))?,
         }),
         "hilbert" => Box::new(coupe::HilbertCurve {
-            part_count: required(usize_arg(args.next()))?,
-            order: optional(usize_arg(args.next()), 12)? as u32,
+            part_count: require(parse(args.next()))?,
+            order: optional(parse(args.next()), 12)?,
         }),
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
