@@ -52,10 +52,7 @@ fn edge_cut(mesh: &Mesh, parts: &[usize]) -> f64 {
             continue;
         }
         for (e2, (e2_type, e2_nodes, _e2_ref)) in mesh.elements().enumerate() {
-            if e1_type.dimension() != mesh.dimension()
-                || e2_type.dimension() != mesh.dimension()
-                || parts[e1] == parts[e2]
-            {
+            if e2_type.dimension() != mesh.dimension() || parts[e1] == parts[e2] {
                 continue;
             }
             let nodes_in_common = e1_nodes
