@@ -44,3 +44,9 @@ ALGORITHMS
 
         hilbert,PART_COUNT,[ORDER]
             Hilbert Curve (coupe)
+
+    Graph partitioning algorithms:
+    These algorithms create partitions by using the topology of the mesh.
+
+        fm,[MAX_BAD_MOVES_IN_A_ROW]
+            Fidducia-Mattheyses algorithm (coupe)

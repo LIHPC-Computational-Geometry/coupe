@@ -20,6 +20,7 @@ use tracing_tree::HierarchicalLayer;
 struct Problem<const D: usize> {
     points: Vec<PointND<D>>,
     weights: weight::Array,
+    adjacency: sprs::CsMat<f64>,
 }
 
 trait Algorithm<const D: usize> {
@@ -159,6 +160,21 @@ impl<const D: usize> Algorithm<D> for coupe::HilbertCurve {
     }
 }
 
+impl<const D: usize> Algorithm<D> for coupe::FiducciaMattheyses {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        let adjacency = problem.adjacency.view();
+        match &problem.weights {
+            Integers(_) => anyhow::bail!("fm is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, (adjacency, &weights))?;
+            }
+        }
+        Ok(())
+    }
+}
+
 fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> {
     let mut args = spec.split(',');
     let name = args.next().context("it's empty")?;
@@ -219,6 +235,10 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             part_count: require(parse(args.next()))?,
             order: optional(parse(args.next()), 12)?,
         }),
+        "fm" => Box::new(coupe::FiducciaMattheyses {
+            max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
+            ..Default::default()
+        }),
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
 }
@@ -248,8 +268,34 @@ fn main_d<const D: usize>(
         })
         .collect();
 
+    let mut adjacency = sprs::CsMat::empty(sprs::CSR, points.len());
+    adjacency.reserve_outer_dim(points.len());
+    for (e1, (e1_type, e1_nodes, _e1_ref)) in mesh.elements().enumerate() {
+        if e1_type.dimension() != mesh.dimension() {
+            continue;
+        }
+        for (e2, (e2_type, e2_nodes, _e2_ref)) in mesh.elements().enumerate() {
+            if e2_type.dimension() != mesh.dimension() {
+                continue;
+            }
+            let nodes_in_common = e1_nodes
+                .iter()
+                .filter(|e1_node| e2_nodes.contains(e1_node))
+                .count();
+            let are_neighbors = mesh.dimension() <= nodes_in_common;
+            if are_neighbors {
+                adjacency.insert(e1, e2, 1.0);
+                adjacency.insert(e2, e1, 1.0);
+            }
+        }
+    }
+
     let mut partition = vec![0; points.len()];
-    let problem = Problem { points, weights };
+    let problem = Problem {
+        points,
+        weights,
+        adjacency,
+    };
 
     let algorithms: Vec<_> = matches
         .opt_strs("a")
