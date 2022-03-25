@@ -51,7 +51,7 @@ fn kernighan_lin_2_impl(
     }
 
     let mut cut_size = crate::topology::cut_size(adjacency, initial_partition);
-    println!("Initial cut size: {}", cut_size);
+    tracing::info!("Initial cut size: {}", cut_size);
     let mut new_cut_size = cut_size;
 
     for iter in 0.. {
@@ -125,7 +125,7 @@ fn kernighan_lin_2_impl(
             let total_gain = max_gain_1 + max_gain_2;
 
             if total_gain <= 0. && num_bad_move >= max_bad_move_in_a_row {
-                println!("readched max bad move in a row");
+                tracing::info!("readched max bad move in a row");
                 break;
             }
 
@@ -154,7 +154,7 @@ fn kernighan_lin_2_impl(
             .unwrap();
 
         // rewind swaps
-        println!(
+        tracing::info!(
             "rewinding flips from pos {} to pos {}",
             best_pos + 1,
             cut_saves.len()
@@ -171,7 +171,7 @@ fn kernighan_lin_2_impl(
             break;
         }
     }
-    println!("final cut size: {}", new_cut_size);
+    tracing::info!("final cut size: {}", new_cut_size);
 }
 
 /// KernighanLin algorithm
