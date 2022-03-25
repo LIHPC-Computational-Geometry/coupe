@@ -175,6 +175,21 @@ impl<const D: usize> Algorithm<D> for coupe::FiducciaMattheyses {
     }
 }
 
+impl<const D: usize> Algorithm<D> for coupe::KernighanLin {
+    fn run(&mut self, partition: &mut [usize], problem: &Problem<D>) -> Result<()> {
+        use weight::Array::*;
+        let adjacency = problem.adjacency.view();
+        match &problem.weights {
+            Integers(_) => anyhow::bail!("kl is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, (adjacency, &weights))?;
+            }
+        }
+        Ok(())
+    }
+}
+
 fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> {
     let mut args = spec.split(',');
     let name = args.next().context("it's empty")?;
@@ -236,6 +251,10 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             order: optional(parse(args.next()), 12)?,
         }),
         "fm" => Box::new(coupe::FiducciaMattheyses {
+            max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
+            ..Default::default()
+        }),
+        "kl" => Box::new(coupe::KernighanLin {
             max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
             ..Default::default()
         }),
