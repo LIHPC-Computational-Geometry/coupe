@@ -60,7 +60,7 @@ fn fiduccia_mattheyses_impl(
         .collect();
 
     let mut cut_size = crate::topology::cut_size(adjacency.view(), initial_partition);
-    println!("Initial cut size: {}", cut_size);
+    tracing::info!("Initial cut size: {}", cut_size);
     let mut new_cut_size = cut_size;
 
     // Outer loop: each iteration makes a "pass" which can flip several nodes
@@ -178,7 +178,7 @@ fn fiduccia_mattheyses_impl(
 
             if max_gain <= 0. {
                 if num_bad_move >= max_bad_move_in_a_row {
-                    println!("reached max bad move in a row");
+                    tracing::info!("reached max bad move in a row");
                     break;
                 }
                 num_bad_move += 1;
@@ -219,7 +219,7 @@ fn fiduccia_mattheyses_impl(
             .unwrap();
 
         // rewind flips
-        println!(
+        tracing::info!(
             "rewinding flips from pos {} to pos {}",
             best_pos + 1,
             cut_saves.len()
@@ -246,7 +246,7 @@ fn fiduccia_mattheyses_impl(
         dbg!(imbalance);
     }
 
-    println!("final cut size: {}", new_cut_size);
+    tracing::info!("final cut size: {}", new_cut_size);
 }
 
 /// FiducciaMattheyses
