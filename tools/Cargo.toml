@@ -27,6 +27,11 @@ mesh-io = { path = "mesh-io", version = "0.1" }
 getopts = { version = "0.2", default-features = false }
 anyhow = { version = "1", default-features = false, features = ["std"] }
 
+# Debug output
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "std"] }
+tracing-chrome = { version = "0.4", default-features = false }
+tracing-tree = { version = "0.2", default-features = false }
+
 # Other utilities
 itertools = { version = "0.10", default-features = false }
 num = { version = "0.4", default-features = false }

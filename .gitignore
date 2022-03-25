@@ -16,3 +16,6 @@
 *.part
 *.weight
 *.weights
+
+# trace files
+*.json

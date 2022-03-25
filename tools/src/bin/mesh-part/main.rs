@@ -11,6 +11,11 @@ use std::env;
 use std::fs;
 use std::io;
 use std::mem;
+use tracing_subscriber::filter::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
+use tracing_subscriber::Registry;
+use tracing_tree::HierarchicalLayer;
 
 struct Problem<const D: usize> {
     points: Vec<PointND<D>>,
@@ -274,6 +279,7 @@ fn main() -> Result<()> {
         "NAME",
     );
     options.optopt("m", "mesh", "mesh file", "FILE");
+    options.optopt("t", "trace", "emit a chrome trace", "FILE");
     options.optopt("w", "weights", "weight file", "FILE");
 
     let matches = options.parse(env::args().skip(1))?;
@@ -283,6 +289,26 @@ fn main() -> Result<()> {
         eprint!(include_str!("help_after.txt"));
         return Ok(());
     }
+
+    let registry = Registry::default().with(EnvFilter::from_env("LOG")).with(
+        HierarchicalLayer::new(4)
+            .with_thread_ids(true)
+            .with_targets(true)
+            .with_bracketed_fields(true),
+    );
+    let _chrome_trace_guard = match matches.opt_str("t") {
+        Some(filename) => {
+            let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new()
+                .file(filename)
+                .build();
+            registry.with(chrome_layer).init();
+            Some(guard)
+        }
+        None => {
+            registry.init();
+            None
+        }
+    };
 
     let mesh_file = matches
         .opt_str("m")
