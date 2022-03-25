@@ -148,14 +148,14 @@ async fn cancel_iterations<W>(iter_ctxs: &[IterationState<W>], iter_count: usize
 /// # Panics
 ///
 /// This function panics if `items` is empty.
-#[tracing::instrument(skip(ctx, items), ret)]
+#[tracing::instrument(skip(ctx, items))]
 async fn compute_min_max<const D: usize, W>(
     ctx: &IterationState<W>,
     items: &[Item<'_, D, W>],
     coord: usize,
 ) -> (f64, f64)
 where
-    W: Copy + AddAssign + Sum,
+    W: Copy + AddAssign + Sum + std::fmt::Debug,
 {
     let min_max_span = tracing::info_span!("compute");
     let enter = min_max_span.enter();
@@ -190,6 +190,16 @@ where
         d.ttl = ctx.thread_count.load(Ordering::Relaxed);
         d.count_left_max = items.len();
     }
+
+    tracing::info!(
+        "compute_min_max_sum: min={:?}/{:?}, max={:?}/{:?}, sum={:?}/{:?}",
+        partial_min,
+        d.min,
+        partial_max,
+        d.max,
+        partial_sum,
+        d.sum,
+    );
 
     (d.min, d.max)
 }
