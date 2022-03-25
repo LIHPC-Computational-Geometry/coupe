@@ -85,7 +85,9 @@ fn apply_distribution(d: Distribution, points: &[Vec<f64>]) -> Box<dyn Fn(&[f64]
                 .unwrap();
             let alpha = (to - from) / (max - min);
             let beta = -min * alpha;
-            Box::new(move |coordinates| f64::mul_add(coordinates[axis as usize], alpha, beta))
+            Box::new(move |coordinates| {
+                from + f64::mul_add(coordinates[axis as usize], alpha, beta)
+            })
         }
     }
 }
