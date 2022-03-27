@@ -17,6 +17,9 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::Registry;
 use tracing_tree::HierarchicalLayer;
 
+#[cfg(feature = "metis")]
+mod metis;
+
 struct Problem<const D: usize> {
     points: Vec<PointND<D>>,
     weights: weight::Array,
@@ -258,6 +261,17 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
             ..Default::default()
         }),
+
+        #[cfg(feature = "metis")]
+        "metis:recursive" => Box::new(metis::Recursive {
+            part_count: require(parse(args.next()))?,
+        }),
+
+        #[cfg(feature = "metis")]
+        "metis:kway" => Box::new(metis::KWay {
+            part_count: require(parse(args.next()))?,
+        }),
+
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
 }
@@ -351,6 +365,10 @@ fn main() -> Result<()> {
     if matches.opt_present("h") {
         eprintln!("{}", options.usage("Usage: mesh-part [options]"));
         eprint!(include_str!("help_after.txt"));
+
+        #[cfg(feature = "metis")]
+        eprint!(include_str!("help_after_metis.txt"));
+
         return Ok(());
     }
 
