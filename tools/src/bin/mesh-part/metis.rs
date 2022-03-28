@@ -20,9 +20,9 @@ impl<const D: usize> Algorithm<D> for Recursive {
         let ncon = weights[0].len() as Idx;
         let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency.clone().into_raw_storage();
-        let mut xadj: Vec<_> = xadj.into_iter().map(|i| i as Idx).collect();
-        let mut adjncy: Vec<_> = adjncy.into_iter().map(|i| i as Idx).collect();
+        let (xadj, adjncy, _) = problem.adjacency.view().into_raw_storage();
+        let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
+        let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
 
         let mut metis_partition = vec![0; partition.len()];
         metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
@@ -51,9 +51,9 @@ impl<const D: usize> Algorithm<D> for KWay {
         let ncon = weights[0].len() as Idx;
         let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency.clone().into_raw_storage();
-        let mut xadj: Vec<_> = xadj.into_iter().map(|i| i as Idx).collect();
-        let mut adjncy: Vec<_> = adjncy.into_iter().map(|i| i as Idx).collect();
+        let (xadj, adjncy, _) = problem.adjacency.view().into_raw_storage();
+        let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
+        let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
 
         let mut metis_partition = vec![0; partition.len()];
         metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
