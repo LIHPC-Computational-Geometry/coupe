@@ -54,7 +54,7 @@ impl std::error::Error for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Wrapping `r` in a [`BufReader`] is recommended.
+/// Wrapping `r` in a [`std::io::BufReader`] is recommended.
 pub fn read<R>(mut r: R) -> Result<Vec<usize>>
 where
     R: io::Read,
@@ -79,7 +79,7 @@ where
     Ok(partition)
 }
 
-/// Wrapping `w` in a [`BufWriter`] is recommended.
+/// Wrapping `w` in a [`std::io::BufWriter`] is recommended.
 pub fn write<I, W>(mut w: W, array: I) -> io::Result<()>
 where
     I: IntoIterator<Item = usize>,

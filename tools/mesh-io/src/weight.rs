@@ -101,7 +101,7 @@ where
     Ok(weights)
 }
 
-/// Wrapping `r` in a [`BufReader`] is recommended.
+/// Wrapping `r` in a [`std::io::BufReader`] is recommended.
 ///
 /// TODO checksum input data
 pub fn read<R>(mut r: R) -> Result<Array>
@@ -191,7 +191,7 @@ where
         .try_for_each(write_weight)
 }
 
-/// Wrapping `w` in a [`BufWriter`] is recommended.
+/// Wrapping `r` in a [`std::io::BufWriter`] is recommended.
 ///
 /// TODO checksum input data
 pub fn write_integers<I, W>(w: W, array: I) -> Result<()>
@@ -205,7 +205,7 @@ where
     write_inner(w, array, i64::to_le_bytes)
 }
 
-/// Wrapping `w` in a BufWriter is recommended.
+/// Wrapping `w` in a [`std::io::BufWriter`] is recommended.
 ///
 /// TODO checksum input data
 pub fn write_floats<I, W>(w: W, array: I) -> Result<()>
