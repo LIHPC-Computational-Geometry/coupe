@@ -6,13 +6,13 @@ authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
 
 
 [features]
-default = ["coupe", "scotch", "metis"]
+default = ["scotch", "metis"]
 
 
 [dependencies]
 
 # Partitioners
-coupe = { version = "0.1", optional = true, path = ".." }
+coupe = { version = "0.1", path = ".." }
 scotch = { version = "0.1", optional = true }
 metis = { version = "0.1", optional = true }
 
