@@ -168,7 +168,12 @@ fn main() -> Result<()> {
     let output = io::stdout();
     let output = output.lock();
     let output = io::BufWriter::new(output);
-    mesh_io::weight::write_floats(output, weights).context("failed to write weight array")?;
+    if matches.opt_present("i") {
+        let weights = weights.map(|weight| weight.map(|criterion| criterion as i64));
+        mesh_io::weight::write_integers(output, weights).context("failed to write weight array")?;
+    } else {
+        mesh_io::weight::write_floats(output, weights).context("failed to write weight array")?;
+    }
 
     Ok(())
 }
