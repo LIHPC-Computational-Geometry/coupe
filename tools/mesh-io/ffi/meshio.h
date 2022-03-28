@@ -1,5 +1,5 @@
 #ifndef LIBMESHIO_H
-#define LIBMESHIO
+#define LIBMESHIO_H
 
 #include <stdint.h>
 
