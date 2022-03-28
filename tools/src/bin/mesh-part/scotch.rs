@@ -23,9 +23,9 @@ impl<const D: usize> Algorithm<D> for Standard {
         }
         let weights: Vec<_> = weights.iter().map(|i| i[0] as Num).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency.clone().into_raw_storage();
-        let xadj: Vec<_> = xadj.into_iter().map(|i| i as Num).collect();
-        let adjncy: Vec<_> = adjncy.into_iter().map(|i| i as Num).collect();
+        let (xadj, adjncy, _) = problem.adjacency.view().into_raw_storage();
+        let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
+        let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
 
         let mut strat = scotch::Strategy::new();
         let arch = scotch::Architecture::complete(self.part_count as Num);
