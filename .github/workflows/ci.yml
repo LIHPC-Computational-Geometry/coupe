@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  BINDGEN_EXTRA_CLANG_ARGS: "-I/usr/include/scotch" # ubuntu package use <scotch/scotch.h>
 
 jobs:
   check:
@@ -19,6 +20,7 @@ jobs:
         rust:
           - stable
     steps:
+      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -38,6 +40,7 @@ jobs:
         rust:
           - stable
     steps:
+      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -75,6 +78,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-20.04
     steps:
+      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
