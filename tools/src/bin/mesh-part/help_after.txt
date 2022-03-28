@@ -11,45 +11,44 @@ ALGORITHMS
 
     Miscellaneous partitioning algorithms:
 
-        random,PART_COUNT,[SEED]
-            Creates a random partition (coupe)
+        random,PART_COUNT,[SEED=0]
+            Creates a random partition
 
     Number partitioning algorithms:
     These algorithms create partitions by only taking weights into account.
 
         greedy,PART_COUNT
-            Greedy number partitioning algorithm (coupe)
+            Greedy number partitioning algorithm
 
         kk,PART_COUNT
-            Karmarkar-Karp, Least Difference Method (coupe)
+            Karmarkar-Karp, Least Difference Method
 
         ckk,TOLERANCE
-            Complete Karmarkar-Karp (coupe)
+            Complete Karmarkar-Karp
 
     Number partition improving algorithms:
-    These algorithms improve a partition by only taking weights into account.
+    These algorithms improve partitions by only taking weights into account.
 
         vn-best,PART_COUNT
-            Steepest descent Vector of Numbers algorithm (coupe)
+            Steepest descent Vector of Numbers algorithm
 
         vn-first,PART_COUNT
-            Descent Vector of Numbers algorithm (coupe)
+            Descent Vector of Numbers algorithm
 
     Geometric partitioning algorithms:
-    These algorithms create partitions by taking weights and coordinates into
-    account.
+    These algorithms create partitions using cell coordinates.
 
         rcb,PART_COUNT
-            Recursive Coordinate Biscection (coupe)
+            Recursive Coordinate Biscection
 
-        hilbert,PART_COUNT,[ORDER]
-            Hilbert Curve (coupe)
+        hilbert,PART_COUNT,[ORDER=12]
+            Hilbert Curve
 
-    Graph partitioning algorithms:
-    These algorithms create partitions by using the topology of the mesh.
+    Graph partition improving algorithms:
+    These algorithms improve partitions using the topology of the mesh.
 
-        fm,[MAX_BAD_MOVES_IN_A_ROW]
-            Fidducia-Mattheyses algorithm (coupe)
+        fm,[MAX_BAD_MOVES_IN_A_ROW=1]
+            Fidducia-Mattheyses algorithm
 
-        kl,[MAX_BAD_MOVES_IN_A_ROW]
-            Kernighan-Lin algorithm (coupe)
+        kl,[MAX_BAD_MOVES_IN_A_ROW=1]
+            Kernighan-Lin algorithm
