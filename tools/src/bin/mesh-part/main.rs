@@ -294,7 +294,7 @@ fn main_d<const D: usize>(
             continue;
         }
         for (e2, (e2_type, e2_nodes, _e2_ref)) in mesh.elements().enumerate() {
-            if e2_type.dimension() != mesh.dimension() {
+            if e1 == e2 || e2_type.dimension() != mesh.dimension() {
                 continue;
             }
             let nodes_in_common = e1_nodes
@@ -304,7 +304,6 @@ fn main_d<const D: usize>(
             let are_neighbors = mesh.dimension() <= nodes_in_common;
             if are_neighbors {
                 adjacency.insert(e1, e2, 1.0);
-                adjacency.insert(e2, e1, 1.0);
             }
         }
     }
@@ -399,4 +398,85 @@ fn main() -> Result<()> {
     mesh_io::partition::write(stdout, partition).context("failed to print partition")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_adjacency_convert() {
+        let mut adjacency = sprs::CsMat::empty(sprs::CSR, 15);
+        adjacency.reserve_outer_dim(15);
+        adjacency.insert(0, 1, 1.0);
+        adjacency.insert(0, 5, 1.0);
+
+        adjacency.insert(1, 0, 1.0);
+        adjacency.insert(1, 2, 1.0);
+        adjacency.insert(1, 6, 1.0);
+
+        adjacency.insert(2, 1, 1.0);
+        adjacency.insert(2, 3, 1.0);
+        adjacency.insert(2, 7, 1.0);
+
+        adjacency.insert(3, 2, 1.0);
+        adjacency.insert(3, 4, 1.0);
+        adjacency.insert(3, 8, 1.0);
+
+        adjacency.insert(4, 3, 1.0);
+        adjacency.insert(4, 9, 1.0);
+
+        adjacency.insert(5, 0, 1.0);
+        adjacency.insert(5, 6, 1.0);
+        adjacency.insert(5, 10, 1.0);
+
+        adjacency.insert(6, 1, 1.0);
+        adjacency.insert(6, 5, 1.0);
+        adjacency.insert(6, 7, 1.0);
+        adjacency.insert(6, 11, 1.0);
+
+        adjacency.insert(7, 2, 1.0);
+        adjacency.insert(7, 6, 1.0);
+        adjacency.insert(7, 8, 1.0);
+        adjacency.insert(7, 12, 1.0);
+
+        adjacency.insert(8, 3, 1.0);
+        adjacency.insert(8, 7, 1.0);
+        adjacency.insert(8, 9, 1.0);
+        adjacency.insert(8, 13, 1.0);
+
+        adjacency.insert(9, 4, 1.0);
+        adjacency.insert(9, 8, 1.0);
+        adjacency.insert(9, 14, 1.0);
+
+        adjacency.insert(10, 5, 1.0);
+        adjacency.insert(10, 11, 1.0);
+
+        adjacency.insert(11, 6, 1.0);
+        adjacency.insert(11, 10, 1.0);
+        adjacency.insert(11, 12, 1.0);
+
+        adjacency.insert(12, 7, 1.0);
+        adjacency.insert(12, 11, 1.0);
+        adjacency.insert(12, 13, 1.0);
+
+        adjacency.insert(13, 8, 1.0);
+        adjacency.insert(13, 12, 1.0);
+        adjacency.insert(13, 14, 1.0);
+
+        adjacency.insert(14, 9, 1.0);
+        adjacency.insert(14, 13, 1.0);
+
+        let (xadj, adjncy, _) = adjacency.into_raw_storage();
+
+        assert_eq!(
+            xadj.as_slice(),
+            &[0, 2, 5, 8, 11, 13, 16, 20, 24, 28, 31, 33, 36, 39, 42, 44]
+        );
+        assert_eq!(
+            adjncy.as_slice(),
+            &[
+                1, 5, 0, 2, 6, 1, 3, 7, 2, 4, 8, 3, 9, 0, 6, 10, 1, 5, 7, 11, 2, 6, 8, 12, 3, 7, 9,
+                13, 4, 8, 14, 5, 11, 6, 10, 12, 7, 11, 13, 8, 12, 14, 9, 13
+            ]
+        );
+    }
 }
