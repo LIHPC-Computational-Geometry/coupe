@@ -201,6 +201,7 @@ dependencies = [
  "rand",
  "rand_pcg",
  "rayon",
+ "scotch",
  "sprs",
  "tracing-chrome",
  "tracing-subscriber",
@@ -1078,6 +1079,24 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
+name = "scotch"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f45dba4f8310414ccf05698a151bed23b6fc26e237de16c9ca74f23b99296143"
+dependencies = [
+ "scotch-sys",
+]
+
+[[package]]
+name = "scotch-sys"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78b54e09a6acd7bfe59e2f331f0012e7e93a37cbf5d85cfc873ef75f49ea1a17"
+dependencies = [
+ "bindgen",
+]
 
 [[package]]
 name = "semver"

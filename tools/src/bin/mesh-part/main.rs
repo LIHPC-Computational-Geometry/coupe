@@ -19,6 +19,8 @@ use tracing_tree::HierarchicalLayer;
 
 #[cfg(feature = "metis")]
 mod metis;
+#[cfg(feature = "scotch")]
+mod scotch;
 
 struct Problem<const D: usize> {
     points: Vec<PointND<D>>,
@@ -272,6 +274,11 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             part_count: require(parse(args.next()))?,
         }),
 
+        #[cfg(feature = "scotch")]
+        "scotch:std" => Box::new(scotch::Standard {
+            part_count: require(parse(args.next()))?,
+        }),
+
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
 }
@@ -368,6 +375,9 @@ fn main() -> Result<()> {
 
         #[cfg(feature = "metis")]
         eprint!(include_str!("help_after_metis.txt"));
+
+        #[cfg(feature = "scotch")]
+        eprint!(include_str!("help_after_scotch.txt"));
 
         return Ok(());
     }
