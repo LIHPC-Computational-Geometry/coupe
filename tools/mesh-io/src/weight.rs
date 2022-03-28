@@ -150,7 +150,7 @@ where
     W: io::Write,
 {
     let flags: u8 = if TypeId::of::<T>() == TypeId::of::<i64>() {
-        1 << FLAG_INTEGER
+        FLAG_INTEGER
     } else {
         0
     };
