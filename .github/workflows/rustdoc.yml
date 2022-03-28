@@ -11,12 +11,14 @@ env:
   RUSTFLAGS: "-D warnings"
   RUSTUP_MAX_RETRIES: 10
   RUST_BACKTRACE: 1
+  BINDGEN_EXTRA_CLANG_ARGS: "-I/usr/include/scotch" # ubuntu package use <scotch/scotch.h>
 
 jobs:
   rustdoc:
     runs-on: ubuntu-20.04
 
     steps:
+      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
