@@ -20,7 +20,7 @@ default = ["scotch", "metis"]
 # Partitioners
 coupe = { version = "0.1", path = ".." }
 scotch = { version = "0.1", optional = true }
-metis = { version = "0.1", optional = true }
+metis = { version = "0.1", optional = true, path = "../../metis-rs" }
 
 # Random number generation
 rand = { version = "0.8", default-features = false, features = ["std"] }
