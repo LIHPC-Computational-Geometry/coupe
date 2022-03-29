@@ -8,7 +8,7 @@ includes the following tools:
   algorithms specifically, and
 - in the `src/bin` directory, a collection of tools to partition meshes and
   evaluate mesh partitions:
-    - weight-gen generate a distribution of cell weights for a mesh,
+    - weight-gen generates a distribution of cell weights for a mesh,
     - mesh-part runs a partitioner on a given mesh and weight distribution,
     - part-info displays information about a partition, for a given mesh and
       weight distribution,
@@ -49,7 +49,7 @@ mesh-part --algorithm hilbert,3 \
           >heart.linear.hilbert-fm.part
 
 # Apply MeTiS' recursive bisection on the same mesh and weights.
-mesh-part --algorithm metis:recursive
+mesh-part --algorithm metis:recursive,3
           --mesh heart.mesh \
           --weights heart.linear.weights \
           >heart.linear.metis.part
