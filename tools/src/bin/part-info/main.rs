@@ -106,7 +106,7 @@ fn main() -> Result<()> {
 
     let part_count = matches
         .opt_get("n")?
-        .unwrap_or_else(|| *parts.iter().minmax().into_option().unwrap().1);
+        .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
 
     let imbs = match &weights {
         mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
