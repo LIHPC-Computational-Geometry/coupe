@@ -170,7 +170,10 @@ impl<const D: usize> Algorithm<D> for coupe::FiducciaMattheyses {
         use weight::Array::*;
         let adjacency = problem.adjacency.view();
         match &problem.weights {
-            Integers(_) => anyhow::bail!("fm is only implemented for floats"),
+            Integers(is) => {
+                let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
+                self.partition(partition, (adjacency, &weights))?;
+            }
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 self.partition(partition, (adjacency, &weights))?;
