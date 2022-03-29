@@ -3,38 +3,11 @@ use itertools::Itertools;
 use sprs::CsMatView;
 
 fn fiduccia_mattheyses<W>(
-    part_ids: &mut [usize],
-    weights: &[W],
-    adjacency: CsMatView<f64>,
-    max_passes: impl Into<Option<usize>>,
-    max_flips_per_pass: impl Into<Option<usize>>,
-    max_imbalance_per_flip: impl Into<Option<W>>,
-    max_bad_move_in_a_row: usize,
-) where
-    W: std::fmt::Debug + Copy + PartialOrd,
-    W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W> + num::Zero,
-{
-    let max_passes = max_passes.into();
-    let max_flips_per_pass = max_flips_per_pass.into();
-    let max_imbalance_per_flip = max_imbalance_per_flip.into();
-
-    fiduccia_mattheyses_impl(
-        part_ids,
-        weights,
-        adjacency,
-        max_passes,
-        max_flips_per_pass,
-        max_imbalance_per_flip,
-        max_bad_move_in_a_row,
-    );
-}
-
-fn fiduccia_mattheyses_impl<W>(
     partition: &mut [usize],
     weights: &[W],
     adjacency: CsMatView<f64>,
-    max_passes: Option<usize>,
-    max_flips_per_pass: Option<usize>,
+    max_passes: usize,
+    max_flips_per_pass: usize,
     max_imbalance_per_flip: Option<W>,
     max_bad_move_in_a_row: usize, // for each pass, the max number of subsequent moves that will decrease the gain
 ) where
@@ -51,36 +24,20 @@ fn fiduccia_mattheyses_impl<W>(
     let mut parts_weights =
         crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
 
-    let mut cut_size = crate::topology::cut_size(adjacency, partition);
-    tracing::info!("Initial cut size: {}", cut_size);
-    let mut new_cut_size = cut_size;
+    let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
+    tracing::info!("Initial cut size: {}", best_cut_size);
 
-    // Outer loop: each iteration makes a "pass" which can flip several nodes
-    // at a time. Repeat passes until passes no longer decrease the cut size.
-    for iter in 0.. {
-        // check user defined iteration limit
-        if let Some(max_passes) = max_passes {
-            if iter >= max_passes {
-                break;
-            }
-        }
-
-        // save old cut size
-        cut_size = new_cut_size;
-
+    for _ in 0..max_passes {
         // monitors for each pass the number of subsequent flips
         // that increase cut size. It may be beneficial in some
         // situations to allow a certain amount of them. Performing bad flips can open
         // up new sequences of good flips.
         let mut num_bad_move = 0;
 
-        // We save each flip data during a pass so that they can be reverted easily
-        // afterwards. For instance if performing wrong flips did not open up any
-        // good flip sequence, those bad flips must be reverted at the end of the pass
-        // so that cut size remains optimal
-        let mut saves = Vec::new(); // flip save
-        let mut cut_saves = Vec::new(); // cut size save
-        let mut ids_before_flip = Vec::new(); // the target id for reverting a flip
+        // Avoid copying partition arrays around and instead record an history
+        // of flips.
+        let mut flip_history = Vec::new();
+        let mut cut_size_history = Vec::new();
 
         // create gain data structure
         // for each node, a gain is associated to each possible target part.
@@ -93,9 +50,8 @@ fn fiduccia_mattheyses_impl<W>(
         //
         // note that the current part in wich a node is is still considered as a potential target part
         // with a gain 0.
-        let mut gains: Vec<Vec<(usize, f64)>> = (0..partition.len())
-            .map(|_idx| (0..part_count).map(|id2| (id2, 0.)).collect())
-            .collect();
+        let mut gains: Vec<Vec<(usize, f64)>> =
+            vec![(0..part_count).map(|id2| (id2, 0.0)).collect(); partition.len()];
 
         // lock array
         // during a loop iteration, if a node is flipped during a pass,
@@ -108,10 +64,7 @@ fn fiduccia_mattheyses_impl<W>(
         // The number of iteration of the pas loop is at most the
         // number of nodes in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
-        for _ in 0..partition
-            .len()
-            .min(max_flips_per_pass.unwrap_or(std::usize::MAX))
-        {
+        for _ in 0..max_flips_per_pass {
             // construct gains
             // Right now all of the gains are recomputed at each new pass
             // a possible optimization would be to use a different gain data structure
@@ -183,48 +136,45 @@ fn fiduccia_mattheyses_impl<W>(
             locks[max_pos] = true;
 
             // save flip
-            saves.push((max_pos, target_part, max_gain));
+            flip_history.push((max_pos, partition[max_pos], target_part));
 
             // update imbalance
             parts_weights[partition[max_pos]] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
 
             // flip node
-            ids_before_flip.push(partition[max_pos]);
             partition[max_pos] = target_part;
 
             // save cut_size
-            cut_saves.push(crate::topology::cut_size(adjacency, partition));
+            cut_size_history.push(crate::topology::cut_size(adjacency, partition));
 
             // end of pass
         }
 
+        let old_cut_size = best_cut_size;
+
         // lookup for best cutsize
-        let (best_pos, best_cut) = cut_saves
+        let (best_pos, best_cut) = cut_size_history
             .iter()
             .cloned()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .unwrap();
 
-        // rewind flips
         tracing::info!(
             "rewinding flips from pos {} to pos {}",
             best_pos + 1,
-            cut_saves.len()
+            flip_history.len()
         );
-        for i in best_pos + 1..cut_saves.len() {
-            let idx = saves[i].0;
-            partition[idx] = ids_before_flip[i];
-
-            // revert weight change
-            parts_weights[ids_before_flip[i]] += weights[idx];
-            parts_weights[saves[i].1] += weights[idx];
+        for (idx, old_part, target_part) in flip_history.drain(best_pos + 1..) {
+            partition[idx] = old_part;
+            parts_weights[old_part] += weights[idx];
+            parts_weights[target_part] += weights[idx];
         }
 
-        new_cut_size = best_cut;
+        best_cut_size = best_cut;
 
-        if new_cut_size >= cut_size {
+        if old_cut_size <= best_cut_size {
             break;
         }
 
@@ -235,7 +185,7 @@ fn fiduccia_mattheyses_impl<W>(
         tracing::info!(?imbalance);
     }
 
-    tracing::info!("final cut size: {}", new_cut_size);
+    tracing::info!("final cut size: {}", best_cut_size);
 }
 
 /// FiducciaMattheyses
@@ -358,8 +308,8 @@ where
             part_ids,
             weights,
             adjacency,
-            self.max_passes,
-            self.max_flips_per_pass,
+            self.max_passes.unwrap_or(usize::MAX),
+            self.max_flips_per_pass.unwrap_or(usize::MAX),
             self.max_imbalance_per_flip.map(|f| W::from_f64(f).unwrap()),
             self.max_bad_move_in_a_row,
         );
