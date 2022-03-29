@@ -45,28 +45,15 @@ where
         .collect()
 }
 
-fn edge_cut(mesh: &Mesh, parts: &[usize]) -> f64 {
-    let mut cut: u64 = 0;
-    for (e1, (e1_type, e1_nodes, _e1_ref)) in mesh.elements().enumerate() {
-        if e1_type.dimension() != mesh.dimension() {
-            continue;
-        }
-        for (e2, (e2_type, e2_nodes, _e2_ref)) in mesh.elements().enumerate() {
-            if e2_type.dimension() != mesh.dimension() || parts[e1] == parts[e2] {
-                continue;
-            }
-            let nodes_in_common = e1_nodes
-                .iter()
-                .filter(|e1_node| e2_nodes.contains(e1_node))
-                .count();
-            let are_neighbors = mesh.dimension() <= nodes_in_common;
-            if are_neighbors {
-                cut += 1;
-            }
+fn edge_cut(adjacency: sprs::CsMatView<f64>, parts: &[usize]) -> f64 {
+    let mut cut = 0.0;
+    for (edge_weight, (el1, el2)) in adjacency {
+        if parts[el1] != parts[el2] {
+            cut += edge_weight;
         }
     }
-    // Divide by 2.0 because we counted the elements twice.
-    cut as f64 / 2.0
+    // Divide by 2 because we counted the elements twice.
+    cut / 2.0
 }
 
 fn main() -> Result<()> {
@@ -108,12 +95,14 @@ fn main() -> Result<()> {
         .opt_get("n")?
         .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
 
+    let adjacency = coupe_tools::adjacency(&mesh);
+
     let imbs = match &weights {
         mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
         mesh_io::weight::Array::Floats(v) => imbalance(part_count, &parts, v),
     };
     println!("imbalances: {:?}", imbs);
-    println!("edge cut: {}", edge_cut(&mesh, &parts));
+    println!("edge cut: {}", edge_cut(adjacency.view(), &parts));
 
     Ok(())
 }
