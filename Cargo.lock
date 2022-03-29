@@ -204,6 +204,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coupe-metis"
+version = "0.1.0"
+dependencies = [
+ "coupe",
+ "libc",
+ "sprs",
+]
+
+[[package]]
 name = "coupe-tools"
 version = "0.1.0"
 dependencies = [
