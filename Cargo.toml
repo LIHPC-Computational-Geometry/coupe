@@ -15,7 +15,7 @@ authors = [
     "Cédric Chevalier", 
     "Sébastien Morais"
 ]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = """
 Coupe is a mesh partitioning library. It implements composable
