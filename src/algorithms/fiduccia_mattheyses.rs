@@ -76,17 +76,17 @@ fn fiduccia_mattheyses<W>(
             //   - if the neighbor is in part q, then the flip will decrease cut size
             //   - if the neighbor is not in part p nor in q, then the flip won't affect the cut size
             for (idx, other_ids) in gains.iter_mut().enumerate() {
-                for (id2, ref mut gain) in other_ids.iter_mut() {
+                for (id2, gain) in other_ids.iter_mut() {
+                    *gain = 0.0;
                     if partition[idx] == *id2 {
                         // target part is current part, no gain
-                        *gain = 0.;
-                    } else {
-                        for (j, w) in adjacency.outer_view(idx).unwrap().iter() {
-                            if partition[idx] == partition[j] {
-                                *gain -= w;
-                            } else if partition[j] == *id2 {
-                                *gain += w;
-                            }
+                        continue;
+                    }
+                    for (j, w) in adjacency.outer_view(idx).unwrap().iter() {
+                        if partition[idx] == partition[j] {
+                            *gain -= w;
+                        } else if partition[j] == *id2 {
+                            *gain += w;
                         }
                     }
                 }
