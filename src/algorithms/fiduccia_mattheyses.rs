@@ -8,10 +8,11 @@ fn fiduccia_mattheyses<W>(
     adjacency: CsMatView<f64>,
     max_passes: usize,
     max_flips_per_pass: usize,
-    max_imbalance_per_flip: Option<W>,
+    max_imbalance: Option<f64>,
     max_bad_move_in_a_row: usize, // for each pass, the max number of subsequent moves that will decrease the gain
 ) where
     W: std::fmt::Debug + Copy + PartialOrd,
+    W: std::iter::Sum + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W> + num::Zero,
 {
     debug_assert!(!partition.is_empty());
@@ -20,9 +21,22 @@ fn fiduccia_mattheyses<W>(
     debug_assert_eq!(partition.len(), adjacency.cols());
 
     let part_count = 1 + *partition.iter().max().unwrap();
-
     let mut parts_weights =
         crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
+    let total_weight: W = parts_weights.iter().cloned().sum();
+    let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+    let max_imbalance = max_imbalance.unwrap_or_else(|| {
+        parts_weights
+            .iter()
+            .map(|part_weight| {
+                (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
+            })
+            .minmax()
+            .into_option()
+            .unwrap()
+            .1
+    });
+    tracing::info!(?max_imbalance);
 
     let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
     tracing::info!("Initial cut size: {}", best_cut_size);
@@ -96,17 +110,9 @@ fn fiduccia_mattheyses<W>(
             let (max_pos, (target_part, max_gain)) = gains
                 .iter()
                 .zip(locks.iter())
-                .zip(weights.iter())
                 .enumerate()
-                .filter(|(_, ((_, locked), weight))| {
-                    if let Some(max_imbalance_per_flip) = max_imbalance_per_flip {
-                        !*locked && **weight <= max_imbalance_per_flip
-                    } else {
-                        !*locked
-                    }
-                })
-                .map(|(idx, ((vec, _), _))| (idx, vec))
-                .map(|(idx, vec)| {
+                .filter(|(_, (_, locked))| !*locked)
+                .map(|(idx, (vec, _))| {
                     // (index of node, (target part of max gain, max gain))
                     (
                         idx,
@@ -135,20 +141,33 @@ fn fiduccia_mattheyses<W>(
             // lock node
             locks[max_pos] = true;
 
-            // save flip
-            flip_history.push((max_pos, partition[max_pos], target_part));
-
-            // update imbalance
-            parts_weights[partition[max_pos]] -= weights[max_pos];
+            // flip node
+            let old_part = std::mem::replace(&mut partition[max_pos], target_part);
+            flip_history.push((max_pos, old_part, target_part));
+            parts_weights[old_part] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
 
-            // flip node
-            partition[max_pos] = target_part;
-
-            // save cut_size
-            cut_size_history.push(crate::topology::cut_size(adjacency, partition));
-
-            // end of pass
+            let imbalance = parts_weights
+                .iter()
+                .map(|part_weight| {
+                    (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
+                })
+                .minmax()
+                .into_option()
+                .unwrap()
+                .1;
+            if imbalance <= max_imbalance {
+                // save cut_size
+                tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
+                cut_size_history.push(crate::topology::cut_size(adjacency, partition));
+            } else {
+                // revert flip
+                tracing::info!(?imbalance, max_pos, old_part, target_part, "no flip");
+                partition[max_pos] = old_part;
+                parts_weights[old_part] += weights[max_pos];
+                parts_weights[target_part] -= weights[max_pos];
+                flip_history.pop();
+            }
         }
 
         let old_cut_size = best_cut_size;
@@ -180,12 +199,6 @@ fn fiduccia_mattheyses<W>(
         if old_cut_size <= best_cut_size {
             break;
         }
-
-        let (min_w, max_w) = parts_weights.iter().minmax().into_option().unwrap();
-
-        // imbalance introduced by flipping nodes around parts
-        let imbalance = *max_w - *min_w;
-        tracing::info!(?imbalance);
     }
 
     tracing::info!("final cut size: {}", best_cut_size);
@@ -258,7 +271,9 @@ fn fiduccia_mattheyses<W>(
 ///  adjacency.insert(6, 2, 1.);
 ///  adjacency.insert(7, 3, 1.);
 ///
-/// coupe::FiducciaMattheyses { max_imbalance: Some(0.26), ..Default::default() }
+/// // Set the imbalance tolerance to 25% to provide enough room for FM to do
+/// // the swap.
+/// coupe::FiducciaMattheyses { max_imbalance: Some(0.25), ..Default::default() }
 ///     .partition(&mut partition, (adjacency.view(), &weights))
 ///     .unwrap();
 ///
@@ -268,13 +283,14 @@ fn fiduccia_mattheyses<W>(
 pub struct FiducciaMattheyses {
     pub max_passes: Option<usize>,
     pub max_flips_per_pass: Option<usize>,
-    pub max_imbalance_per_flip: Option<f64>,
+    pub max_imbalance: Option<f64>,
     pub max_bad_move_in_a_row: usize,
 }
 
 impl<'a, W> crate::Partition<(CsMatView<'a, f64>, &'a [W])> for FiducciaMattheyses
 where
-    W: std::fmt::Debug + Copy + PartialOrd + num::Zero + num::FromPrimitive,
+    W: std::fmt::Debug + Copy + PartialOrd + num::Zero,
+    W: std::iter::Sum + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
     type Metadata = ();
@@ -312,7 +328,7 @@ where
             adjacency,
             self.max_passes.unwrap_or(usize::MAX),
             self.max_flips_per_pass.unwrap_or(usize::MAX),
-            self.max_imbalance_per_flip.map(|f| W::from_f64(f).unwrap()),
+            self.max_imbalance,
             self.max_bad_move_in_a_row,
         );
         Ok(())
