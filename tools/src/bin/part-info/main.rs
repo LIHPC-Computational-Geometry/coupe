@@ -56,6 +56,25 @@ fn edge_cut(adjacency: sprs::CsMatView<f64>, parts: &[usize]) -> f64 {
     cut / 2.0
 }
 
+fn lambda_cut(adjacency: sprs::CsMatView<f64>, parts: &[usize]) -> f64 {
+    use std::collections::BTreeSet;
+
+    let mut cut = 0.0;
+    let mut neighbor_parts = BTreeSet::new();
+    for (el1, el1_neighbors) in adjacency.outer_iterator().enumerate() {
+        neighbor_parts.clear();
+        for (el2, _edge_weight) in el1_neighbors.iter() {
+            if parts[el1] != parts[el2] {
+                neighbor_parts.insert(parts[el2]);
+            }
+        }
+        // TODO multiply by communication cost of el1
+        cut += neighbor_parts.len() as f64;
+    }
+
+    cut
+}
+
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
@@ -103,6 +122,7 @@ fn main() -> Result<()> {
     };
     println!("imbalances: {:?}", imbs);
     println!("edge cut: {}", edge_cut(adjacency.view(), &parts));
+    println!("lambda cut: {}", lambda_cut(adjacency.view(), &parts));
 
     Ok(())
 }
