@@ -1,3 +1,4 @@
+use super::Error;
 use itertools::Itertools;
 use sprs::CsMatView;
 
@@ -231,7 +232,7 @@ fn fiduccia_mattheyses_impl<W>(
 
         // imbalance introduced by flipping nodes around parts
         let imbalance = *max_w - *min_w;
-        dbg!(imbalance);
+        tracing::info!(?imbalance);
     }
 
     tracing::info!("final cut size: {}", new_cut_size);
@@ -325,13 +326,34 @@ where
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
     type Metadata = ();
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         (adjacency, weights): (CsMatView<f64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
+        if part_ids.is_empty() {
+            return Ok(());
+        }
+        if part_ids.len() != weights.len() {
+            return Err(Error::InputLenMismatch {
+                expected: part_ids.len(),
+                actual: weights.len(),
+            });
+        }
+        if part_ids.len() != adjacency.rows() {
+            return Err(Error::InputLenMismatch {
+                expected: part_ids.len(),
+                actual: adjacency.rows(),
+            });
+        }
+        if part_ids.len() != adjacency.cols() {
+            return Err(Error::InputLenMismatch {
+                expected: part_ids.len(),
+                actual: adjacency.cols(),
+            });
+        }
         fiduccia_mattheyses(
             part_ids,
             weights,
