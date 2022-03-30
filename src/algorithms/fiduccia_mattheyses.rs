@@ -51,7 +51,7 @@ fn fiduccia_mattheyses<W>(
         // Avoid copying partition arrays around and instead record an history
         // of flips.
         let mut flip_history = Vec::new();
-        let mut cut_size_history = Vec::new();
+        let mut cut_imb_history = Vec::new();
 
         use std::collections::BinaryHeap;
 
@@ -168,7 +168,6 @@ fn fiduccia_mattheyses<W>(
             parts_weights[old_part] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
             gains[max_pos] = NodeGains::Locked;
-
             let imbalance = parts_weights
                 .iter()
                 .map(|part_weight| {
@@ -178,19 +177,13 @@ fn fiduccia_mattheyses<W>(
                 .into_option()
                 .unwrap()
                 .1;
-            if max_imbalance < imbalance {
-                // revert flip
-                tracing::info!(?imbalance, max_pos, old_part, target_part, "no flip");
-                partition[max_pos] = old_part;
-                parts_weights[old_part] += weights[max_pos];
-                parts_weights[target_part] -= weights[max_pos];
-                flip_history.pop();
-                continue;
-            }
 
             // save cut_size
             tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
-            let mut new_cut_size = *cut_size_history.last().unwrap_or(&best_cut_size);
+            let mut new_cut_size = match cut_imb_history.last() {
+                Some((cut_size, _imbalance)) => *cut_size,
+                None => best_cut_size,
+            };
             for (neighbors, edge_weight) in adjacency.outer_view(max_pos).unwrap().iter() {
                 if partition[neighbors] == old_part {
                     new_cut_size += edge_weight;
@@ -202,7 +195,7 @@ fn fiduccia_mattheyses<W>(
                 new_cut_size,
                 crate::topology::cut_size(adjacency, partition),
             );
-            cut_size_history.push(new_cut_size);
+            cut_imb_history.push((new_cut_size, imbalance));
 
             for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
                 let mut update_gains_for = |node: usize| {
@@ -241,29 +234,30 @@ fn fiduccia_mattheyses<W>(
 
         let old_cut_size = best_cut_size;
 
-        // lookup for best cutsize
-        let (best_pos, best_cut) = match cut_size_history
+        // lookup for best cut_size that respects max_imbalance
+        let rewind_to = cut_imb_history
             .iter()
             .cloned()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        {
-            Some(v) => v,
-            None => break,
-        };
+            .filter(|(_, (_cut_size, imbalance))| *imbalance <= max_imbalance)
+            .min_by(|(_, (cut_size1, _imb1)), (_, (cut_size2, _imb2))| {
+                cut_size1.partial_cmp(cut_size2).unwrap()
+            })
+            .map_or(0, |(best_pos, (best_cut, _best_imb))| {
+                best_cut_size = best_cut;
+                best_pos + 1
+            });
 
         tracing::info!(
             "rewinding flips from pos {} to pos {}",
-            best_pos + 1,
+            rewind_to,
             flip_history.len()
         );
-        for (idx, old_part, target_part) in flip_history.drain(best_pos + 1..) {
+        for (idx, old_part, target_part) in flip_history.drain(rewind_to..) {
             partition[idx] = old_part;
             parts_weights[old_part] += weights[idx];
             parts_weights[target_part] += weights[idx];
         }
-
-        best_cut_size = best_cut;
 
         if old_cut_size <= best_cut_size {
             break;
@@ -340,9 +334,7 @@ fn fiduccia_mattheyses<W>(
 /// adjacency.insert(6, 2, 1.);
 /// adjacency.insert(7, 3, 1.);
 ///
-/// // Set the imbalance tolerance to 25% to provide enough room for FM to do
-/// // the swap.
-/// coupe::FiducciaMattheyses { max_imbalance: Some(0.25), ..Default::default() }
+/// coupe::FiducciaMattheyses::default()
 ///     .partition(&mut partition, (adjacency.view(), &weights))
 ///     .unwrap();
 ///
