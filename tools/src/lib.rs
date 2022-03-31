@@ -1,6 +1,7 @@
 use mesh_io::medit::Mesh;
 
-pub fn adjacency(mesh: &Mesh) -> sprs::CsMat<f64> {
+/// The adjacency matrix that model the dual graph of the given mesh.
+pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
     let mut adjacency = sprs::CsMat::empty(sprs::CSR, 0);
     let elements = || {
         mesh.elements()

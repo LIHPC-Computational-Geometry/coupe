@@ -114,7 +114,7 @@ fn main() -> Result<()> {
         .opt_get("n")?
         .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
 
-    let adjacency = coupe_tools::adjacency(&mesh);
+    let adjacency = coupe_tools::dual(&mesh);
 
     let imbs = match &weights {
         mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
