@@ -271,7 +271,9 @@ fn fiduccia_mattheyses<W>(
 ///  adjacency.insert(6, 2, 1.);
 ///  adjacency.insert(7, 3, 1.);
 ///
-/// coupe::FiducciaMattheyses { max_imbalance: Some(0.26), ..Default::default() }
+/// // Set the imbalance tolerance to 25% to provide enough room for FM to do
+/// // the swap.
+/// coupe::FiducciaMattheyses { max_imbalance: Some(0.25), ..Default::default() }
 ///     .partition(&mut partition, (adjacency.view(), &weights))
 ///     .unwrap();
 ///
