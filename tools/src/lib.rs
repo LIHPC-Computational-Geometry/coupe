@@ -2,12 +2,15 @@ use mesh_io::medit::Mesh;
 
 pub fn adjacency(mesh: &Mesh) -> sprs::CsMat<f64> {
     let mut adjacency = sprs::CsMat::empty(sprs::CSR, 0);
-    for (e1, (e1_type, e1_nodes, _e1_ref)) in mesh.elements().enumerate() {
-        if e1_type.dimension() != mesh.dimension() {
-            continue;
-        }
-        for (e2, (e2_type, e2_nodes, _e2_ref)) in mesh.elements().enumerate() {
-            if e1 == e2 || e2_type.dimension() != mesh.dimension() {
+    let elements = || {
+        mesh.elements()
+            .filter(|(el_type, _nodes, _ref)| el_type.dimension() == mesh.dimension())
+            .map(|(_el_type, nodes, _ref)| nodes)
+            .enumerate()
+    };
+    for (e1, e1_nodes) in elements() {
+        for (e2, e2_nodes) in elements() {
+            if e1 == e2 {
                 continue;
             }
             let nodes_in_common = e1_nodes
