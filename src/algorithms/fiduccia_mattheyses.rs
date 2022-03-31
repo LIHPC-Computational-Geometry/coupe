@@ -233,43 +233,43 @@ fn fiduccia_mattheyses<W>(
 /// // +--+--+--+
 /// // 0  0  1  1
 /// let points = [
-///      Point2D::new(0., 0.),
-///      Point2D::new(1., 0.),
-///      Point2D::new(2., 0.),
-///      Point2D::new(3., 0.),
-///      Point2D::new(0., 1.),
-///      Point2D::new(1., 1.),
-///      Point2D::new(2., 1.),
-///      Point2D::new(3., 1.),
-///  ];
-///  let weights = [1.0; 8];
-///  let mut partition = [0, 0, 1, 1, 0, 1, 0, 1];
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 0.),
+///     Point2D::new(2., 0.),
+///     Point2D::new(3., 0.),
+///     Point2D::new(0., 1.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(2., 1.),
+///     Point2D::new(3., 1.),
+/// ];
+/// let weights = [1.0; 8];
+/// let mut partition = [0, 0, 1, 1, 0, 1, 0, 1];
 ///
-///  let mut adjacency = CsMat::empty(sprs::CSR, 8);
-///  adjacency.reserve_outer_dim(8);
-///  eprintln!("shape: {:?}", adjacency.shape());
-///  adjacency.insert(0, 1, 1.);
-///  adjacency.insert(1, 2, 1.);
-///  adjacency.insert(2, 3, 1.);
-///  adjacency.insert(4, 5, 1.);
-///  adjacency.insert(5, 6, 1.);
-///  adjacency.insert(6, 7, 1.);
-///  adjacency.insert(0, 4, 1.);
-///  adjacency.insert(1, 5, 1.);
-///  adjacency.insert(2, 6, 1.);
-///  adjacency.insert(3, 7, 1.);
-///  
-///  // symmetry
-///  adjacency.insert(1, 0, 1.);
-///  adjacency.insert(2, 1, 1.);
-///  adjacency.insert(3, 2, 1.);
-///  adjacency.insert(5, 4, 1.);
-///  adjacency.insert(6, 5, 1.);
-///  adjacency.insert(7, 6, 1.);
-///  adjacency.insert(4, 0, 1.);
-///  adjacency.insert(5, 1, 1.);
-///  adjacency.insert(6, 2, 1.);
-///  adjacency.insert(7, 3, 1.);
+/// let mut adjacency = CsMat::empty(sprs::CSR, 8);
+/// adjacency.reserve_outer_dim(8);
+/// eprintln!("shape: {:?}", adjacency.shape());
+/// adjacency.insert(0, 1, 1.);
+/// adjacency.insert(1, 2, 1.);
+/// adjacency.insert(2, 3, 1.);
+/// adjacency.insert(4, 5, 1.);
+/// adjacency.insert(5, 6, 1.);
+/// adjacency.insert(6, 7, 1.);
+/// adjacency.insert(0, 4, 1.);
+/// adjacency.insert(1, 5, 1.);
+/// adjacency.insert(2, 6, 1.);
+/// adjacency.insert(3, 7, 1.);
+///
+/// // symmetry
+/// adjacency.insert(1, 0, 1.);
+/// adjacency.insert(2, 1, 1.);
+/// adjacency.insert(3, 2, 1.);
+/// adjacency.insert(5, 4, 1.);
+/// adjacency.insert(6, 5, 1.);
+/// adjacency.insert(7, 6, 1.);
+/// adjacency.insert(4, 0, 1.);
+/// adjacency.insert(5, 1, 1.);
+/// adjacency.insert(6, 2, 1.);
+/// adjacency.insert(7, 3, 1.);
 ///
 /// // Set the imbalance tolerance to 25% to provide enough room for FM to do
 /// // the swap.
