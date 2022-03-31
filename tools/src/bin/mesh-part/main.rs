@@ -313,7 +313,7 @@ fn main_d<const D: usize>(
         })
         .collect();
 
-    let adjacency = coupe_tools::adjacency(&mesh);
+    let adjacency = coupe_tools::dual(&mesh);
 
     let mut partition = vec![0; points.len()];
     let problem = Problem {
