@@ -154,12 +154,15 @@ fn fiduccia_mattheyses<W>(
         let old_cut_size = best_cut_size;
 
         // lookup for best cutsize
-        let (best_pos, best_cut) = cut_size_history
+        let (best_pos, best_cut) = match cut_size_history
             .iter()
             .cloned()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap();
+        {
+            Some(v) => v,
+            None => break,
+        };
 
         tracing::info!(
             "rewinding flips from pos {} to pos {}",
@@ -255,12 +258,11 @@ fn fiduccia_mattheyses<W>(
 ///  adjacency.insert(6, 2, 1.);
 ///  adjacency.insert(7, 3, 1.);
 ///
-/// coupe::FiducciaMattheyses { max_bad_move_in_a_row: 1, ..Default::default() }
+/// coupe::FiducciaMattheyses { max_imbalance: Some(0.26), ..Default::default() }
 ///     .partition(&mut partition, (adjacency.view(), &weights))
 ///     .unwrap();
 ///
-/// assert_eq!(partition[5], 0);
-/// assert_eq!(partition[6], 1);
+/// assert_eq!(partition, [0, 0, 1, 1, 0, 0, 1, 1]);
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FiducciaMattheyses {
