@@ -53,79 +53,103 @@ fn fiduccia_mattheyses<W>(
         let mut flip_history = Vec::new();
         let mut cut_size_history = Vec::new();
 
-        // create gain data structure
-        // for each node, a gain is associated to each possible target part.
-        // It is currently implemented wit an array of vectors:
-        // [
-        //  node_1: [(target_part_1, gain_1), ..., (target_part_n, gain_n)],
-        //  ...,
-        //  node_n: [(target_part_1, gain_1), ..., (target_part_n, gain_n)]
-        // ]
-        //
-        // note that the current part in wich a node is is still considered as a potential target part
-        // with a gain 0.
-        let mut gains: Vec<Vec<(usize, f64)>> =
-            vec![(0..part_count).map(|id2| (id2, 0.0)).collect(); partition.len()];
+        use std::collections::BinaryHeap;
 
-        // lock array
-        // during a loop iteration, if a node is flipped during a pass,
-        // it becomes locked and can't be flipped again during the following passes,
-        // and is unlocked at next loop iteration.
-        // locks are per node and do not depend on target partition.
-        let mut locks = vec![false; partition.len()];
+        #[derive(Clone, Copy)]
+        struct Flip {
+            target_part: usize,
+            gain: f64,
+        }
+
+        impl PartialEq for Flip {
+            fn eq(&self, other: &Self) -> bool {
+                self.gain == other.gain
+            }
+        }
+        impl Eq for Flip {}
+
+        impl PartialOrd for Flip {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                f64::partial_cmp(&self.gain, &other.gain)
+            }
+        }
+
+        impl Ord for Flip {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                Flip::partial_cmp(self, other).unwrap()
+            }
+        }
+
+        /// Gain table element.
+        enum NodeGains {
+            /// The edge-cut gain should the node move to part P, for each P.
+            Available(BinaryHeap<Flip>),
+            /// The node is locked and will not be visited again this pass.
+            Locked,
+        }
+
+        impl NodeGains {
+            pub fn unlock(&self) -> Option<&BinaryHeap<Flip>> {
+                match self {
+                    NodeGains::Available(gains) => Some(gains),
+                    NodeGains::Locked => None,
+                }
+            }
+
+            pub fn max_gain(&self) -> Option<Flip> {
+                self.unlock().and_then(|gains| gains.peek().cloned())
+            }
+        }
+
+        // Gain table, stored as a heap of node gains for each node.
+        let mut gains: Vec<NodeGains> = partition
+            .iter()
+            .enumerate()
+            .map(|(node, &initial_part)| {
+                let gains = (0..part_count)
+                    .map(|target_part| {
+                        let gain = if target_part == initial_part {
+                            0.0
+                        } else {
+                            adjacency
+                                .outer_view(node)
+                                .unwrap()
+                                .iter()
+                                .map(|(neighbor, &edge_weight)| {
+                                    if partition[neighbor] == initial_part {
+                                        -edge_weight
+                                    } else if partition[neighbor] == target_part {
+                                        edge_weight
+                                    } else {
+                                        0.0
+                                    }
+                                })
+                                .sum()
+                        };
+                        Flip { target_part, gain }
+                    })
+                    .collect();
+                NodeGains::Available(gains)
+            })
+            .collect();
 
         // enter pass loop
         // The number of iteration of the pas loop is at most the
         // number of nodes in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
         for _ in 0..max_flips_per_pass {
-            // construct gains
-            // Right now all of the gains are recomputed at each new pass
-            // a possible optimization would be to use a different gain data structure
-            // to modify only some of the gains instead of recomputing everything.
-            //
-            // for each node (assigned to part p), and for each target part q (with p != q),
-            // gain contributiuon comes from each node neighbor:
-            //   - if the neighbor is in part p, then the flip will increase cut size
-            //   - if the neighbor is in part q, then the flip will decrease cut size
-            //   - if the neighbor is not in part p nor in q, then the flip won't affect the cut size
-            for (idx, other_ids) in gains.iter_mut().enumerate() {
-                for (id2, gain) in other_ids.iter_mut() {
-                    *gain = 0.0;
-                    if partition[idx] == *id2 {
-                        // target part is current part, no gain
-                        continue;
-                    }
-                    for (j, w) in adjacency.outer_view(idx).unwrap().iter() {
-                        if partition[idx] == partition[j] {
-                            *gain -= w;
-                        } else if partition[j] == *id2 {
-                            *gain += w;
-                        }
-                    }
-                }
-            }
-
             // find max gain and target part
-            let (max_pos, (target_part, max_gain)) = gains
+            let (max_pos, flip) = gains
                 .iter()
-                .zip(locks.iter())
                 .enumerate()
-                .filter(|(_, (_, locked))| !*locked)
-                .map(|(idx, (vec, _))| {
-                    // (index of node, (target part of max gain, max gain))
-                    (
-                        idx,
-                        *vec.iter()
-                            .max_by(|(_idx1, gain1), (_id2, gain2)| {
-                                gain1.partial_cmp(gain2).unwrap()
-                            })
-                            .unwrap(),
-                    )
-                })
+                .filter_map(|(node, gains)| gains.max_gain().map(|flip| (node, flip)))
                 // get max gain of max gains computed for each node
-                .max_by(|(_, (_, gain1)), (_, (_, gain2))| gain1.partial_cmp(gain2).unwrap())
+                .max_by(|(_, flip1), (_, flip2)| {
+                    f64::partial_cmp(&flip1.gain, &flip2.gain).unwrap()
+                })
                 .unwrap();
+            let max_gain = flip.gain;
+            let target_part = flip.target_part;
 
             if max_gain <= 0. {
                 if num_bad_move >= max_bad_move_in_a_row {
@@ -138,14 +162,12 @@ fn fiduccia_mattheyses<W>(
                 num_bad_move = 0;
             }
 
-            // lock node
-            locks[max_pos] = true;
-
             // flip node
             let old_part = std::mem::replace(&mut partition[max_pos], target_part);
             flip_history.push((max_pos, old_part, target_part));
             parts_weights[old_part] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
+            gains[max_pos] = NodeGains::Locked;
 
             let imbalance = parts_weights
                 .iter()
@@ -156,17 +178,64 @@ fn fiduccia_mattheyses<W>(
                 .into_option()
                 .unwrap()
                 .1;
-            if imbalance <= max_imbalance {
-                // save cut_size
-                tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
-                cut_size_history.push(crate::topology::cut_size(adjacency, partition));
-            } else {
+            if max_imbalance < imbalance {
                 // revert flip
                 tracing::info!(?imbalance, max_pos, old_part, target_part, "no flip");
                 partition[max_pos] = old_part;
                 parts_weights[old_part] += weights[max_pos];
                 parts_weights[target_part] -= weights[max_pos];
                 flip_history.pop();
+                continue;
+            }
+
+            // save cut_size
+            tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
+            let mut new_cut_size = *cut_size_history.last().unwrap_or(&best_cut_size);
+            for (neighbors, edge_weight) in adjacency.outer_view(max_pos).unwrap().iter() {
+                if partition[neighbors] == old_part {
+                    new_cut_size += edge_weight;
+                } else if partition[neighbors] == target_part {
+                    new_cut_size -= edge_weight;
+                }
+            }
+            debug_assert_eq!(
+                new_cut_size,
+                crate::topology::cut_size(adjacency, partition),
+            );
+            cut_size_history.push(new_cut_size);
+
+            for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
+                let mut update_gains_for = |node: usize| {
+                    let gains = match &mut gains[node] {
+                        NodeGains::Available(gains) => gains,
+                        NodeGains::Locked => return,
+                    };
+                    let initial_part = partition[node];
+                    *gains = (0..part_count)
+                        .map(|target_part| {
+                            let gain = if target_part == initial_part {
+                                0.0
+                            } else {
+                                adjacency
+                                    .outer_view(node)
+                                    .unwrap()
+                                    .iter()
+                                    .map(|(neighbor, &edge_weight)| {
+                                        if partition[neighbor] == initial_part {
+                                            -edge_weight
+                                        } else if partition[neighbor] == target_part {
+                                            edge_weight
+                                        } else {
+                                            0.0
+                                        }
+                                    })
+                                    .sum()
+                            };
+                            Flip { target_part, gain }
+                        })
+                        .collect();
+                };
+                update_gains_for(neighbor);
             }
         }
 
