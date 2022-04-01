@@ -25,8 +25,8 @@ pub fn cut_size(adjacency: CsMatView<f64>, partition: &[usize]) -> f64 {
     for (i, row) in adjacency.outer_iterator().enumerate() {
         for (j, w) in row.iter() {
             // graph edge are present twice in the matrix be cause of symetry
-            if j >= i {
-                continue;
+            if i <= j {
+                break;
             }
             if partition[i] != partition[j] {
                 cut_size += w;
