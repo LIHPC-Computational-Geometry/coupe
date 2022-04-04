@@ -258,12 +258,24 @@ fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn Algorithm<D>>> 
             part_count: require(parse(args.next()))?,
             order: optional(parse(args.next()), 12)?,
         }),
-        "fm" => Box::new(coupe::FiducciaMattheyses {
-            max_imbalance: Some(optional(parse(args.next()), 0.1)?),
-            max_bad_move_in_a_row: optional(parse(args.next()), 0)?,
-            max_passes: parse(args.next()).transpose()?,
-            max_flips_per_pass: parse(args.next()).transpose()?,
-        }),
+        "fm" => {
+            let max_imbalance = parse(args.next()).transpose()?;
+            let max_bad_move_in_a_row = optional(parse(args.next()), 0)?;
+            let mut max_passes = parse(args.next()).transpose()?;
+            if max_passes == Some(0) {
+                max_passes = None;
+            }
+            let mut max_flips_per_pass = parse(args.next()).transpose()?;
+            if max_flips_per_pass == Some(0) {
+                max_flips_per_pass = None;
+            }
+            Box::new(coupe::FiducciaMattheyses {
+                max_imbalance,
+                max_bad_move_in_a_row,
+                max_passes,
+                max_flips_per_pass,
+            })
+        }
         "kl" => Box::new(coupe::KernighanLin {
             max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
             ..Default::default()
