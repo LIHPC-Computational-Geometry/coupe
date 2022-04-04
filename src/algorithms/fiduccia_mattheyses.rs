@@ -21,6 +21,8 @@ fn fiduccia_mattheyses<W>(
     debug_assert_eq!(partition.len(), adjacency.cols());
 
     let part_count = 1 + *partition.iter().max().unwrap();
+    debug_assert!(part_count <= 2);
+
     let mut parts_weights =
         crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
     let total_weight: W = parts_weights.iter().cloned().sum();
@@ -53,11 +55,11 @@ fn fiduccia_mattheyses<W>(
         let mut flip_history = Vec::new();
         let mut cut_size_history = Vec::new();
 
-        use std::collections::BinaryHeap;
+        use std::collections::BTreeSet;
 
         #[derive(Clone, Copy)]
         struct Flip {
-            target_part: usize,
+            node: usize,
             gain: f64,
         }
 
@@ -80,56 +82,27 @@ fn fiduccia_mattheyses<W>(
             }
         }
 
-        /// Gain table element.
-        enum NodeGains {
-            /// The edge-cut gain should the node move to part P, for each P.
-            Available(BinaryHeap<Flip>),
-            /// The node is locked and will not be visited again this pass.
-            Locked,
-        }
-
-        impl NodeGains {
-            pub fn unlock(&self) -> Option<&BinaryHeap<Flip>> {
-                match self {
-                    NodeGains::Available(gains) => Some(gains),
-                    NodeGains::Locked => None,
-                }
-            }
-
-            pub fn max_gain(&self) -> Option<Flip> {
-                self.unlock().and_then(|gains| gains.peek().cloned())
-            }
-        }
-
-        // Gain table, stored as a heap of node gains for each node.
-        let mut gains: Vec<NodeGains> = partition
+        // Gain table, stored as a heap of (node gains, node index).
+        let mut gains: BTreeSet<Flip> = partition
             .iter()
             .enumerate()
             .map(|(node, &initial_part)| {
-                let gains = (0..part_count)
-                    .map(|target_part| {
-                        let gain = if target_part == initial_part {
-                            0.0
+                let target_part = 1 - initial_part;
+                let gain = adjacency
+                    .outer_view(node)
+                    .unwrap()
+                    .iter()
+                    .map(|(neighbor, &edge_weight)| {
+                        if partition[neighbor] == initial_part {
+                            -edge_weight
+                        } else if partition[neighbor] == target_part {
+                            edge_weight
                         } else {
-                            adjacency
-                                .outer_view(node)
-                                .unwrap()
-                                .iter()
-                                .map(|(neighbor, &edge_weight)| {
-                                    if partition[neighbor] == initial_part {
-                                        -edge_weight
-                                    } else if partition[neighbor] == target_part {
-                                        edge_weight
-                                    } else {
-                                        0.0
-                                    }
-                                })
-                                .sum()
-                        };
-                        Flip { target_part, gain }
+                            0.0
+                        }
                     })
-                    .collect();
-                NodeGains::Available(gains)
+                    .sum();
+                Flip { node, gain }
             })
             .collect();
 
@@ -139,17 +112,13 @@ fn fiduccia_mattheyses<W>(
         // bad flips are performed, the loop will break early
         for _ in 0..max_flips_per_pass {
             // find max gain and target part
-            let (max_pos, flip) = gains
-                .iter()
-                .enumerate()
-                .filter_map(|(node, gains)| gains.max_gain().map(|flip| (node, flip)))
-                // get max gain of max gains computed for each node
-                .max_by(|(_, flip1), (_, flip2)| {
-                    f64::partial_cmp(&flip1.gain, &flip2.gain).unwrap()
-                })
-                .unwrap();
-            let max_gain = flip.gain;
-            let target_part = flip.target_part;
+            let flip = *gains.iter().last().unwrap();
+            gains.remove(&flip);
+            let Flip {
+                node: max_pos,
+                gain: max_gain,
+            } = flip;
+            let target_part = 1 - partition[max_pos];
 
             if max_gain <= 0. {
                 if num_bad_move >= max_bad_move_in_a_row {
@@ -167,7 +136,6 @@ fn fiduccia_mattheyses<W>(
             flip_history.push((max_pos, old_part, target_part));
             parts_weights[old_part] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
-            gains[max_pos] = NodeGains::Locked;
 
             let imbalance = parts_weights
                 .iter()
@@ -204,38 +172,35 @@ fn fiduccia_mattheyses<W>(
             );
             cut_size_history.push(new_cut_size);
 
-            for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
-                let mut update_gains_for = |node: usize| {
-                    let gains = match &mut gains[node] {
-                        NodeGains::Available(gains) => gains,
-                        NodeGains::Locked => return,
-                    };
-                    let initial_part = partition[node];
-                    *gains = (0..part_count)
-                        .map(|target_part| {
-                            let gain = if target_part == initial_part {
-                                0.0
-                            } else {
-                                adjacency
-                                    .outer_view(node)
-                                    .unwrap()
-                                    .iter()
-                                    .map(|(neighbor, &edge_weight)| {
-                                        if partition[neighbor] == initial_part {
-                                            -edge_weight
-                                        } else if partition[neighbor] == target_part {
-                                            edge_weight
-                                        } else {
-                                            0.0
-                                        }
-                                    })
-                                    .sum()
-                            };
-                            Flip { target_part, gain }
-                        })
-                        .collect();
-                };
-                update_gains_for(neighbor);
+            let neighbors: BTreeSet<usize> = adjacency
+                .outer_view(max_pos)
+                .unwrap()
+                .iter()
+                .map(|(neighbor, _edge_weight)| neighbor)
+                .collect();
+
+            gains.retain(|flip| !neighbors.contains(&flip.node));
+
+            for neighbor in neighbors {
+                let initial_part = partition[neighbor];
+                let gain = adjacency
+                    .outer_view(neighbor)
+                    .unwrap()
+                    .iter()
+                    .map(|(neighbor, &edge_weight)| {
+                        if partition[neighbor] == initial_part {
+                            -edge_weight
+                        } else if partition[neighbor] == target_part {
+                            edge_weight
+                        } else {
+                            0.0
+                        }
+                    })
+                    .sum();
+                gains.insert(Flip {
+                    node: neighbor,
+                    gain,
+                });
             }
         }
 
@@ -390,6 +355,9 @@ where
                 expected: part_ids.len(),
                 actual: adjacency.cols(),
             });
+        }
+        if 1 < *part_ids.iter().max().unwrap_or(&0) {
+            return Err(Error::BiPartitioningOnly);
         }
         fiduccia_mattheyses(
             part_ids,
