@@ -518,6 +518,28 @@ fn rcb_thread<const D: usize, W>(
     futures_lite::future::block_on(task);
 }
 
+/// Split `total_work` among a given number of threads.
+///
+/// Returns `(thread_count, work_per_thread)`, where `thread_count` is the
+/// amount of threads that have actual work, and `work_per_thread` is the
+/// maximum amount of work these thread have (RCB here splits by chunks, thus
+/// the last thread will not have this much work).
+///
+/// # Panics
+///
+/// Panics if either argument is zero.
+fn work_share(total_work: usize, max_threads: usize) -> (usize, usize) {
+    let max_threads = usize::min(total_work, max_threads);
+
+    // ceil(total_work / max_threads)
+    let work_per_thread = (total_work + max_threads - 1) / max_threads;
+
+    // ceil(total_work / work_per_thread)
+    let thread_count = (total_work + work_per_thread - 1) / work_per_thread;
+
+    (work_per_thread, thread_count)
+}
+
 fn rcb<const D: usize, P, W>(
     partition: &mut [usize],
     points: P,
@@ -561,9 +583,7 @@ where
             part,
         })
         .collect();
-
-    let thread_count = usize::min(items.len(), rayon::current_num_threads());
-
+    let (items_per_thread, thread_count) = work_share(items.len(), rayon::current_num_threads());
     let iteration_ctxs: Vec<_> = (0..usize::pow(2, iter_count as u32 + 1) - 1)
         .map(|_| IterationState::new(thread_count))
         .collect();
@@ -571,8 +591,6 @@ where
     mem::drop(enter);
 
     rayon::in_place_scope(|s| {
-        let items_per_thread = (items.len() + thread_count - 1) / thread_count;
-
         for chunk in items.chunks_mut(items_per_thread) {
             let iteration_ctxs = &iteration_ctxs;
             s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, 0.05));
@@ -810,6 +828,25 @@ mod tests {
         axis_sort(&points, &mut permutation, 1);
 
         assert_eq!(permutation, vec![3, 6, 5, 1, 0, 2, 4]);
+    }
+
+    #[test]
+    fn test_work_share() {
+        assert_eq!(work_share(100, 4), (25, 4));
+        assert_eq!(work_share(101, 4), (26, 4));
+
+        assert_eq!(work_share(100, 20), (5, 20));
+        assert_eq!(work_share(101, 20), (6, 17));
+
+        assert_eq!(work_share(100, 100), (1, 100));
+        assert_eq!(work_share(100, 101), (1, 100));
+
+        assert_eq!(work_share(100, 1), (100, 1));
+        assert_eq!(work_share(100, 2), (50, 2));
+        assert_eq!(work_share(100, 3), (34, 3));
+        assert_eq!(work_share(1, 100), (1, 1));
+        assert_eq!(work_share(2, 100), (1, 2));
+        assert_eq!(work_share(3, 100), (1, 3));
     }
 
     #[test]
