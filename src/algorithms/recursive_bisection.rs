@@ -570,13 +570,17 @@ where
             actual: points.len(),
         });
     }
+    if partition.is_empty() {
+        // Would make the partition.min() at the end panic.
+        return Ok(());
+    }
 
     let init_span = tracing::info_span!("convert input and make initial data structures");
     let enter = init_span.enter();
 
     let mut items: Vec<_> = points
         .zip(weights)
-        .zip(unsafe { mem::transmute::<_, &[AtomicUsize]>(partition) })
+        .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut *partition) })
         .map(|((point, weight), part)| Item {
             point,
             weight,
@@ -596,6 +600,11 @@ where
             s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, 0.05));
         }
     });
+
+    let part_id_offset = *partition.par_iter().min().unwrap();
+    partition
+        .par_iter_mut()
+        .for_each(|part_id| *part_id -= part_id_offset);
 
     Ok(())
 }
