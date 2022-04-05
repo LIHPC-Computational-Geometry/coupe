@@ -61,6 +61,10 @@ pub trait Partition<M> {
 
     /// Partition the given data and output the part ID of each element in
     /// `part_ids`.
+    ///
+    /// Part IDs must be contiguous and start from zero, meaning the number of
+    /// parts is one plus the maximum of `part_ids`.  If a lower ID does not
+    /// appear in the array, the part is assumed to be empty.
     fn partition(&mut self, part_ids: &mut [usize], data: M)
         -> Result<Self::Metadata, Self::Error>;
 }
