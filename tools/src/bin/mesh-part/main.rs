@@ -23,18 +23,19 @@ fn main_d<const D: usize>(
     };
     let mut partition = vec![0; problem.points.len()];
 
-    let algorithms: Vec<_> = matches
-        .opt_strs("a")
-        .into_iter()
+    let algorithm_specs = matches.opt_strs("a");
+    let algorithms: Vec<_> = algorithm_specs
+        .iter()
         .map(|algorithm_spec| {
-            coupe_tools::parse_algorithm(&algorithm_spec)
+            coupe_tools::parse_algorithm(algorithm_spec)
                 .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
         })
         .collect::<Result<_>>()?;
 
-    for mut algorithm in algorithms {
+    for (algorithm_spec, mut algorithm) in algorithm_specs.iter().zip(algorithms) {
         let mut algorithm = algorithm.to_runner(&problem);
-        algorithm(&mut partition).context("failed to apply algorithm")?;
+        algorithm(&mut partition)
+            .with_context(|| format!("failed to apply algorithm {:?}", algorithm_spec))?;
     }
 
     Ok(partition)
