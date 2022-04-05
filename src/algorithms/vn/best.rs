@@ -1,4 +1,5 @@
 use crate::imbalance::compute_parts_load;
+use crate::Error;
 use itertools::Itertools;
 use num::One;
 use num::Zero;
@@ -7,7 +8,11 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 
-fn vn_best_mono<W, T>(partition: &mut [usize], criterion: W, nb_parts: usize) -> usize
+fn vn_best_mono<W, T>(
+    partition: &mut [usize],
+    criterion: W,
+    nb_parts: usize,
+) -> Result<usize, Error>
 where
     W: IntoIterator<Item = T>,
     T: AddAssign + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
@@ -22,12 +27,19 @@ where
 
     let mut criterion: Vec<(T, usize)> = criterion.into_iter().zip(0..).collect();
 
-    assert_eq!(partition.len(), criterion.len());
-
-    // We expect weights to be non-negative values
-    assert!(criterion
+    if criterion.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: criterion.len(),
+        });
+    }
+    if criterion
         .iter()
-        .all(|(weight, _weight_id)| *weight >= T::zero()));
+        .any(|(weight, _weight_id)| *weight < T::zero())
+    {
+        return Err(Error::NegativeValues);
+    }
+
     // We check if all weights are 0 because this screw the gain table
     // initialization and a quick fix could interfere with the algorithm.
     if partition.is_empty()
@@ -37,7 +49,7 @@ where
             .all(|(weight, _weight_id)| weight.is_zero())
         || nb_parts < 2
     {
-        return 0;
+        return Ok(0);
     }
 
     let mut part_loads = compute_parts_load(
@@ -56,7 +68,7 @@ where
             .enumerate()
             .minmax_by_key(|&(_part, load)| load)
             .into_option()
-            .unwrap();
+            .unwrap(); // Won't panic because part_loads as at least two elements.
         let imbalance = part_loads[overweight_part] - part_loads[underweight_part];
 
         let maybe_nearest = (|| -> Option<usize> {
@@ -117,7 +129,7 @@ where
         algo_iterations += 1;
     }
 
-    algo_iterations
+    Ok(algo_iterations)
 }
 
 /// # Steepest descent Vector-of-Numbers algorithm
@@ -160,15 +172,17 @@ where
     W::Item: Ord + Copy,
 {
     type Metadata = usize;
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         weights: W,
     ) -> Result<Self::Metadata, Self::Error> {
-        let algo_iterations = vn_best_mono(part_ids, weights, self.part_count);
-        Ok(algo_iterations)
+        if self.part_count < 2 {
+            return Ok(0);
+        }
+        vn_best_mono(part_ids, weights, self.part_count)
     }
 }
 
@@ -184,7 +198,7 @@ mod tests {
         let w = [1, 2, 3, 4, 5, 6];
         let mut part = vec![0; w.len()];
         let imb_ini = imbalance::imbalance(2, &part, &w);
-        vn_best_mono(&mut part, w, 2);
+        vn_best_mono(&mut part, w, 2).unwrap();
         let imb_end = imbalance::imbalance(2, &part, &w);
         assert!(imb_end < imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -203,7 +217,8 @@ mod tests {
                 })
         ) {
             let imb_ini = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
-            vn_best_mono::<_, u64>(&mut partition, weights.iter().cloned(), 2);
+            vn_best_mono::<_, u64>(&mut partition, weights.iter().cloned(), 2)
+                .unwrap();
             let imb_end = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini, "{} < {}", imb_ini, imb_end);

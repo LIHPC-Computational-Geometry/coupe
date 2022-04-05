@@ -38,6 +38,9 @@ pub enum Error {
 
     /// Input sets don't have matching lengths.
     InputLenMismatch { expected: usize, actual: usize },
+
+    /// Input contains negative values and such values are not supported.
+    NegativeValues,
 }
 
 impl fmt::Display for Error {
@@ -48,6 +51,7 @@ impl fmt::Display for Error {
                 f,
                 "input sets don't have the same length (expected {expected} items, got {actual})",
             ),
+            Error::NegativeValues => write!(f, "input contains negative values"),
         }
     }
 }
