@@ -1,3 +1,4 @@
+use crate::Error;
 use itertools::Itertools as _;
 use num::FromPrimitive;
 use num::One;
@@ -7,23 +8,32 @@ use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
-fn vn_first_mono<T>(partition: &mut [usize], weights: &[T], num_parts: usize) -> usize
+fn vn_first_mono<T>(
+    partition: &mut [usize],
+    weights: &[T],
+    num_parts: usize,
+) -> Result<usize, Error>
 where
     T: AddAssign + Sub<Output = T> + Sum,
     T: Zero + One + FromPrimitive,
     T: Clone + PartialOrd,
 {
-    assert_eq!(partition.len(), weights.len());
+    if weights.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
     assert_ne!(num_parts, 0);
-    if weights.is_empty() {
-        return 0;
+    if weights.is_empty() || num_parts < 2 {
+        return Ok(0);
     }
 
     let mut part_loads =
         crate::imbalance::compute_parts_load(partition, num_parts, weights.iter().cloned());
     let total_weight: T = part_loads.iter().cloned().sum();
     if total_weight.is_zero() {
-        return 0;
+        return Ok(0);
     }
 
     let (min_load, mut max_load) = part_loads.iter().cloned().minmax().into_option().unwrap();
@@ -71,7 +81,7 @@ where
         algo_iterations += 1;
     }
 
-    algo_iterations
+    Ok(algo_iterations)
 }
 
 #[allow(dead_code)]
@@ -226,15 +236,14 @@ where
     W: Clone + PartialOrd,
 {
     type Metadata = usize;
-    type Error = std::convert::Infallible;
+    type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         weights: &'a [W],
     ) -> Result<Self::Metadata, Self::Error> {
-        let algo_iterations = vn_first_mono(part_ids, weights, self.part_count);
-        Ok(algo_iterations)
+        vn_first_mono(part_ids, weights, self.part_count)
     }
 }
 
@@ -250,9 +259,9 @@ mod tests {
         const W: [i32; 6] = [1, 2, 3, 4, 5, 6];
         let mut part = [0; W.len()];
 
-        vn_first_mono(&mut part, &W, 1);
+        vn_first_mono(&mut part, &W, 1).unwrap();
         let imb_ini = imbalance::imbalance(2, &part, &W);
-        vn_first_mono(&mut part, &W, 2);
+        vn_first_mono(&mut part, &W, 2).unwrap();
         let imb_end = imbalance::imbalance(2, &part, &W);
         assert!(imb_end <= imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -269,7 +278,7 @@ mod tests {
                 })
         ) {
             let imb_ini = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
-            vn_first_mono(&mut partition, &weights, 2);
+            vn_first_mono(&mut partition, &weights, 2).unwrap();
             let imb_end = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini);
