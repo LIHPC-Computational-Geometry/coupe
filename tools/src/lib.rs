@@ -1,4 +1,349 @@
+use anyhow::Context as _;
+use anyhow::Result;
+use coupe::Partition as _;
+use coupe::PointND;
 use mesh_io::medit::Mesh;
+use mesh_io::weight;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
+use std::any;
+use std::mem;
+
+#[cfg(feature = "metis")]
+mod metis;
+#[cfg(feature = "scotch")]
+mod scotch;
+
+pub struct Problem<const D: usize> {
+    pub points: Vec<PointND<D>>,
+    pub weights: weight::Array,
+    pub adjacency: sprs::CsMat<f64>,
+}
+
+pub type Runner<'a> = Box<dyn FnMut(&mut [usize]) -> Result<()> + Send + Sync + 'a>;
+
+fn runner_error(message: &'static str) -> Runner {
+    Box::new(move |_partition| Err(anyhow::anyhow!("{}", message)))
+}
+
+pub trait ToRunner<const D: usize> {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a>;
+}
+
+impl<const D: usize, R> ToRunner<D> for coupe::Random<R>
+where
+    R: 'static + rand::Rng + Send + Sync,
+{
+    fn to_runner<'a>(&'a mut self, _: &'a Problem<D>) -> Runner<'a> {
+        Box::new(move |partition| {
+            self.partition(partition, ())?;
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::Greedy {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        Box::new(move |partition| {
+            match &problem.weights {
+                Integers(is) => {
+                    let weights = is.iter().map(|weight| weight[0]);
+                    self.partition(partition, weights)?;
+                }
+                Floats(fs) => {
+                    let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                    self.partition(partition, weights)?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::KarmarkarKarp {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        Box::new(move |partition| {
+            match &problem.weights {
+                Integers(is) => {
+                    let weights = is.iter().map(|weight| weight[0]);
+                    self.partition(partition, weights)?;
+                }
+                Floats(fs) => {
+                    let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                    self.partition(partition, weights)?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::CompleteKarmarkarKarp {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        Box::new(move |partition| {
+            match &problem.weights {
+                Integers(is) => {
+                    let weights = is.iter().map(|weight| weight[0]);
+                    self.partition(partition, weights)?;
+                }
+                Floats(fs) => {
+                    let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                    self.partition(partition, weights)?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::VnBest {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        Box::new(move |partition| {
+            match &problem.weights {
+                Integers(is) => {
+                    let weights = is.iter().map(|weight| weight[0]);
+                    self.partition(partition, weights)?;
+                }
+                Floats(fs) => {
+                    let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                    self.partition(partition, weights)?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::VnFirst {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(is) => {
+                let weights: Vec<_> = is.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, &weights)?;
+                    Ok(())
+                })
+            }
+            Floats(fs) => {
+                let weights: Vec<_> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, &weights)?;
+                    Ok(())
+                })
+            }
+        }
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::Rcb {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        Box::new(move |partition| {
+            let points = problem.points.par_iter().cloned();
+            match &problem.weights {
+                Integers(is) => {
+                    let weights = is.par_iter().map(|weight| weight[0]);
+                    self.partition(partition, (points, weights))?;
+                }
+                Floats(fs) => {
+                    let weights = fs.par_iter().map(|weight| weight[0]);
+                    self.partition(partition, (points, weights))?;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        if D != 2 {
+            return runner_error("hilbert is only implemented for 2D meshes");
+        }
+        // SAFETY: is a noop since D == 2
+        let points =
+            unsafe { mem::transmute::<&Vec<PointND<D>>, &Vec<PointND<2>>>(&problem.points) };
+        match &problem.weights {
+            Integers(_) => runner_error("hilbert is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (points, &weights))?;
+                    Ok(())
+                })
+            }
+        }
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        let adjacency = problem.adjacency.view();
+        match &problem.weights {
+            Integers(is) => {
+                let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (adjacency, &weights))?;
+                    Ok(())
+                })
+            }
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (adjacency, &weights))?;
+                    Ok(())
+                })
+            }
+        }
+    }
+}
+
+impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        let adjacency = problem.adjacency.view();
+        match &problem.weights {
+            Integers(_) => runner_error("kl is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (adjacency, &weights))?;
+                    Ok(())
+                })
+            }
+        }
+    }
+}
+
+pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>> {
+    let mut args = spec.split(',');
+    let name = args.next().context("it's empty")?;
+
+    fn optional<T>(maybe_arg: Option<Result<T>>, default: T) -> Result<T> {
+        Ok(maybe_arg.transpose()?.unwrap_or(default))
+    }
+
+    fn require<T>(maybe_arg: Option<Result<T>>) -> Result<T> {
+        maybe_arg.context("not enough arguments")?
+    }
+
+    fn parse<T>(arg: Option<&str>) -> Option<Result<T>>
+    where
+        T: std::str::FromStr + any::Any,
+        T::Err: std::error::Error + Send + Sync + 'static,
+    {
+        arg.map(|arg| {
+            let f = arg.parse::<T>().with_context(|| {
+                format!("arg {:?} is not a valid {}", arg, any::type_name::<T>())
+            })?;
+            Ok(f)
+        })
+    }
+
+    Ok(match name {
+        "random" => {
+            use rand::SeedableRng as _;
+
+            let part_count = require(parse(args.next()))?;
+            let seed: [u8; 32] = {
+                let mut bytes = args.next().unwrap_or("").as_bytes().to_vec();
+                bytes.resize(32_usize, 0_u8);
+                bytes.try_into().unwrap()
+            };
+            let rng = rand_pcg::Pcg64::from_seed(seed);
+            Box::new(coupe::Random { rng, part_count })
+        }
+        "greedy" => Box::new(coupe::Greedy {
+            part_count: require(parse(args.next()))?,
+        }),
+        "kk" => Box::new(coupe::KarmarkarKarp {
+            part_count: require(parse(args.next()))?,
+        }),
+        "ckk" => Box::new(coupe::CompleteKarmarkarKarp {
+            tolerance: require(parse(args.next()))?,
+        }),
+        "vn-best" => Box::new(coupe::VnBest {
+            part_count: require(parse(args.next()))?,
+        }),
+        "vn-first" => Box::new(coupe::VnFirst {
+            part_count: require(parse(args.next()))?,
+        }),
+        "rcb" => Box::new(coupe::Rcb {
+            iter_count: require(parse(args.next()))?,
+        }),
+        "hilbert" => Box::new(coupe::HilbertCurve {
+            part_count: require(parse(args.next()))?,
+            order: optional(parse(args.next()), 12)?,
+        }),
+        "fm" => {
+            let max_imbalance = parse(args.next()).transpose()?;
+            let max_bad_move_in_a_row = optional(parse(args.next()), 0)?;
+            let mut max_passes = parse(args.next()).transpose()?;
+            if max_passes == Some(0) {
+                max_passes = None;
+            }
+            let mut max_flips_per_pass = parse(args.next()).transpose()?;
+            if max_flips_per_pass == Some(0) {
+                max_flips_per_pass = None;
+            }
+            Box::new(coupe::FiducciaMattheyses {
+                max_imbalance,
+                max_bad_move_in_a_row,
+                max_passes,
+                max_flips_per_pass,
+            })
+        }
+        "kl" => Box::new(coupe::KernighanLin {
+            max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
+            ..Default::default()
+        }),
+
+        #[cfg(feature = "metis")]
+        "metis:recursive" => Box::new(metis::Recursive {
+            part_count: require(parse(args.next()))?,
+        }),
+
+        #[cfg(feature = "metis")]
+        "metis:kway" => Box::new(metis::KWay {
+            part_count: require(parse(args.next()))?,
+        }),
+
+        #[cfg(feature = "scotch")]
+        "scotch:std" => Box::new(scotch::Standard {
+            part_count: require(parse(args.next()))?,
+        }),
+
+        _ => anyhow::bail!("unknown algorithm {:?}", name),
+    })
+}
+
+pub fn barycentres<const D: usize>(mesh: &Mesh) -> Vec<PointND<D>> {
+    mesh.elements()
+        .filter_map(|(element_type, nodes, _element_ref)| {
+            if element_type.dimension() != mesh.dimension() {
+                return None;
+            }
+            let mut barycentre = [0.0; D];
+            for node_idx in nodes {
+                let node_coordinates = mesh.node(*node_idx);
+                for (bc_coord, node_coord) in barycentre.iter_mut().zip(node_coordinates) {
+                    *bc_coord += node_coord;
+                }
+            }
+            for bc_coord in &mut barycentre {
+                *bc_coord /= nodes.len() as f64;
+            }
+            Some(PointND::from(barycentre))
+        })
+        .collect()
+}
 
 /// The adjacency matrix that models the dual graph of the given mesh.
 pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
