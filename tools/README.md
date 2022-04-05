@@ -10,6 +10,7 @@ includes the following tools:
   evaluate mesh partitions:
     - weight-gen generates a distribution of cell weights for a mesh,
     - mesh-part runs a partitioner on a given mesh and weight distribution,
+    - part-bench runs criterion on given partitioners, meshes and weights,
     - part-info displays information about a partition, for a given mesh and
       weight distribution,
     - apply-part encodes a partition in a mesh file for visualization.
@@ -22,7 +23,7 @@ These tools can be built with cargo:
 cargo build --bins
 ```
 
-The `mesh-part` tool has optional support for [MeTiS] and [SCOTCH]:
+The `mesh-part` and `part-bench` tools have optional support for [MeTiS] and [SCOTCH]:
 
 ```
 cargo build --bins --features metis,scotch

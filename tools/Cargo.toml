@@ -32,6 +32,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["e
 tracing-chrome = { version = "0.4", default-features = false }
 tracing-tree = { version = "0.2", default-features = false }
 
+# Benchmark framework
+criterion = { version = "0.3", default-features = false }
+
 # Other utilities
 itertools = { version = "0.10", default-features = false }
 num = { version = "0.4", default-features = false }
