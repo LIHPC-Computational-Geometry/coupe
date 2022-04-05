@@ -19,3 +19,8 @@
 
 # trace files
 *.json
+
+# flamegraphs
+perf.data
+perf.data.old
+*.svg
