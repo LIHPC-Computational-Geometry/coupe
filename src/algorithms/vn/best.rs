@@ -135,7 +135,8 @@ where
 /// # Steepest descent Vector-of-Numbers algorithm
 ///
 /// This algorithm greedily moves weights from parts to parts in such a way that
-/// the balance gain is maximized on each step.
+/// the balance gain is maximized on each move. See also its
+/// [non-greedy version][crate::VnFirst].
 ///
 /// # Example
 ///
