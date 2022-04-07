@@ -252,6 +252,13 @@ impl std::error::Error for Error {}
 /// Projects points on the hilbert curve and splits this curve into a given
 /// amount of parts.
 ///
+/// The hilbert curve depends on a grid resolution called `order`. Basically,
+/// the minimal bounding rectangle of the set of points is split into
+/// `2^order * 2^order` cells.  All the points in a given cell will have the
+/// same encoding.
+///
+/// The complexity of encoding a point is `O(order)`.
+///
 /// # Example
 ///
 /// ```rust

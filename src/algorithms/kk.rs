@@ -122,8 +122,8 @@ where
 /// Also called the Largest Differencing Method.
 ///
 /// Similar to the [greedy number partitioning algorithm][crate::Greedy], but
-/// instead of puting the highest weight in the lowest part, it puts the two
-/// highest weights in two different parts and keep their difference.
+/// instead of puting the highest weight into the lowest part, it puts the two
+/// highest weights in two different parts and keeps their difference.
 ///
 /// # Example
 ///
