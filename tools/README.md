@@ -36,6 +36,10 @@ cargo build --bins --features metis,scotch
 
 Use the `--help` flag on any executable to open its manual.
 
+You can also set those environment variables:
+- `LOG=coupe`, enables debug logging for coupe's algorithms,
+- `RAYON_NUM_THREADS=4`, limits the number of threads to 4.
+
 For example,
 
 ```shell
