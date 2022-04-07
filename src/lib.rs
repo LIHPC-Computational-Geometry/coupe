@@ -38,6 +38,7 @@ pub mod topology;
 mod uid;
 
 pub use crate::algorithms::*;
+pub use crate::geometry::Aabb;
 pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::nextafter::nextafter;
 pub use crate::real::Real;

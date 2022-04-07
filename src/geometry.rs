@@ -17,7 +17,7 @@ pub type PointND<const D: usize> = SVector<f64, D>;
 pub type Matrix<const D: usize> = SMatrix<f64, D, D>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Aabb<const D: usize> {
+pub struct Aabb<const D: usize> {
     p_min: PointND<D>,
     p_max: PointND<D>,
 }
