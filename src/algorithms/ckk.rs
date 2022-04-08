@@ -38,6 +38,7 @@ fn ckk_bipart_build(partition: &mut [usize], last_weight: usize, steps: &[Step])
     }
 }
 
+#[allow(clippy::ptr_arg)] // clippy bug
 fn ckk_bipart_rec<T>(
     partition: &mut [usize],
     weights: &mut Vec<(T, usize)>,
