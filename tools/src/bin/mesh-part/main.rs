@@ -69,14 +69,6 @@ fn main() -> Result<()> {
 
     if matches.opt_present("h") {
         eprintln!("{}", options.usage("Usage: mesh-part [options]"));
-        eprint!(include_str!("help_after.txt"));
-
-        #[cfg(feature = "metis")]
-        eprint!(include_str!("help_after_metis.txt"));
-
-        #[cfg(feature = "scotch")]
-        eprint!(include_str!("help_after_scotch.txt"));
-
         return Ok(());
     }
 

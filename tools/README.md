@@ -14,33 +14,49 @@ includes the following tools:
     - part-info displays information about a partition, for a given mesh and
       weight distribution,
     - apply-part encodes a partition in a mesh file for visualization.
+    - apply-weight encodes a weight distribution in a mesh file for
+      visualization.
 
 ## Building
 
-These tools can be built with cargo:
+[scdoc] is required to build the man pages.
+
+For end users, a simple Makefile with basic options is provided:
+
+```
+make
+sudo make install
+```
+
+Otherwise, these tools can be built with cargo:
 
 ```
 cargo build --bins
 ```
 
-The `mesh-part` and `part-bench` tools have optional support for [MeTiS] and [SCOTCH]:
+The `mesh-part` and `part-bench` tools have optional support for [MeTiS] and
+[SCOTCH] that is enabled by default.  To disable these features, use the
+`--no-default-features` command-line flag.
 
 ```
-cargo build --bins --features metis,scotch
+# Disable SCOTCH and MeTiS support
+cargo build --bins --no-default-features
+
+# Enable MeTiS support only
+cargo build --bins --no-default-features --features metis
 ```
 
-[MeTiS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
-[SCOTCH]: https://github.com/LIHPC-Computational-Geometry/scotch-rs
+C bindings to mesh-io can be built with the following command:
+
+```
+cargo build -p mesh-io-ffi
+```
 
 ## Usage
 
-Use the `--help` flag on any executable to open its manual.
+See the man pages in the `doc/` directory.
 
-You can also set those environment variables:
-- `LOG=coupe`, enables debug logging for coupe's algorithms,
-- `RAYON_NUM_THREADS=4`, limits the number of threads to 4.
-
-For example,
+For example, here is a quick walk-through:
 
 ```shell
 # Cell weights increase linearly according to its position on the X axis.
@@ -65,3 +81,7 @@ part-info --mesh heart.mesh --weights heart.linear.weights \
 part-info --mesh heart.mesh --weights heart.linear.weights \
           --partition heart.linear.metis.part
 ```
+
+[MeTiS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
+[SCOTCH]: https://github.com/LIHPC-Computational-Geometry/scotch-rs
+[scdoc]: https://sr.ht/~sircmpwn/scdoc/

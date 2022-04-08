@@ -110,11 +110,7 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("Usage: weight-gen [options]");
-        eprintln!();
-        eprint!("Generate a weight distribution from the given mesh and prints it to STDOUT.");
-        eprintln!("{}", options.usage(""));
-        eprint!(include_str!("help_after.txt"));
+        eprintln!("{}", options.usage("Usage: weight-gen [options]"));
         return Ok(());
     }
 
