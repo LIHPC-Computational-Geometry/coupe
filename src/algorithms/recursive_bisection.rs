@@ -545,6 +545,7 @@ fn rcb<const D: usize, P, W>(
     points: P,
     weights: W,
     iter_count: usize,
+    tolerance: f64,
 ) -> Result<(), Error>
 where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
@@ -597,7 +598,7 @@ where
     rayon::in_place_scope(|s| {
         for chunk in items.chunks_mut(items_per_thread) {
             let iteration_ctxs = &iteration_ctxs;
-            s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, 0.05));
+            s.spawn(move |_| rcb_thread(iteration_ctxs, chunk, iter_count, tolerance));
         }
     });
 
@@ -734,6 +735,7 @@ fn simple_rcb<const D: usize, P, W>(
     points: P,
     weights: W,
     iter_count: usize,
+    tolerance: f64,
 ) -> Result<(), Error>
 where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
@@ -774,7 +776,7 @@ where
         })
         .collect();
 
-    simple_rcb_recurse(&mut items, iter_count, 0, 0, 0.05);
+    simple_rcb_recurse(&mut items, iter_count, 0, 0, tolerance);
 
     let part_id_offset = *partition.par_iter().min().unwrap();
     partition
@@ -839,6 +841,9 @@ pub struct Rcb {
     /// of at most `2^num_iter` parts.
     pub iter_count: usize,
 
+    /// Tolerance on the normalized imbalance.
+    pub tolerance: f64,
+
     /// Use a faster, experimental implementation of the algorithm.
     pub fast: bool,
 }
@@ -866,9 +871,9 @@ where
             return Ok(());
         }
         if self.fast {
-            rcb(part_ids, points, weights, self.iter_count)
+            rcb(part_ids, points, weights, self.iter_count, self.tolerance)
         } else {
-            simple_rcb(part_ids, points, weights, self.iter_count)
+            simple_rcb(part_ids, points, weights, self.iter_count, self.tolerance)
         }
     }
 }
@@ -907,7 +912,7 @@ where
     let mbr = Mbr::from_points(points);
     let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
     // When the rotation is done, we just apply RCB
-    rcb(partition, points, weights, n_iter)
+    rcb(partition, points, weights, n_iter, 0.05)
 }
 
 /// # Recursive Inertial Bisection algorithm
@@ -1060,7 +1065,7 @@ mod tests {
             .num_threads(1) // make the test deterministic
             .build()
             .unwrap()
-            .install(|| rcb(&mut partition, points, weights, 2))
+            .install(|| rcb(&mut partition, points, weights, 2, 0.05))
             .unwrap();
 
         assert_eq!(partition[0], partition[6]);
@@ -1091,7 +1096,7 @@ mod tests {
         let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
 
         let mut partition = vec![0; points.len()];
-        rcb(&mut partition, points, weights.par_iter().cloned(), 3).unwrap();
+        rcb(&mut partition, points, weights.par_iter().cloned(), 3, 0.05).unwrap();
 
         let mut loads: HashMap<usize, f64> = HashMap::new();
         let mut sizes: HashMap<usize, usize> = HashMap::new();
