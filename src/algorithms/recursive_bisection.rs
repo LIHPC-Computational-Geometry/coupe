@@ -609,6 +609,181 @@ where
     Ok(())
 }
 
+fn simple_rcb_split<const D: usize, W>(
+    items: &mut [Item<D, W>],
+    coord: usize,
+    tolerance: f64,
+    mut min: f64,
+    mut max: f64,
+    sum: W,
+) -> usize
+where
+    W: Copy + std::fmt::Debug + Default + Send + Sync,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
+    W: num::ToPrimitive,
+{
+    let mut prev_count_left = usize::MAX;
+    loop {
+        let split_target = (min + max) / 2.0;
+        let (count_left, weight_left) = items
+            .par_iter()
+            .filter(|item| item.point[coord] < split_target)
+            .fold(
+                || (0, W::default()),
+                |(count, weight), item| (count + 1, weight + item.weight),
+            )
+            .reduce(
+                || (0, W::default()),
+                |(count0, weight0), (count1, weight1)| (count0 + count1, weight0 + weight1),
+            );
+
+        let imbalance = {
+            let ideal_weight_left = sum.to_f64().unwrap() / 2.0;
+            let weight_left = weight_left.to_f64().unwrap();
+            f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
+        };
+        if count_left == prev_count_left || imbalance < tolerance {
+            return count_left;
+        }
+        prev_count_left = count_left;
+
+        let weight_right = sum - weight_left;
+        if weight_left < weight_right {
+            min = split_target;
+        } else {
+            max = split_target;
+        }
+    }
+}
+
+fn simple_rcb_recurse<const D: usize, W>(
+    items: &mut [Item<D, W>],
+    iter_count: usize,
+    iter_id: usize,
+    coord: usize,
+    tolerance: f64,
+) where
+    W: Copy + std::fmt::Debug + Default + Send + Sync,
+    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
+    W: num::ToPrimitive,
+{
+    if items.is_empty() {
+        // Would make min/max computation panic.
+        return;
+    }
+    if iter_count == 0 {
+        items
+            .into_par_iter()
+            .for_each(|item| item.part.store(iter_id, Ordering::Relaxed));
+        return;
+    }
+
+    let sum: W = items.par_iter().map(|item| item.weight).sum();
+    let (min, max) = items
+        .par_iter()
+        .fold(
+            || (f64::INFINITY, f64::NEG_INFINITY),
+            |(min, max), item| {
+                (
+                    f64::min(min, item.point[coord]),
+                    f64::max(max, item.point[coord]),
+                )
+            },
+        )
+        .reduce(
+            || (f64::INFINITY, f64::NEG_INFINITY),
+            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
+        );
+
+    let split_idx = simple_rcb_split(items, coord, tolerance, min, max, sum);
+    let (left, right) = if split_idx == items.len() {
+        items.split_at_mut(items.len())
+    } else {
+        let (left, _, _right_minus_one) = items
+            .select_nth_unstable_by(split_idx, |item1, item2| {
+                f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+            });
+        let left_len = left.len();
+        items.split_at_mut(left_len)
+    };
+
+    rayon::join(
+        || {
+            simple_rcb_recurse(
+                left,
+                iter_count - 1,
+                2 * iter_id + 1,
+                (coord + 1) % D,
+                tolerance,
+            )
+        },
+        || {
+            simple_rcb_recurse(
+                right,
+                iter_count - 1,
+                2 * iter_id + 2,
+                (coord + 1) % D,
+                tolerance,
+            )
+        },
+    );
+}
+
+fn simple_rcb<const D: usize, P, W>(
+    partition: &mut [usize],
+    points: P,
+    weights: W,
+    iter_count: usize,
+) -> Result<(), Error>
+where
+    P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
+    P::Iter: rayon::iter::IndexedParallelIterator,
+    W: rayon::iter::IntoParallelIterator,
+    W::Item: Copy + std::fmt::Debug + Default + Send + Sync,
+    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
+    W::Item: num::ToPrimitive,
+    W::Iter: rayon::iter::IndexedParallelIterator,
+{
+    let points = points.into_par_iter();
+    let weights = weights.into_par_iter();
+
+    if weights.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
+    if points.len() != partition.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: points.len(),
+        });
+    }
+    if partition.is_empty() {
+        // Would make the partition.min() at the end panic.
+        return Ok(());
+    }
+
+    let mut items: Vec<_> = points
+        .zip(weights)
+        .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut *partition) })
+        .map(|((point, weight), part)| Item {
+            point,
+            weight,
+            part,
+        })
+        .collect();
+
+    simple_rcb_recurse(&mut items, iter_count, 0, 0, 0.05);
+
+    let part_id_offset = *partition.par_iter().min().unwrap();
+    partition
+        .par_iter_mut()
+        .for_each(|part_id| *part_id -= part_id_offset);
+
+    Ok(())
+}
+
 /// # Recursive Coordinate Bisection algorithm
 ///
 /// Partitions a mesh based on the nodes coordinates and coresponding weights.
@@ -638,7 +813,7 @@ where
 /// let mut partition = [0; 4];
 ///
 /// // Generate a partition of 4 parts (2 splits).
-/// coupe::Rcb { iter_count: 2 }
+/// coupe::Rcb { iter_count: 2, ..Default::default() }
 ///     .partition(&mut partition, (points, weights))
 ///     .unwrap();
 ///
@@ -658,10 +833,14 @@ where
 /// Berger, M. J. and Bokhari, S. H., 1987. A partitioning strategy for
 /// nonuniform problems on multiprocessors. *IEEE Transactions on Computers*,
 /// C-36(5):570–580. <doi:10.1109/TC.1987.1676942>.
+#[derive(Default)]
 pub struct Rcb {
     /// The number of iterations of the algorithm. This will yield a partition
     /// of at most `2^num_iter` parts.
     pub iter_count: usize,
+
+    /// Use a faster, experimental implementation of the algorithm.
+    pub fast: bool,
 }
 
 impl<const D: usize, P, W> crate::Partition<(P, W)> for Rcb
@@ -669,7 +848,7 @@ where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Copy + std::fmt::Debug + Default + Send + Sync,
     W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
     W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
@@ -686,7 +865,11 @@ where
             // Would make Itertools::minmax().into_option() return None.
             return Ok(());
         }
-        rcb(part_ids, points, weights, self.iter_count)
+        if self.fast {
+            rcb(part_ids, points, weights, self.iter_count)
+        } else {
+            simple_rcb(part_ids, points, weights, self.iter_count)
+        }
     }
 }
 
