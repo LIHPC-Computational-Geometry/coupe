@@ -90,6 +90,7 @@ fn bench_rcb_random(c: &mut Criterion) {
                 let w = weights.par_iter().cloned();
                 coupe::Rcb {
                     iter_count: NUM_ITER,
+                    ..Default::default()
                 }
                 .partition(&mut ids, (p, w))
                 .unwrap()
