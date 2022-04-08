@@ -1,36 +1,6 @@
 //! Weight file format encoder/decoder.
 //!
-//! # Weight file specification
-//!
-//! Following is the [ABNF] definition of a weight file:
-//!
-//! ```abnf
-//!     file            = header version flags criterion-count weight-count weights
-//!     header          = %x4d %x65 %x57 %x65  ; "MeWe"
-//!     version         = %x01                 ; Version 1
-//!     flags           = U8                   ; see Flags
-//!     criterion-count = U16                  ; Number of criteria
-//!     weight-count    = U64                  ; Number of weights
-//!     weights         = *I64 / *F64          ; criterion-count times weight-count weights
-//! ```
-//!
-//! Weights are laid out as weight-count arrays of criterion-count items.
-//!
-//! `U16` is a little-endian 2-byte unsigned integer.
-//! `U64` is a little-endian 8-byte unsigned integer.
-//! `I64` is a little-endian 8-byte signed integer.
-//! `F64` is a little-endian-encoded binary64 IEEE 754-2008 floating point.
-//!
-//! [ABNF]: https://datatracker.ietf.org/doc/html/rfc5234
-//!
-//! # Flags
-//!
-//! The "flags" byte has the following meaning, from least significant bit to
-//! the most:
-//!
-//! - The first bit is 1 if weights are integers (`U64`), or 0 if weights are
-//!   floats (`F64`),
-//! - The other bits are left unspecified.
+//! See `weight-gen(1)` for a specification.
 
 use std::any::TypeId;
 use std::fmt;

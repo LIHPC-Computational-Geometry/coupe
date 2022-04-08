@@ -1,5 +1,0 @@
-
-    SCOTCH partitioning algorithms:
-
-        scotch:std,PART_COUNT
-            The default partitioning algorithm from SCOTCH.

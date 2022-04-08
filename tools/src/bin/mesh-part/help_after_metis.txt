@@ -1,5 +1,0 @@
-
-    MeTiS partitioning algorithms:
-
-        metis:recursive,PART_COUNT
-        metis:kway,PART_COUNT

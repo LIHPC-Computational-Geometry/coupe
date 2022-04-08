@@ -133,8 +133,6 @@ fn main() -> Result<()> {
 
     if matches.opt_present("h") {
         eprintln!("{}", options.usage("Usage: part-bench [options]"));
-        eprintln!("ALGORITHMS");
-        eprintln!("    See mesh-part's help for a list of algorithms");
         return Ok(());
     }
 
