@@ -123,7 +123,7 @@ fn fiduccia_mattheyses<W>(
                             let initial_part = partition[*node];
                             let target_part = 1 - initial_part;
                             let initial_part_weight = parts_weights[initial_part] - weight;
-                            let target_part_weight = parts_weights[target_part] - weight;
+                            let target_part_weight = parts_weights[target_part] + weight;
                             let imbalance = [initial_part_weight, target_part_weight]
                                 .iter()
                                 .map(part_imbalance)
