@@ -1,0 +1,177 @@
+#!/bin/sh
+set -e
+
+. "$(dirname "$0")"/common.sh
+
+run_algorithm() {
+	mesh_file=$1
+	weight_file=$2
+	algorithm=$3
+
+	algorithm_id=$(echo "$algorithm" | cut -b4- | sed 's/ -a /-/g')
+	partition_file="${weight_file%.*}.$algorithm_id.part"
+	sayfile Computing "$partition_file"
+	mesh-part --mesh "$mesh_file" --weights "$weight_file" $algorithm >"$partition_file" || {
+		rm "$partition_file"
+		return 0
+	}
+
+	out_mesh="${partition_file%.*}.mesh"
+	sayfile Rendering "$out_mesh"
+	apply-part --mesh "$mesh_file" --partition "$partition_file" >"$out_mesh"
+
+	out_svg="${out_mesh%.*}.svg"
+	sayfile Rendering "$out_svg"
+	medit2svg <"$out_mesh" >"$out_svg" 2>/dev/null
+
+	echo "$out_svg"
+}
+
+HTML_REPORT="$OUTPUT_DIR/quality.html"
+
+if [ $# -eq 0 ]
+then
+	echo "usage: $0 MESHDIR"
+	exit 1
+fi
+INPUT_DIR=$1
+
+cat >"$HTML_REPORT" <<EOF
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+.mesh-tabs {
+  position: relative;
+  min-height: 100%;
+}
+
+.mesh-tab {
+  float: left;
+}
+
+.mesh-tab > label {
+  top: 1em;
+  background: #b8b;
+  padding: 0.4em;
+  border-radius: 4px 4px 0 0;
+}
+
+.mesh-tab > input {
+  position: absolute;
+  height: 0;
+  width: 0;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+}
+.mesh-tab > input:focus + label {
+  outline: 2px dotted black;
+}
+
+.mesh-tab > .content {
+  position: absolute;
+  top: 1em;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  margin-top: 2em;
+}
+
+.mesh-tab > input:checked ~ label {
+  padding: 0.6em 0.4em 0.4em 0.4em;
+  background: #ede;
+}
+
+.mesh-tab > input:checked ~ .content {
+  display: block;
+}
+
+.mesh-tab .mesh-tab > .content {
+  z-index: -1;
+}
+
+img {
+  max_width: 69%;
+}
+</style>
+<div class="mesh-tabs">
+EOF
+
+i=0
+for mesh_file in "$INPUT_DIR"/*.mesh
+do
+	[ -z "$mesh_file" ] && continue
+
+	attrs=""
+	if [ $i -eq 0 ]
+	then attrs="checked"
+	fi
+
+	cat >>"$HTML_REPORT" <<-EOF
+	<div class="mesh-tab">
+	<input type="radio" name="mesh-tab" id="mesh-tab-$i" $attrs>
+	<label for="mesh-tab-$i">$mesh_file</label>
+	<div class="content mesh-tabs">
+	EOF
+
+	j=0
+	echo "$WEIGHT_DISTRIBUTIONS" | while read -r weight_distribution
+	do
+		[ -z "$weight_distribution" ] && continue
+
+		attrs=""
+		if [ $j -eq 0 ]
+		then attrs="checked"
+		fi
+
+		cat >>"$HTML_REPORT" <<-EOF
+		<div class="mesh-tab">
+		<input type="radio" name="weight-tab-$i" id="weight-tab-$i-$j" $attrs>
+		<label for="weight-tab-$i-$j">$weight_distribution</label>
+		<div class="content">
+		EOF
+
+		weight_file="$OUTPUT_DIR/$(basename "${mesh_file%.*}").$weight_distribution.weights"
+		sayfile Generating "$weight_file"
+		weight-gen -d "$weight_distribution" <"$mesh_file" >"$weight_file" 2>/dev/null
+
+		echo "$ALGORITHMS" | while read -r algorithm
+		do
+			algorithm=$(echo "$algorithm" | sed 's/^#.*//')
+			[ -z "$algorithm" ] && continue
+
+			#algorithm_id=$(echo "$algorithm" | cut -b4- | sed 's/ -a /-/g')
+			#svg_file="${weight_file%.*}.$algorithm_id.svg"
+			svg_file=$(run_algorithm "$mesh_file" "$weight_file" "$algorithm" || true)
+
+			cat >>"$HTML_REPORT" <<-EOF
+			<p class="run">
+			Algorithm: <code>$algorithm</code>
+			<pre>
+			$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
+			</pre>
+			<img src="$(basename "$svg_file")" alt="$mesh_file; $weight_distribution; $algorithm">
+			</p>
+			EOF
+		done
+
+		cat >>"$HTML_REPORT" <<-EOF
+		</div>
+		</div>
+		EOF
+		j=$((j+1))
+	done
+
+	cat >>"$HTML_REPORT" <<-EOF
+	</div>
+	</div>
+	EOF
+	i=$((i+1))
+done
+
+cat >>"$HTML_REPORT" <<EOF
+</div>
+EOF
+
+say Report "$HTML_REPORT"
