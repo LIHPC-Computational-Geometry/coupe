@@ -1,7 +1,22 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
 use sprs::{CsMat, CsMatView, TriMat};
-use std::ops::AddAssign;
+use std::iter::Sum;
+
+pub fn edge_cut<'a, T>(
+    adjacency: &'a CsMatView<'a, T>,
+    partition: &'a [usize],
+) -> impl Iterator<Item = (usize, usize, T)> + 'a
+where
+    T: Copy,
+{
+    adjacency
+        .into_iter()
+        .filter(|(_edge_weight, (node1, node2))| {
+            node1 < node2 && partition[*node1] != partition[*node2]
+        })
+        .map(|(edge_weight, (node1, node2))| (node1, node2, *edge_weight))
+}
 
 /// Computes the cutsize of a partition.
 ///
@@ -23,21 +38,11 @@ use std::ops::AddAssign;
 /// ```
 pub fn cut_size<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
 where
-    T: Copy + Default + AddAssign,
+    T: Copy + Sum,
 {
-    let mut cut_size = T::default();
-    for (i, row) in adjacency.outer_iterator().enumerate() {
-        for (j, w) in row.iter() {
-            // graph edge are present twice in the matrix be cause of symetry
-            if i <= j {
-                break;
-            }
-            if partition[i] != partition[j] {
-                cut_size += *w;
-            }
-        }
-    }
-    cut_size
+    edge_cut(&adjacency, partition)
+        .map(|(_n1, _n2, edge_weight)| edge_weight)
+        .sum()
 }
 
 /// Build an adjacency matrix from a mesh connectivity.
