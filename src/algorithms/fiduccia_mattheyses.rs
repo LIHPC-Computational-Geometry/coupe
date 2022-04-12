@@ -55,33 +55,6 @@ fn fiduccia_mattheyses<W>(
         let mut flip_history = Vec::new();
         let mut cut_size_history = Vec::new();
 
-        use std::collections::BTreeSet;
-
-        #[derive(Clone, Copy)]
-        struct Flip {
-            gain: i64,
-            node: usize,
-        }
-
-        impl PartialEq for Flip {
-            fn eq(&self, other: &Self) -> bool {
-                self.gain == other.gain
-            }
-        }
-        impl Eq for Flip {}
-
-        impl PartialOrd for Flip {
-            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                f64::partial_cmp(&self.gain, &other.gain)
-            }
-        }
-
-        impl Ord for Flip {
-            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                Flip::partial_cmp(self, other).unwrap()
-            }
-        }
-
         // Gain table, stored as a heap of (node gains, node index).
         let mut gains: BTreeSet<Flip> = partition
             .iter()
@@ -98,7 +71,7 @@ fn fiduccia_mattheyses<W>(
                         } else if partition[neighbor] == target_part {
                             edge_weight
                         } else {
-                            0.0
+                            0
                         }
                     })
                     .sum();
@@ -120,7 +93,7 @@ fn fiduccia_mattheyses<W>(
             } = flip;
             let target_part = 1 - partition[max_pos];
 
-            if max_gain <= 0. {
+            if max_gain <= 0 {
                 if num_bad_move >= max_bad_move_in_a_row {
                     tracing::info!("reached max bad move in a row");
                     break;
@@ -193,7 +166,7 @@ fn fiduccia_mattheyses<W>(
                         } else if partition[neighbor] == target_part {
                             edge_weight
                         } else {
-                            0.0
+                            0
                         }
                     })
                     .sum();
