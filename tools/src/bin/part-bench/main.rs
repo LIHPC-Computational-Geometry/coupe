@@ -78,12 +78,19 @@ fn main_d<const D: usize>(
 
     let mut c = configure_criterion(Criterion::default(), &matches)?.with_output_color(true);
 
-    let benchmark_name = format!(
-        "{}:{}:{}",
-        matches.opt_str("m").unwrap(),
-        matches.opt_str("w").unwrap(),
-        algorithm_specs.join(":"),
-    );
+    let benchmark_name = {
+        use std::path::PathBuf;
+
+        let mesh_file = matches.opt_str("m").unwrap();
+        let mesh_file = PathBuf::from(mesh_file);
+        let mesh_file = mesh_file.file_stem().unwrap().to_str().unwrap();
+
+        let weight_file = matches.opt_str("w").unwrap();
+        let weight_file = PathBuf::from(weight_file);
+        let weight_file = weight_file.file_stem().unwrap().to_str().unwrap();
+
+        format!("{mesh_file}:{weight_file}:{}", algorithm_specs.join(":"))
+    };
     if matches.opt_present("e") {
         let max_threads = matches.opt_get("e")?.unwrap_or_else(|| {
             let t = rayon::current_num_threads();
