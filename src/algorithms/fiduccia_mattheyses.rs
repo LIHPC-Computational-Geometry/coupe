@@ -1,6 +1,7 @@
 use super::Error;
-use itertools::Itertools;
+use itertools::Itertools as _;
 use sprs::CsMatView;
+use std::collections::BTreeSet;
 
 fn fiduccia_mattheyses<W>(
     partition: &mut [usize],
@@ -39,6 +40,27 @@ fn fiduccia_mattheyses<W>(
             .1
     });
     tracing::info!(?max_imbalance);
+
+    struct GainTable {
+        gain_to_node: Box<[BTreeSet<usize>]>,
+        node_to_gain: Box<[usize]>,
+    }
+
+    let pmax = adjacency
+        .into_iter()
+        .into_grouping_map_by(|(_edge_weight, (node1, _node2))| *node1)
+        .fold(0, |acc, _node, (edge_weight, (_, _))| acc + edge_weight)
+        .into_iter()
+        .map(|(node, total_edge_weight)| total_edge_weight)
+        .max()
+        .unwrap();
+    let gain_count = (2 * pmax + 1) as usize;
+    let gain_to_node = vec![BTreeSet::new(); gain_count];
+    let node_to_gain = vec![0; adjacency.outer_dims()];
+    let gain_table = GainTable {
+        gain_to_node: gain_to_node.into_boxed_slice(),
+        node_to_gain: node_to_gain.into_boxed_slice(),
+    };
 
     let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
     tracing::info!("Initial cut size: {}", best_cut_size);
