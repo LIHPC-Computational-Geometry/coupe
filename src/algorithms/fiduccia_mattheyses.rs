@@ -1,7 +1,7 @@
 use super::Error;
 use itertools::Itertools as _;
 use sprs::CsMatView;
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 fn fiduccia_mattheyses<W>(
     partition: &mut [usize],
@@ -28,12 +28,12 @@ fn fiduccia_mattheyses<W>(
         crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
     let total_weight: W = parts_weights.iter().cloned().sum();
     let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+    let part_imbalance =
+        |part_weight: &W| (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight;
     let max_imbalance = max_imbalance.unwrap_or_else(|| {
         parts_weights
             .iter()
-            .map(|part_weight| {
-                (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
-            })
+            .map(part_imbalance)
             .minmax()
             .into_option()
             .unwrap()
@@ -42,25 +42,30 @@ fn fiduccia_mattheyses<W>(
     tracing::info!(?max_imbalance);
 
     struct GainTable {
-        gain_to_node: Box<[BTreeSet<usize>]>,
-        node_to_gain: Box<[usize]>,
+        gain_to_node: Box<[HashSet<usize>]>,
+        node_to_gain: Box<[Option<i64>]>,
     }
 
-    let pmax = adjacency
-        .into_iter()
-        .into_grouping_map_by(|(_edge_weight, (node1, _node2))| *node1)
-        .fold(0, |acc, _node, (edge_weight, (_, _))| acc + edge_weight)
-        .into_iter()
-        .map(|(node, total_edge_weight)| total_edge_weight)
+    let pmax = (0..partition.len())
+        .map(|node| {
+            adjacency
+                .outer_view(node)
+                .unwrap()
+                .iter()
+                .fold(0, |acc, (_, edge_weight)| acc + edge_weight)
+        })
         .max()
         .unwrap();
+
     let gain_count = (2 * pmax + 1) as usize;
-    let gain_to_node = vec![BTreeSet::new(); gain_count];
-    let node_to_gain = vec![0; adjacency.outer_dims()];
-    let gain_table = GainTable {
+    let gain_to_node = vec![HashSet::new(); gain_count];
+    let node_to_gain = vec![None; adjacency.outer_dims()];
+
+    let mut gain_table = GainTable {
         gain_to_node: gain_to_node.into_boxed_slice(),
         node_to_gain: node_to_gain.into_boxed_slice(),
     };
+    let gain_table_idx = |gain: i64| (gain + pmax) as usize;
 
     let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
     tracing::info!("Initial cut size: {}", best_cut_size);
@@ -77,42 +82,71 @@ fn fiduccia_mattheyses<W>(
         let mut flip_history = Vec::new();
         let mut cut_size_history = Vec::new();
 
-        // Gain table, stored as a heap of (node gains, node index).
-        let mut gains: BTreeSet<Flip> = partition
-            .iter()
-            .enumerate()
-            .map(|(node, &initial_part)| {
-                let target_part = 1 - initial_part;
-                let gain = adjacency
-                    .outer_view(node)
-                    .unwrap()
-                    .iter()
-                    .map(|(neighbor, &edge_weight)| {
-                        if partition[neighbor] == initial_part {
-                            -edge_weight
-                        } else if partition[neighbor] == target_part {
-                            edge_weight
-                        } else {
-                            0
-                        }
-                    })
-                    .sum();
-                Flip { node, gain }
-            })
-            .collect();
+        for set in &mut *gain_table.gain_to_node {
+            set.clear();
+        }
+        for (node, initial_part) in partition.iter().enumerate() {
+            let target_part = 1 - *initial_part;
+            let gain = adjacency
+                .outer_view(node)
+                .unwrap()
+                .iter()
+                .map(|(neighbor, edge_weight)| {
+                    if partition[neighbor] == *initial_part {
+                        -*edge_weight
+                    } else if partition[neighbor] == target_part {
+                        *edge_weight
+                    } else {
+                        0
+                    }
+                })
+                .sum();
+            gain_table.node_to_gain[node] = Some(gain);
+            gain_table.gain_to_node[gain_table_idx(gain)].insert(node);
+        }
 
         // enter pass loop
         // The number of iteration of the pas loop is at most the
         // number of nodes in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
         for _ in 0..max_flips_per_pass {
-            // find max gain and target part
-            let flip = *gains.iter().last().unwrap();
-            gains.remove(&flip);
-            let Flip {
-                node: max_pos,
-                gain: max_gain,
-            } = flip;
+            let (max_pos, max_gain) = match gain_table
+                .gain_to_node
+                .iter()
+                .rev()
+                .zip((-pmax..=pmax).rev())
+                .find_map(|(nodes, gain)| {
+                    let (best_node, _) = nodes
+                        .iter()
+                        .filter_map(|node| {
+                            let weight = weights[*node];
+                            let initial_part = partition[*node];
+                            let target_part = 1 - initial_part;
+                            let initial_part_weight = parts_weights[initial_part] - weight;
+                            let target_part_weight = parts_weights[target_part] - weight;
+                            let imbalance = [initial_part_weight, target_part_weight]
+                                .iter()
+                                .map(part_imbalance)
+                                .minmax()
+                                .into_option()
+                                .unwrap()
+                                .1;
+                            if max_imbalance < imbalance {
+                                return None;
+                            }
+                            Some((*node, imbalance))
+                        })
+                        .minmax()
+                        .into_option()?
+                        .1;
+                    Some((best_node, gain))
+                }) {
+                Some(v) => v,
+                None => break,
+            };
+
+            gain_table.node_to_gain[max_pos] = None;
+            gain_table.gain_to_node[gain_table_idx(max_gain)].remove(&max_pos);
             let target_part = 1 - partition[max_pos];
 
             if max_gain <= 0 {
@@ -132,27 +166,8 @@ fn fiduccia_mattheyses<W>(
             parts_weights[old_part] -= weights[max_pos];
             parts_weights[target_part] += weights[max_pos];
 
-            let imbalance = parts_weights
-                .iter()
-                .map(|part_weight| {
-                    (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
-                })
-                .minmax()
-                .into_option()
-                .unwrap()
-                .1;
-            if max_imbalance < imbalance {
-                // revert flip
-                tracing::info!(?imbalance, max_pos, old_part, target_part, "no flip");
-                partition[max_pos] = old_part;
-                parts_weights[old_part] += weights[max_pos];
-                parts_weights[target_part] -= weights[max_pos];
-                flip_history.pop();
-                continue;
-            }
-
             // save cut_size
-            tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
+            tracing::info!(max_pos, old_part, target_part, "flip");
             let mut new_cut_size = *cut_size_history.last().unwrap_or(&best_cut_size);
             for (neighbors, edge_weight) in adjacency.outer_view(max_pos).unwrap().iter() {
                 if partition[neighbors] == old_part {
@@ -167,35 +182,31 @@ fn fiduccia_mattheyses<W>(
             );
             cut_size_history.push(new_cut_size);
 
-            let neighbors: BTreeSet<usize> = adjacency
-                .outer_view(max_pos)
-                .unwrap()
-                .iter()
-                .map(|(neighbor, _edge_weight)| neighbor)
-                .collect();
-
-            gains.retain(|flip| !neighbors.contains(&flip.node));
-
-            for neighbor in neighbors {
+            for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
                 let initial_part = partition[neighbor];
-                let gain = adjacency
+                let target_part = 1 - initial_part;
+                let outdated_gain = match gain_table.node_to_gain[neighbor] {
+                    Some(v) => v,
+                    None => continue,
+                };
+                let updated_gain = adjacency
                     .outer_view(neighbor)
                     .unwrap()
                     .iter()
-                    .map(|(neighbor, &edge_weight)| {
+                    .map(|(neighbor, edge_weight)| {
                         if partition[neighbor] == initial_part {
-                            -edge_weight
+                            -*edge_weight
                         } else if partition[neighbor] == target_part {
-                            edge_weight
+                            *edge_weight
                         } else {
                             0
                         }
                     })
                     .sum();
-                gains.insert(Flip {
-                    node: neighbor,
-                    gain,
-                });
+                if outdated_gain != updated_gain {
+                    gain_table.gain_to_node[gain_table_idx(outdated_gain)].remove(&neighbor);
+                    gain_table.gain_to_node[gain_table_idx(updated_gain)].insert(neighbor);
+                }
             }
         }
 
