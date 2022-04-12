@@ -298,6 +298,15 @@ pub struct HilbertCurve {
     pub order: u32,
 }
 
+impl Default for HilbertCurve {
+    fn default() -> Self {
+        Self {
+            part_count: 2,
+            order: 12,
+        }
+    }
+}
+
 // hilbert curve is only implemented in 2d for now
 impl<P, W> crate::Partition<(P, W)> for HilbertCurve
 where
