@@ -1,0 +1,56 @@
+#!/bin/sh
+
+. "$(dirname "$0")"/common.sh
+
+run_algorithm() {
+	mesh_file=$1
+	weight_file=$2
+	algorithm=$3
+
+	part-bench --mesh "$mesh_file" \
+			   --weights "$weight_file" \
+			   $algorithm
+}
+
+if [ $# -lt 2 ]
+then
+	echo "usage: $0 MESHDIR [algorithm options]"
+	exit 1
+fi
+
+HTML_REPORT="$OUTPUT_DIR/perf.html"
+INPUT_DIR=$1
+shift
+ALGORITHM=$@
+
+echo "$HTML_REPORT"
+echo "$INPUT_DIR"
+
+i=0
+for mesh_file in "$INPUT_DIR"/*.mesh
+do
+	[ -z "$mesh_file" ] && continue
+
+	j=0
+	echo "$WEIGHT_DISTRIBUTIONS" | while read -r weight_distribution
+	do
+		[ -z "$weight_distribution" ] && continue
+
+		attrs=""
+		if [ $j -eq 0 ]
+		then attrs="checked"
+		fi
+
+		weight_file="$OUTPUT_DIR/$(basename "${mesh_file%.*}").$weight_distribution.weights"
+		sayfile Generating "$weight_file"
+		weight-gen -d "$weight_distribution" <"$mesh_file" >"$weight_file" 2>/dev/null
+
+		run_algorithm "$mesh_file" "$weight_file" "$ALGORITHM"
+
+		j=$((j+1))
+	done
+
+	i=$((i+1))
+done
+
+say Report "$HTML_REPORT"
