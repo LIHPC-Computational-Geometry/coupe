@@ -28,3 +28,6 @@ perf.data.old
 # coverage
 *.profraw
 *.profdata
+
+# generated man pages
+tools/doc/*.1
