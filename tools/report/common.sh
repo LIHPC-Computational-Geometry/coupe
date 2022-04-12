@@ -43,8 +43,8 @@ say() {
 	verb=$1
 	shift
 
-	YELLOW="\x1b[33;1m"
-	RESET="\x1b[0m"
+	YELLOW="\e[33;1m"
+	RESET="\e[0m"
 	if ! [ -t 2 ]
 	then
 		# Not a tty, dont use escape codes

@@ -92,7 +92,7 @@ cat >"$HTML_REPORT" <<EOF
 }
 
 img {
-  max_width: 69%;
+  max-width: 69%;
 }
 </style>
 <div class="mesh-tabs">
@@ -150,6 +150,7 @@ do
 			Algorithm: <code>$algorithm</code>
 			<pre>
 			$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
+			mesh file: ${svg_file%.*}.mesh
 			</pre>
 			<img src="$(basename "$svg_file")" alt="$mesh_file; $weight_distribution; $algorithm">
 			</p>
