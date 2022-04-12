@@ -24,3 +24,7 @@
 perf.data
 perf.data.old
 *.svg
+
+# coverage
+*.profraw
+*.profdata
