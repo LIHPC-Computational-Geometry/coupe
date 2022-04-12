@@ -1,6 +1,7 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
 use sprs::{CsMat, CsMatView, TriMat};
+use std::ops::AddAssign;
 
 /// Computes the cutsize of a partition.
 ///
@@ -20,8 +21,11 @@ use sprs::{CsMat, CsMatView, TriMat};
 ///    1*  ┆╲ ╱            
 ///          * 0
 /// ```
-pub fn cut_size(adjacency: CsMatView<f64>, partition: &[usize]) -> f64 {
-    let mut cut_size = 0.;
+pub fn cut_size<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
+where
+    T: Copy + Default + AddAssign,
+{
+    let mut cut_size = T::default();
     for (i, row) in adjacency.outer_iterator().enumerate() {
         for (j, w) in row.iter() {
             // graph edge are present twice in the matrix be cause of symetry
@@ -29,7 +33,7 @@ pub fn cut_size(adjacency: CsMatView<f64>, partition: &[usize]) -> f64 {
                 break;
             }
             if partition[i] != partition[j] {
-                cut_size += w;
+                cut_size += *w;
             }
         }
     }

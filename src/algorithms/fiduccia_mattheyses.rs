@@ -5,7 +5,7 @@ use sprs::CsMatView;
 fn fiduccia_mattheyses<W>(
     partition: &mut [usize],
     weights: &[W],
-    adjacency: CsMatView<f64>,
+    adjacency: CsMatView<i64>,
     max_passes: usize,
     max_flips_per_pass: usize,
     max_imbalance: Option<f64>,
@@ -59,8 +59,8 @@ fn fiduccia_mattheyses<W>(
 
         #[derive(Clone, Copy)]
         struct Flip {
+            gain: i64,
             node: usize,
-            gain: f64,
         }
 
         impl PartialEq for Flip {
@@ -321,7 +321,7 @@ pub struct FiducciaMattheyses {
     pub max_bad_move_in_a_row: usize,
 }
 
-impl<'a, W> crate::Partition<(CsMatView<'a, f64>, &'a [W])> for FiducciaMattheyses
+impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
 where
     W: std::fmt::Debug + Copy + PartialOrd + num::Zero,
     W: std::iter::Sum + num::ToPrimitive,
@@ -333,7 +333,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<f64>, &'a [W]),
+        (adjacency, weights): (CsMatView<i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(());
