@@ -250,9 +250,6 @@ fn fiduccia_mattheyses<W>(
 /// The algorithm thus does not preserve partition weights balance and may produce an unbalanced
 /// partition.
 ///
-/// Original algorithm from "A Linear-Time Heuristic for Improving Network Partitions"
-/// by C.M. Fiduccia and R.M. Mattheyses.
-///
 /// # Example
 ///
 /// ```rust
@@ -313,6 +310,12 @@ fn fiduccia_mattheyses<W>(
 ///
 /// assert_eq!(partition, [0, 0, 1, 1, 0, 0, 1, 1]);
 /// ```
+///
+/// # Reference
+///
+/// Fiduccia, C. M., Mattheyses, R. M. (1982). A linear-time heuristic for
+/// improving network partitions. *DAC'82: Proceeding of the 19th Design
+/// Automation Conference*.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FiducciaMattheyses {
     pub max_passes: Option<usize>,
