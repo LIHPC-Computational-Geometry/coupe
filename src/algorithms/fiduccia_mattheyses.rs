@@ -136,9 +136,9 @@ fn fiduccia_mattheyses<W>(
                             }
                             Some((*node, imbalance))
                         })
-                        .minmax()
-                        .into_option()?
-                        .1;
+                        .min_by(|(_, imbalance0), (_, imbalance1)| {
+                            f64::partial_cmp(imbalance0, imbalance1).unwrap()
+                        })?;
                     Some((best_node, gain))
                 }) {
                 Some(v) => v,
