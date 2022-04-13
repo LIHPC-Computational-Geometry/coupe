@@ -124,15 +124,29 @@ fn fiduccia_mattheyses<W>(
         });
 
         (0..max_flips_per_pass).into_par_iter().try_for_each(|_| {
+            let span = tracing::info_span!("copy part_weights");
+            let enter = span.enter();
+
             let part_weights_copy = s.read().unwrap().part_weights.to_vec();
+
+            std::mem::drop(enter);
+            let span = tracing::info_span!("find node to move");
+            let enter = span.enter();
+
+            let mut has_top_gain = true;
             let (max_pos, max_gain) = gain_to_node
                 .iter()
                 .rev()
                 .zip((-pmax..=pmax).rev())
                 .find_map(|(nodes, gain)| {
+                    let nodes = match nodes.try_lock() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            has_top_gain = false;
+                            return None;
+                        }
+                    };
                     let (best_node, _) = nodes
-                        .try_lock()
-                        .ok()?
                         .iter()
                         .filter_map(|node| {
                             let weight = weights[*node];
@@ -158,23 +172,34 @@ fn fiduccia_mattheyses<W>(
                     Some((best_node, gain))
                 })?;
 
+            tracing::info!(max_pos, max_gain, "found node");
+            std::mem::drop(enter);
+
             if max_gain <= 0 {
-                let num_bad_move = num_bad_move.fetch_add(1, Ordering::Relaxed);
-                if num_bad_move >= max_bad_move_in_a_row {
-                    tracing::info!("reached max bad move in a row");
-                    return None;
+                if has_top_gain {
+                    let num_bad_move = num_bad_move.fetch_add(1, Ordering::Relaxed);
+                    if num_bad_move >= max_bad_move_in_a_row {
+                        tracing::info!("reached max bad move in a row");
+                        return None;
+                    }
+                } else {
+                    tracing::info!("could not get a good gain, retrying");
+                    return Some(());
                 }
             } else {
                 // a good move breaks the bad moves sequence
                 num_bad_move.store(0, Ordering::Relaxed);
             }
 
+            let span = tracing::info_span!("lock node");
+            let enter = span.enter();
+
             let was_present = gain_to_node[gain_table_idx(max_gain)]
                 .lock()
                 .unwrap()
                 .remove(&max_pos);
             if !was_present {
-                // The node has been already moved by another thread.
+                tracing::info!("raced, node was already locked");
                 return Some(());
             }
             node_to_gain[max_pos].store(i64::MIN, Ordering::Relaxed);
@@ -183,7 +208,12 @@ fn fiduccia_mattheyses<W>(
             let target_part = 1 - old_part;
             partition[max_pos].store(target_part, Ordering::Relaxed);
 
+            std::mem::drop(enter);
+
             {
+                let span = tracing::info_span!("update part_weights and history");
+                let _enter = span.enter();
+
                 let mut s = s.write().unwrap();
                 s.flip_history.push((max_pos, old_part));
                 s.part_weights[old_part] -= weights[max_pos];
@@ -201,6 +231,9 @@ fn fiduccia_mattheyses<W>(
                 }
                 s.cut_size_history.push(new_cut_size);
             }
+
+            let span = tracing::info_span!("update gain table");
+            let _enter = span.enter();
 
             for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
                 let initial_part = partition[neighbor].load(Ordering::Relaxed);
@@ -238,6 +271,13 @@ fn fiduccia_mattheyses<W>(
         let old_cut_size = best_cut_size;
 
         let mut s = s.into_inner().unwrap();
+
+        let span = tracing::info_span!(
+            "rewind history",
+            "history.len() == {}",
+            s.flip_history.len()
+        );
+        let _enter = span.enter();
 
         // lookup for best cutsize
         let (best_pos, best_cut) = match s
