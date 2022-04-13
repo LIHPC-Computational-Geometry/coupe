@@ -1,5 +1,4 @@
 use super::Error;
-use itertools::Itertools as _;
 use sprs::CsMatView;
 use std::collections::HashSet;
 
@@ -34,10 +33,8 @@ fn fiduccia_mattheyses<W>(
         parts_weights
             .iter()
             .map(part_imbalance)
-            .minmax()
-            .into_option()
+            .max_by(|imbalance0, imbalance1| f64::partial_cmp(imbalance0, imbalance1).unwrap())
             .unwrap()
-            .1
     });
     tracing::info!(?max_imbalance);
 
@@ -127,10 +124,10 @@ fn fiduccia_mattheyses<W>(
                             let imbalance = [initial_part_weight, target_part_weight]
                                 .iter()
                                 .map(part_imbalance)
-                                .minmax()
-                                .into_option()
-                                .unwrap()
-                                .1;
+                                .max_by(|imbalance0, imbalance1| {
+                                    f64::partial_cmp(imbalance0, imbalance1).unwrap()
+                                })
+                                .unwrap();
                             if max_imbalance < imbalance {
                                 return None;
                             }
