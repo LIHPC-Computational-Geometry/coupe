@@ -80,34 +80,45 @@ fn fiduccia_mattheyses<W>(
         // up new sequences of good flips.
         let num_bad_move = AtomicUsize::new(0);
 
+        let span = tracing::info_span!("creating gain table");
+        let enter = span.enter();
+
         for set in &*gain_to_node {
             set.try_lock().unwrap().clear();
         }
         partition
             .par_iter()
             .enumerate()
-            .for_each(|(node, initial_part)| {
-                let initial_part = initial_part.load(Ordering::Relaxed);
-                let gain = adjacency
-                    .outer_view(node)
-                    .unwrap()
-                    .iter()
-                    .map(|(neighbor, edge_weight)| {
-                        let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
-                        if neighbor_part == initial_part {
-                            -*edge_weight
-                        } else {
-                            // neighbor_part == 1 - initial_part
-                            *edge_weight
-                        }
-                    })
-                    .sum();
-                node_to_gain[node].store(gain, Ordering::Relaxed);
-                gain_to_node[gain_table_idx(gain)]
-                    .lock()
-                    .unwrap()
-                    .insert(node);
+            .fold(
+                || std::collections::BTreeMap::<usize, HashSet<usize>>::new(),
+                |mut acc, (node, initial_part)| {
+                    let initial_part = initial_part.load(Ordering::Relaxed);
+                    let gain: i64 = adjacency
+                        .outer_view(node)
+                        .unwrap()
+                        .iter()
+                        .map(|(neighbor, edge_weight)| {
+                            let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
+                            if neighbor_part == initial_part {
+                                -*edge_weight
+                            } else {
+                                // neighbor_part == 1 - initial_part
+                                *edge_weight
+                            }
+                        })
+                        .sum();
+
+                    acc.entry(gain_table_idx(gain)).or_default().insert(node);
+                    acc
+                },
+            )
+            .for_each(|map| {
+                for (gain, nodes) in map {
+                    gain_to_node[gain].lock().unwrap().extend(nodes);
+                }
             });
+
+        std::mem::drop(enter);
 
         struct Synchronized<'a, W> {
             part_weights: &'a mut [W],
