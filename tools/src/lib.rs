@@ -290,7 +290,6 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
         }),
         "fm" => {
             let max_imbalance = parse(args.next()).transpose()?;
-            let max_bad_move_in_a_row = optional(parse(args.next()), 0)?;
             let mut max_passes = parse(args.next()).transpose()?;
             if max_passes == Some(0) {
                 max_passes = None;
@@ -301,7 +300,6 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
             }
             Box::new(coupe::FiducciaMattheyses {
                 max_imbalance,
-                max_bad_move_in_a_row,
                 max_passes,
                 max_flips_per_pass,
             })

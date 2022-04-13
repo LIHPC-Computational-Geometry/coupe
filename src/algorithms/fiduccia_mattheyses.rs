@@ -18,7 +18,6 @@ fn fiduccia_mattheyses<W>(
     max_passes: usize,
     max_flips_per_pass: usize,
     max_imbalance: Option<f64>,
-    max_bad_move_in_a_row: usize, // for each pass, the max number of subsequent moves that will decrease the gain
 ) where
     W: std::fmt::Debug + Copy + Send + Sync + PartialOrd,
     W: std::iter::Sum + num::ToPrimitive,
@@ -74,12 +73,6 @@ fn fiduccia_mattheyses<W>(
     let partition = unsafe { std::mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
 
     for _ in 0..max_passes {
-        // monitors for each pass the number of subsequent flips
-        // that increase cut size. It may be beneficial in some
-        // situations to allow a certain amount of them. Performing bad flips can open
-        // up new sequences of good flips.
-        let num_bad_move = AtomicUsize::new(0);
-
         let span = tracing::info_span!("creating gain table");
         let enter = span.enter();
 
@@ -122,16 +115,12 @@ fn fiduccia_mattheyses<W>(
 
         struct Synchronized<'a, W> {
             part_weights: &'a mut [W],
-            /// Keep track of (node, initial_part) to rewind bad moves.
-            flip_history: Vec<(usize, usize)>,
-            /// Also keep track of cut sizes.
-            cut_size_history: Vec<i64>,
+            last_cut_size: i64,
         }
 
         let s = RwLock::new(Synchronized {
             part_weights: &mut parts_weights,
-            flip_history: Vec::new(),
-            cut_size_history: Vec::new(),
+            last_cut_size: best_cut_size,
         });
 
         (0..max_flips_per_pass).into_par_iter().try_for_each(|_| {
@@ -188,18 +177,12 @@ fn fiduccia_mattheyses<W>(
 
             if max_gain <= 0 {
                 if has_top_gain {
-                    let num_bad_move = num_bad_move.fetch_add(1, Ordering::Relaxed);
-                    if num_bad_move >= max_bad_move_in_a_row {
-                        tracing::info!("reached max bad move in a row");
-                        return None;
-                    }
+                    tracing::info!("bad move");
+                    return None;
                 } else {
                     tracing::info!("could not get a good gain, retrying");
                     return Some(());
                 }
-            } else {
-                // a good move breaks the bad moves sequence
-                num_bad_move.store(0, Ordering::Relaxed);
             }
 
             let span = tracing::info_span!("lock node");
@@ -226,21 +209,18 @@ fn fiduccia_mattheyses<W>(
                 let _enter = span.enter();
 
                 let mut s = s.write().unwrap();
-                s.flip_history.push((max_pos, old_part));
                 s.part_weights[old_part] -= weights[max_pos];
                 s.part_weights[target_part] += weights[max_pos];
 
                 // save cut_size
                 tracing::info!(max_pos, old_part, target_part, "flip");
-                let mut new_cut_size = *s.cut_size_history.last().unwrap_or(&best_cut_size);
                 for (neighbors, edge_weight) in adjacency.outer_view(max_pos).unwrap().iter() {
                     if partition[neighbors].load(Ordering::Relaxed) == old_part {
-                        new_cut_size += edge_weight;
+                        s.last_cut_size += edge_weight;
                     } else {
-                        new_cut_size -= edge_weight;
+                        s.last_cut_size -= edge_weight;
                     }
                 }
-                s.cut_size_history.push(new_cut_size);
             }
 
             let span = tracing::info_span!("update gain table");
@@ -279,45 +259,11 @@ fn fiduccia_mattheyses<W>(
             Some(())
         });
 
-        let old_cut_size = best_cut_size;
-
-        let mut s = s.into_inner().unwrap();
-
-        let span = tracing::info_span!(
-            "rewind history",
-            "history.len() == {}",
-            s.flip_history.len()
-        );
-        let _enter = span.enter();
-
-        // lookup for best cutsize
-        let (best_pos, best_cut) = match s
-            .cut_size_history
-            .iter()
-            .cloned()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        {
-            Some(v) => v,
-            None => break,
-        };
-
-        tracing::info!(
-            "rewinding flips from pos {} to pos {}",
-            best_pos + 1,
-            s.flip_history.len()
-        );
-        for (idx, old_part) in s.flip_history.drain(best_pos + 1..) {
-            partition[idx].store(old_part, Ordering::Relaxed);
-            parts_weights[old_part] += weights[idx];
-            parts_weights[1 - old_part] += weights[idx];
-        }
-
-        best_cut_size = best_cut;
-
-        if old_cut_size <= best_cut_size {
+        let new_cut_size = s.into_inner().unwrap().last_cut_size;
+        if best_cut_size <= new_cut_size {
             break;
         }
+        best_cut_size = new_cut_size;
     }
 
     tracing::info!("final cut size: {}", best_cut_size);
@@ -406,7 +352,6 @@ pub struct FiducciaMattheyses {
     pub max_passes: Option<usize>,
     pub max_flips_per_pass: Option<usize>,
     pub max_imbalance: Option<f64>,
-    pub max_bad_move_in_a_row: usize,
 }
 
 impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
@@ -454,7 +399,6 @@ where
             self.max_passes.unwrap_or(usize::MAX),
             self.max_flips_per_pass.unwrap_or(usize::MAX),
             self.max_imbalance,
-            self.max_bad_move_in_a_row,
         );
         Ok(())
     }
