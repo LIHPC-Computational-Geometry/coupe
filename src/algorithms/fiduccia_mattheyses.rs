@@ -38,11 +38,6 @@ fn fiduccia_mattheyses<W>(
     });
     tracing::info!(?max_imbalance);
 
-    struct GainTable {
-        gain_to_node: Box<[HashSet<usize>]>,
-        node_to_gain: Box<[Option<i64>]>,
-    }
-
     let pmax = (0..partition.len())
         .map(|node| {
             adjacency
@@ -55,13 +50,8 @@ fn fiduccia_mattheyses<W>(
         .unwrap();
 
     let gain_count = (2 * pmax + 1) as usize;
-    let gain_to_node = vec![HashSet::new(); gain_count];
-    let node_to_gain = vec![None; adjacency.outer_dims()];
-
-    let mut gain_table = GainTable {
-        gain_to_node: gain_to_node.into_boxed_slice(),
-        node_to_gain: node_to_gain.into_boxed_slice(),
-    };
+    let mut gain_to_node = vec![HashSet::new(); gain_count].into_boxed_slice();
+    let mut node_to_gain = vec![None; adjacency.outer_dims()].into_boxed_slice();
     let gain_table_idx = |gain: i64| (gain + pmax) as usize;
 
     let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
@@ -79,7 +69,7 @@ fn fiduccia_mattheyses<W>(
         let mut flip_history = Vec::new();
         let mut cut_size_history = Vec::new();
 
-        for set in &mut *gain_table.gain_to_node {
+        for set in &mut *gain_to_node {
             set.clear();
         }
         for (node, initial_part) in partition.iter().enumerate() {
@@ -98,8 +88,8 @@ fn fiduccia_mattheyses<W>(
                     }
                 })
                 .sum();
-            gain_table.node_to_gain[node] = Some(gain);
-            gain_table.gain_to_node[gain_table_idx(gain)].insert(node);
+            node_to_gain[node] = Some(gain);
+            gain_to_node[gain_table_idx(gain)].insert(node);
         }
 
         // enter pass loop
@@ -107,8 +97,7 @@ fn fiduccia_mattheyses<W>(
         // number of nodes in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
         for _ in 0..max_flips_per_pass {
-            let (max_pos, max_gain) = match gain_table
-                .gain_to_node
+            let (max_pos, max_gain) = match gain_to_node
                 .iter()
                 .rev()
                 .zip((-pmax..=pmax).rev())
@@ -142,10 +131,6 @@ fn fiduccia_mattheyses<W>(
                 None => break,
             };
 
-            gain_table.node_to_gain[max_pos] = None;
-            gain_table.gain_to_node[gain_table_idx(max_gain)].remove(&max_pos);
-            let target_part = 1 - partition[max_pos];
-
             if max_gain <= 0 {
                 if num_bad_move >= max_bad_move_in_a_row {
                     tracing::info!("reached max bad move in a row");
@@ -156,6 +141,10 @@ fn fiduccia_mattheyses<W>(
                 // a good move breaks the bad moves sequence
                 num_bad_move = 0;
             }
+
+            node_to_gain[max_pos] = None;
+            gain_to_node[gain_table_idx(max_gain)].remove(&max_pos);
+            let target_part = 1 - partition[max_pos];
 
             // flip node
             let old_part = std::mem::replace(&mut partition[max_pos], target_part);
@@ -182,7 +171,7 @@ fn fiduccia_mattheyses<W>(
             for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
                 let initial_part = partition[neighbor];
                 let target_part = 1 - initial_part;
-                let outdated_gain = match gain_table.node_to_gain[neighbor] {
+                let outdated_gain = match node_to_gain[neighbor] {
                     Some(v) => v,
                     None => continue,
                 };
@@ -201,8 +190,8 @@ fn fiduccia_mattheyses<W>(
                     })
                     .sum();
                 if outdated_gain != updated_gain {
-                    gain_table.gain_to_node[gain_table_idx(outdated_gain)].remove(&neighbor);
-                    gain_table.gain_to_node[gain_table_idx(updated_gain)].insert(neighbor);
+                    gain_to_node[gain_table_idx(outdated_gain)].remove(&neighbor);
+                    gain_to_node[gain_table_idx(updated_gain)].insert(neighbor);
                 }
             }
         }
