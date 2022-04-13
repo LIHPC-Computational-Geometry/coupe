@@ -1,19 +1,43 @@
 use super::Error;
-use itertools::Itertools;
 use sprs::CsMatView;
+use std::cmp::Ordering;
+use std::collections::HashSet;
+
+fn partial_cmp<W>(a: &W, b: &W) -> Ordering
+where
+    W: PartialOrd,
+{
+    if a < b {
+        Ordering::Less
+    } else {
+        Ordering::Greater
+    }
+}
+
+/// Some data used to rewind the partition array to a previous state, should the
+/// edge cut in said state is better.
+struct Move {
+    /// The index of the vertex.
+    vertex: usize,
+
+    /// The index of the part the vertex was in before the move.
+    ///
+    /// The target part is 1 - initial_part, because there are only two parts.
+    initial_part: usize,
+}
 
 fn fiduccia_mattheyses<W>(
     partition: &mut [usize],
     weights: &[W],
-    adjacency: CsMatView<f64>,
+    adjacency: CsMatView<i64>,
     max_passes: usize,
-    max_flips_per_pass: usize,
+    max_moves_per_pass: usize,
     max_imbalance: Option<f64>,
-    max_bad_move_in_a_row: usize, // for each pass, the max number of subsequent moves that will decrease the gain
+    max_bad_moves_in_a_row: usize,
 ) where
     W: std::fmt::Debug + Copy + PartialOrd,
-    W: std::iter::Sum + num::ToPrimitive,
-    W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W> + num::Zero,
+    W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive + num::Zero,
+    W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
     debug_assert!(!partition.is_empty());
     debug_assert_eq!(partition.len(), weights.len());
@@ -21,232 +45,172 @@ fn fiduccia_mattheyses<W>(
     debug_assert_eq!(partition.len(), adjacency.cols());
 
     let part_count = 1 + *partition.iter().max().unwrap();
-    let mut parts_weights =
-        crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
-    let total_weight: W = parts_weights.iter().cloned().sum();
-    let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
-    let max_imbalance = max_imbalance.unwrap_or_else(|| {
-        parts_weights
-            .iter()
-            .map(|part_weight| {
-                (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
-            })
-            .minmax()
-            .into_option()
-            .unwrap()
-            .1
-    });
-    tracing::info!(?max_imbalance);
+    debug_assert!(part_count <= 2);
 
-    let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
-    tracing::info!("Initial cut size: {}", best_cut_size);
+    let mut part_weights =
+        crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
+
+    // Enforce part weights to be below this value.
+    let max_part_weight = match max_imbalance {
+        Some(max_imbalance) => {
+            let total_weight: W = part_weights.iter().cloned().sum();
+            let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+            W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
+        }
+        None => *part_weights.iter().max_by(partial_cmp).unwrap(),
+    };
+
+    let mut best_edge_cut = crate::topology::cut_size(adjacency, partition);
+    tracing::info!("Initial edge cut: {}", best_edge_cut);
+
+    let max_possible_gain = (0..partition.len())
+        .map(|vertex| {
+            adjacency
+                .outer_view(vertex)
+                .unwrap()
+                .iter()
+                .fold(0, |acc, (_, edge_weight)| acc + edge_weight)
+        })
+        .max()
+        .unwrap();
+
+    // Maps (-max_possible_gain..=max_possible_gain) to nodes that have that gain.
+    let mut gain_to_vertex = {
+        let possible_gain_count = (2 * max_possible_gain + 1) as usize;
+        vec![HashSet::new(); possible_gain_count].into_boxed_slice()
+    };
+    // Maps a gain value to its index in gain_to_vertex.
+    let gain_table_idx = |gain: i64| (gain + max_possible_gain) as usize;
+    // Either Some(gain) or None if the vertex is locked.
+    let mut vertex_to_gain = vec![None; adjacency.outer_dims()].into_boxed_slice();
 
     for _ in 0..max_passes {
-        // monitors for each pass the number of subsequent flips
-        // that increase cut size. It may be beneficial in some
-        // situations to allow a certain amount of them. Performing bad flips can open
-        // up new sequences of good flips.
+        // monitors for each pass the number of subsequent moves that increase
+        // the edge cut. It may be beneficial in some situations to allow a
+        // certain amount of them. Performing bad moves can open up new
+        // sequences of good moves.
         let mut num_bad_move = 0;
 
         // Avoid copying partition arrays around and instead record an history
-        // of flips.
-        let mut flip_history = Vec::new();
-        let mut cut_size_history = Vec::new();
+        // of moves, so that even if bad moves are performed during the pass, we
+        // can look back and pick the best partition.
+        let mut move_history: Vec<Move> = Vec::new();
+        let mut edge_cut_history: Vec<i64> = Vec::new();
 
-        use std::collections::BinaryHeap;
-
-        #[derive(Clone, Copy)]
-        struct Flip {
-            target_part: usize,
-            gain: f64,
+        for set in &mut *gain_to_vertex {
+            set.clear();
         }
-
-        impl PartialEq for Flip {
-            fn eq(&self, other: &Self) -> bool {
-                self.gain == other.gain
-            }
+        for (vertex, initial_part) in partition.iter().enumerate() {
+            let gain = adjacency
+                .outer_view(vertex)
+                .unwrap()
+                .iter()
+                .map(|(neighbor, edge_weight)| {
+                    if partition[neighbor] == *initial_part {
+                        -*edge_weight
+                    } else {
+                        *edge_weight
+                    }
+                })
+                .sum();
+            vertex_to_gain[vertex] = Some(gain);
+            gain_to_vertex[gain_table_idx(gain)].insert(vertex);
         }
-        impl Eq for Flip {}
-
-        impl PartialOrd for Flip {
-            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                f64::partial_cmp(&self.gain, &other.gain)
-            }
-        }
-
-        impl Ord for Flip {
-            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                Flip::partial_cmp(self, other).unwrap()
-            }
-        }
-
-        /// Gain table element.
-        enum NodeGains {
-            /// The edge-cut gain should the node move to part P, for each P.
-            Available(BinaryHeap<Flip>),
-            /// The node is locked and will not be visited again this pass.
-            Locked,
-        }
-
-        impl NodeGains {
-            pub fn unlock(&self) -> Option<&BinaryHeap<Flip>> {
-                match self {
-                    NodeGains::Available(gains) => Some(gains),
-                    NodeGains::Locked => None,
-                }
-            }
-
-            pub fn max_gain(&self) -> Option<Flip> {
-                self.unlock().and_then(|gains| gains.peek().cloned())
-            }
-        }
-
-        // Gain table, stored as a heap of node gains for each node.
-        let mut gains: Vec<NodeGains> = partition
-            .iter()
-            .enumerate()
-            .map(|(node, &initial_part)| {
-                let gains = (0..part_count)
-                    .map(|target_part| {
-                        let gain = if target_part == initial_part {
-                            0.0
-                        } else {
-                            adjacency
-                                .outer_view(node)
-                                .unwrap()
-                                .iter()
-                                .map(|(neighbor, &edge_weight)| {
-                                    if partition[neighbor] == initial_part {
-                                        -edge_weight
-                                    } else if partition[neighbor] == target_part {
-                                        edge_weight
-                                    } else {
-                                        0.0
-                                    }
-                                })
-                                .sum()
-                        };
-                        Flip { target_part, gain }
-                    })
-                    .collect();
-                NodeGains::Available(gains)
-            })
-            .collect();
 
         // enter pass loop
         // The number of iteration of the pas loop is at most the
-        // number of nodes in the mesh. However, if too many subsequent
+        // number of vertices in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
-        for _ in 0..max_flips_per_pass {
-            // find max gain and target part
-            let (max_pos, flip) = gains
+        for _ in 0..max_moves_per_pass {
+            let (moved_vertex, move_gain) = match gain_to_vertex
                 .iter()
-                .enumerate()
-                .filter_map(|(node, gains)| gains.max_gain().map(|flip| (node, flip)))
-                // get max gain of max gains computed for each node
-                .max_by(|(_, flip1), (_, flip2)| {
-                    f64::partial_cmp(&flip1.gain, &flip2.gain).unwrap()
-                })
-                .unwrap();
-            let max_gain = flip.gain;
-            let target_part = flip.target_part;
+                .rev()
+                .zip((-max_possible_gain..=max_possible_gain).rev())
+                .find_map(|(vertices, gain)| {
+                    let (best_vertex, _) = vertices
+                        .iter()
+                        .filter_map(|vertex| {
+                            let weight = weights[*vertex];
+                            let initial_part = partition[*vertex];
+                            let target_part = 1 - initial_part;
+                            let target_part_weight = part_weights[target_part] + weight;
+                            if max_part_weight < target_part_weight {
+                                return None;
+                            }
+                            Some((*vertex, target_part_weight))
+                        })
+                        .min_by(|(_, max_part_weight0), (_, max_part_weight1)| {
+                            partial_cmp(max_part_weight0, max_part_weight1)
+                        })?;
+                    Some((best_vertex, gain))
+                }) {
+                Some(v) => v,
+                None => break,
+            };
 
-            if max_gain <= 0. {
-                if num_bad_move >= max_bad_move_in_a_row {
+            if move_gain <= 0 {
+                if num_bad_move >= max_bad_moves_in_a_row {
                     tracing::info!("reached max bad move in a row");
                     break;
                 }
                 num_bad_move += 1;
             } else {
-                // a good move breaks the bad moves sequence
+                // A good move breaks the bad moves sequence.
                 num_bad_move = 0;
             }
 
-            // flip node
-            let old_part = std::mem::replace(&mut partition[max_pos], target_part);
-            flip_history.push((max_pos, old_part, target_part));
-            parts_weights[old_part] -= weights[max_pos];
-            parts_weights[target_part] += weights[max_pos];
-            gains[max_pos] = NodeGains::Locked;
+            vertex_to_gain[moved_vertex] = None;
+            gain_to_vertex[gain_table_idx(move_gain)].remove(&moved_vertex);
 
-            let imbalance = parts_weights
-                .iter()
-                .map(|part_weight| {
-                    (part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
-                })
-                .minmax()
-                .into_option()
-                .unwrap()
-                .1;
-            if max_imbalance < imbalance {
-                // revert flip
-                tracing::info!(?imbalance, max_pos, old_part, target_part, "no flip");
-                partition[max_pos] = old_part;
-                parts_weights[old_part] += weights[max_pos];
-                parts_weights[target_part] -= weights[max_pos];
-                flip_history.pop();
-                continue;
-            }
+            let initial_part = partition[moved_vertex];
+            let target_part = 1 - initial_part;
+            partition[moved_vertex] = target_part;
+            part_weights[initial_part] -= weights[moved_vertex];
+            part_weights[target_part] += weights[moved_vertex];
+            move_history.push(Move {
+                vertex: moved_vertex,
+                initial_part,
+            });
+            tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
-            // save cut_size
-            tracing::info!(?imbalance, max_pos, old_part, target_part, "flip");
-            let mut new_cut_size = *cut_size_history.last().unwrap_or(&best_cut_size);
-            for (neighbors, edge_weight) in adjacency.outer_view(max_pos).unwrap().iter() {
-                if partition[neighbors] == old_part {
-                    new_cut_size += edge_weight;
-                } else if partition[neighbors] == target_part {
-                    new_cut_size -= edge_weight;
+            let mut new_edge_cut = *edge_cut_history.last().unwrap_or(&best_edge_cut);
+            for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
+                if partition[neighbor] == initial_part {
+                    new_edge_cut += edge_weight;
+                } else if partition[neighbor] == target_part {
+                    new_edge_cut -= edge_weight;
                 }
             }
             debug_assert_eq!(
-                new_cut_size,
+                new_edge_cut,
                 crate::topology::cut_size(adjacency, partition),
             );
-            cut_size_history.push(new_cut_size);
+            edge_cut_history.push(new_edge_cut);
 
-            for (neighbor, _) in adjacency.outer_view(max_pos).unwrap().iter() {
-                let mut update_gains_for = |node: usize| {
-                    let gains = match &mut gains[node] {
-                        NodeGains::Available(gains) => gains,
-                        NodeGains::Locked => return,
-                    };
-                    let initial_part = partition[node];
-                    *gains = (0..part_count)
-                        .map(|target_part| {
-                            let gain = if target_part == initial_part {
-                                0.0
-                            } else {
-                                adjacency
-                                    .outer_view(node)
-                                    .unwrap()
-                                    .iter()
-                                    .map(|(neighbor, &edge_weight)| {
-                                        if partition[neighbor] == initial_part {
-                                            -edge_weight
-                                        } else if partition[neighbor] == target_part {
-                                            edge_weight
-                                        } else {
-                                            0.0
-                                        }
-                                    })
-                                    .sum()
-                            };
-                            Flip { target_part, gain }
-                        })
-                        .collect();
+            for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
+                let outdated_gain = match vertex_to_gain[neighbor] {
+                    Some(v) => v,
+                    None => continue,
                 };
-                update_gains_for(neighbor);
+                let updated_gain = if partition[neighbor] == initial_part {
+                    outdated_gain + edge_weight
+                } else {
+                    outdated_gain - edge_weight
+                };
+                vertex_to_gain[neighbor] = Some(updated_gain);
+                gain_to_vertex[gain_table_idx(outdated_gain)].remove(&neighbor);
+                gain_to_vertex[gain_table_idx(updated_gain)].insert(neighbor);
             }
         }
 
-        let old_cut_size = best_cut_size;
+        let old_edge_cut = best_edge_cut;
 
-        // lookup for best cutsize
-        let (best_pos, best_cut) = match cut_size_history
+        // Rewind history of moves to the best edge cut found in the pass.
+        let (best_pos, best_cut) = match edge_cut_history
             .iter()
             .cloned()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .min_by(|(_, a), (_, b)| i64::cmp(a, b))
         {
             Some(v) => v,
             None => break,
@@ -255,22 +219,26 @@ fn fiduccia_mattheyses<W>(
         tracing::info!(
             "rewinding flips from pos {} to pos {}",
             best_pos + 1,
-            flip_history.len()
+            move_history.len()
         );
-        for (idx, old_part, target_part) in flip_history.drain(best_pos + 1..) {
-            partition[idx] = old_part;
-            parts_weights[old_part] += weights[idx];
-            parts_weights[target_part] += weights[idx];
+        for Move {
+            vertex,
+            initial_part,
+        } in move_history.drain(best_pos + 1..)
+        {
+            partition[vertex] = initial_part;
+            part_weights[initial_part] += weights[vertex];
+            part_weights[1 - initial_part] += weights[vertex];
         }
 
-        best_cut_size = best_cut;
+        best_edge_cut = best_cut;
 
-        if old_cut_size <= best_cut_size {
+        if old_edge_cut <= best_edge_cut {
             break;
         }
     }
 
-    tracing::info!("final cut size: {}", best_cut_size);
+    tracing::info!("final edge cut: {}", best_edge_cut);
 }
 
 /// FiducciaMattheyses
@@ -279,11 +247,11 @@ fn fiduccia_mattheyses<W>(
 /// for graph partitioning. This implementation is an extension of the
 /// original algorithm to handle partitioning into more than two parts.
 ///
-/// This algorithm repeats an iterative pass during which a set of graph nodes are assigned to
-/// a new part, reducing the overall cutsize of the partition. As opposed to the
-/// Kernighan-Lin algorithm, during each pass iteration, only one node is flipped at a time.
-/// The algorithm thus does not preserve partition weights balance and may produce an unbalanced
-/// partition.
+/// This algorithm repeats an iterative pass during which a set of graph
+/// vertices are assigned to a new part, reducing the overall cutsize of the
+/// partition. As opposed to the Kernighan-Lin algorithm, during each pass
+/// iteration, only one vertex is flipped at a time. The algorithm thus does not
+/// preserve partition weights balance and may produce an unbalanced partition.
 ///
 /// Original algorithm from "A Linear-Time Heuristic for Improving Network Partitions"
 /// by C.M. Fiduccia and R.M. Mattheyses.
@@ -317,28 +285,28 @@ fn fiduccia_mattheyses<W>(
 /// let mut adjacency = CsMat::empty(sprs::CSR, 8);
 /// adjacency.reserve_outer_dim(8);
 /// eprintln!("shape: {:?}", adjacency.shape());
-/// adjacency.insert(0, 1, 1.);
-/// adjacency.insert(1, 2, 1.);
-/// adjacency.insert(2, 3, 1.);
-/// adjacency.insert(4, 5, 1.);
-/// adjacency.insert(5, 6, 1.);
-/// adjacency.insert(6, 7, 1.);
-/// adjacency.insert(0, 4, 1.);
-/// adjacency.insert(1, 5, 1.);
-/// adjacency.insert(2, 6, 1.);
-/// adjacency.insert(3, 7, 1.);
+/// adjacency.insert(0, 1, 1);
+/// adjacency.insert(1, 2, 1);
+/// adjacency.insert(2, 3, 1);
+/// adjacency.insert(4, 5, 1);
+/// adjacency.insert(5, 6, 1);
+/// adjacency.insert(6, 7, 1);
+/// adjacency.insert(0, 4, 1);
+/// adjacency.insert(1, 5, 1);
+/// adjacency.insert(2, 6, 1);
+/// adjacency.insert(3, 7, 1);
 ///
 /// // symmetry
-/// adjacency.insert(1, 0, 1.);
-/// adjacency.insert(2, 1, 1.);
-/// adjacency.insert(3, 2, 1.);
-/// adjacency.insert(5, 4, 1.);
-/// adjacency.insert(6, 5, 1.);
-/// adjacency.insert(7, 6, 1.);
-/// adjacency.insert(4, 0, 1.);
-/// adjacency.insert(5, 1, 1.);
-/// adjacency.insert(6, 2, 1.);
-/// adjacency.insert(7, 3, 1.);
+/// adjacency.insert(1, 0, 1);
+/// adjacency.insert(2, 1, 1);
+/// adjacency.insert(3, 2, 1);
+/// adjacency.insert(5, 4, 1);
+/// adjacency.insert(6, 5, 1);
+/// adjacency.insert(7, 6, 1);
+/// adjacency.insert(4, 0, 1);
+/// adjacency.insert(5, 1, 1);
+/// adjacency.insert(6, 2, 1);
+/// adjacency.insert(7, 3, 1);
 ///
 /// // Set the imbalance tolerance to 25% to provide enough room for FM to do
 /// // the swap.
@@ -356,10 +324,10 @@ pub struct FiducciaMattheyses {
     pub max_bad_move_in_a_row: usize,
 }
 
-impl<'a, W> crate::Partition<(CsMatView<'a, f64>, &'a [W])> for FiducciaMattheyses
+impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
 where
     W: std::fmt::Debug + Copy + PartialOrd + num::Zero,
-    W: std::iter::Sum + num::ToPrimitive,
+    W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
     type Metadata = ();
@@ -368,7 +336,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<f64>, &'a [W]),
+        (adjacency, weights): (CsMatView<i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(());
@@ -390,6 +358,9 @@ where
                 expected: part_ids.len(),
                 actual: adjacency.cols(),
             });
+        }
+        if 1 < *part_ids.iter().max().unwrap_or(&0) {
+            return Err(Error::BiPartitioningOnly);
         }
         fiduccia_mattheyses(
             part_ids,
