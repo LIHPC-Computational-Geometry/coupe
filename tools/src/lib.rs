@@ -185,19 +185,24 @@ impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
 impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
-        let adjacency = problem.adjacency.view();
+        let adjacency = {
+            let shape = problem.adjacency.shape();
+            let (indptr, indices, f64_data) = problem.adjacency.view().into_raw_storage();
+            let i64_data = f64_data.iter().map(|f| *f as i64).collect();
+            sprs::CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
+        };
         match &problem.weights {
             Integers(is) => {
                 let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency, &weights))?;
+                    self.partition(partition, (adjacency.view(), &weights))?;
                     Ok(())
                 })
             }
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency, &weights))?;
+                    self.partition(partition, (adjacency.view(), &weights))?;
                     Ok(())
                 })
             }

@@ -41,6 +41,9 @@ pub enum Error {
 
     /// Input contains negative values and such values are not supported.
     NegativeValues,
+
+    /// When a partition improving algorithm is given more than 2 parts.
+    BiPartitioningOnly,
 }
 
 impl fmt::Display for Error {
@@ -52,6 +55,7 @@ impl fmt::Display for Error {
                 "input sets don't have the same length (expected {expected} items, got {actual})",
             ),
             Error::NegativeValues => write!(f, "input contains negative values"),
+            Error::BiPartitioningOnly => write!(f, "expected no more than two parts"),
         }
     }
 }
