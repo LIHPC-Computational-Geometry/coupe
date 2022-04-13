@@ -70,57 +70,53 @@ fn fiduccia_mattheyses<W>(
     let mut best_cut_size = crate::topology::cut_size(adjacency, partition);
     tracing::info!("Initial cut size: {}", best_cut_size);
 
+    let span = tracing::info_span!("creating gain table");
+    let enter = span.enter();
+
+    partition
+        .par_iter()
+        .enumerate()
+        .fold(
+            || std::collections::BTreeMap::<usize, HashSet<usize>>::new(),
+            |mut acc, (node, initial_part)| {
+                let gain: i64 = adjacency
+                    .outer_view(node)
+                    .unwrap()
+                    .iter()
+                    .map(|(neighbor, edge_weight)| {
+                        if partition[neighbor] == *initial_part {
+                            -*edge_weight
+                        } else {
+                            // neighbor_part == 1 - initial_part
+                            *edge_weight
+                        }
+                    })
+                    .sum();
+                acc.entry(gain_table_idx(gain)).or_default().insert(node);
+                acc
+            },
+        )
+        .for_each(|map| {
+            for (gain, nodes) in map {
+                gain_to_node[gain].lock().unwrap().extend(nodes);
+            }
+        });
+
+    std::mem::drop(enter);
+
     let partition = unsafe { std::mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
 
     for _ in 0..max_passes {
-        let span = tracing::info_span!("creating gain table");
-        let enter = span.enter();
-
-        for set in &*gain_to_node {
-            set.try_lock().unwrap().clear();
-        }
-        partition
-            .par_iter()
-            .enumerate()
-            .fold(
-                || std::collections::BTreeMap::<usize, HashSet<usize>>::new(),
-                |mut acc, (node, initial_part)| {
-                    let initial_part = initial_part.load(Ordering::Relaxed);
-                    let gain: i64 = adjacency
-                        .outer_view(node)
-                        .unwrap()
-                        .iter()
-                        .map(|(neighbor, edge_weight)| {
-                            let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
-                            if neighbor_part == initial_part {
-                                -*edge_weight
-                            } else {
-                                // neighbor_part == 1 - initial_part
-                                *edge_weight
-                            }
-                        })
-                        .sum();
-
-                    acc.entry(gain_table_idx(gain)).or_default().insert(node);
-                    acc
-                },
-            )
-            .for_each(|map| {
-                for (gain, nodes) in map {
-                    gain_to_node[gain].lock().unwrap().extend(nodes);
-                }
-            });
-
-        std::mem::drop(enter);
-
         struct Synchronized<'a, W> {
             part_weights: &'a mut [W],
             last_cut_size: i64,
+            locked_nodes: Vec<usize>,
         }
 
         let s = RwLock::new(Synchronized {
             part_weights: &mut parts_weights,
             last_cut_size: best_cut_size,
+            locked_nodes: Vec::new(),
         });
 
         (0..max_flips_per_pass).into_par_iter().try_for_each(|_| {
@@ -211,6 +207,7 @@ fn fiduccia_mattheyses<W>(
                 let mut s = s.write().unwrap();
                 s.part_weights[old_part] -= weights[max_pos];
                 s.part_weights[target_part] += weights[max_pos];
+                s.locked_nodes.push(max_pos);
 
                 // save cut_size
                 tracing::info!(max_pos, old_part, target_part, "flip");
@@ -259,11 +256,36 @@ fn fiduccia_mattheyses<W>(
             Some(())
         });
 
-        let new_cut_size = s.into_inner().unwrap().last_cut_size;
+        let s = s.into_inner().unwrap();
+        let new_cut_size = s.last_cut_size;
         if best_cut_size <= new_cut_size {
             break;
         }
         best_cut_size = new_cut_size;
+
+        let span = tracing::info_span!("rebuild gain table");
+        let _enter = span.enter();
+
+        s.locked_nodes.into_iter().for_each(|node| {
+            let initial_part = partition[node].load(Ordering::Relaxed);
+            let gain = adjacency
+                .outer_view(node)
+                .unwrap()
+                .iter()
+                .map(|(neighbor, edge_weight)| {
+                    if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                        -*edge_weight
+                    } else {
+                        *edge_weight
+                    }
+                })
+                .sum();
+            node_to_gain[node].store(gain, Ordering::Relaxed);
+            gain_to_node[gain_table_idx(gain)]
+                .try_lock()
+                .unwrap()
+                .insert(node);
+        });
     }
 
     tracing::info!("final cut size: {}", best_cut_size);
