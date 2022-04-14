@@ -173,14 +173,7 @@ fn fiduccia_mattheyses<W>(
             });
             tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
-            let mut new_edge_cut = *edge_cut_history.last().unwrap_or(&best_edge_cut);
-            for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
-                if partition[neighbor] == initial_part {
-                    new_edge_cut += edge_weight;
-                } else if partition[neighbor] == target_part {
-                    new_edge_cut -= edge_weight;
-                }
-            }
+            let new_edge_cut = *edge_cut_history.last().unwrap_or(&best_edge_cut) - move_gain;
             debug_assert_eq!(
                 new_edge_cut,
                 crate::topology::edge_cut(adjacency, partition),
