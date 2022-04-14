@@ -3,11 +3,11 @@
 use sprs::{CsMat, CsMatView, TriMat};
 use std::iter::Sum;
 
-/// Computes the cutsize of a partition.
+/// The edge cut of a partition.
 ///
-/// Given a partition and a weighted graph associated to a mesh, the cutsize
-/// of a partition woth two parts is defined as the total weights of edged that link
-/// two graph nodes of different parts.
+/// Given a partition and a weighted graph associated to a mesh, the edge cut of
+/// a partition is defined as the total weight of the edges that link graph
+/// nodes of different parts.
 ///
 /// # Example
 ///
@@ -16,12 +16,12 @@ use std::iter::Sum;
 ///          0
 ///    1*──┆─*────* 0
 ///    ╱ ╲ ┆╱    ╱     
-///  1*  1*┆ <┈┈╱┈┈┈ Dotted line passes through edged that contribute to cutsize.         
-///    ╲ ╱ ┆   ╱     If all edges have a weight of 1 then cutsize = 3         
+///  1*  1*┆ <┈┈╱┈┈┈ Dotted line passes through edged that contribute to edge cut.         
+///    ╲ ╱ ┆   ╱     If all edges have a weight of 1 then edge_cut = 3
 ///    1*  ┆╲ ╱            
 ///          * 0
 /// ```
-pub fn cut_size<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
+pub fn edge_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
 where
     T: Copy + Sum,
 {

@@ -60,7 +60,7 @@ fn fiduccia_mattheyses<W>(
         None => *part_weights.iter().max_by(partial_cmp).unwrap(),
     };
 
-    let mut best_edge_cut = crate::topology::cut_size(adjacency, partition);
+    let mut best_edge_cut = crate::topology::edge_cut(adjacency, partition);
     tracing::info!("Initial edge cut: {}", best_edge_cut);
 
     let max_possible_gain = (0..partition.len())
@@ -183,7 +183,7 @@ fn fiduccia_mattheyses<W>(
             }
             debug_assert_eq!(
                 new_edge_cut,
-                crate::topology::cut_size(adjacency, partition),
+                crate::topology::edge_cut(adjacency, partition),
             );
             edge_cut_history.push(new_edge_cut);
 

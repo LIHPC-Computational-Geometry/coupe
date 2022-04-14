@@ -50,7 +50,7 @@ fn kernighan_lin_2_impl(
         unimplemented!();
     }
 
-    let mut cut_size = crate::topology::cut_size(adjacency, initial_partition);
+    let mut cut_size = crate::topology::edge_cut(adjacency, initial_partition);
     tracing::info!("Initial cut size: {}", cut_size);
     let mut new_cut_size = cut_size;
 
@@ -139,7 +139,7 @@ fn kernighan_lin_2_impl(
             initial_partition.swap(max_pos_1, max_pos_2);
 
             // save cut size
-            cut_saves.push(crate::topology::cut_size(
+            cut_saves.push(crate::topology::edge_cut(
                 adjacency.view(),
                 initial_partition,
             ));
