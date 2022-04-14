@@ -193,9 +193,9 @@ fn fiduccia_mattheyses<W>(
                     None => continue,
                 };
                 let updated_gain = if partition[neighbor] == initial_part {
-                    outdated_gain + edge_weight
+                    outdated_gain + 2 * edge_weight
                 } else {
-                    outdated_gain - edge_weight
+                    outdated_gain - 2 * edge_weight
                 };
                 vertex_to_gain[neighbor] = Some(updated_gain);
                 gain_to_vertex[gain_table_idx(outdated_gain)].remove(&neighbor);
