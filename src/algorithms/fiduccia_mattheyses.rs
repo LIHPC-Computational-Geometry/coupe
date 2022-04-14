@@ -140,10 +140,10 @@ where
         // number of vertices in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
         for move_num in 0..max_moves_per_pass {
-            let (moved_vertex, move_gain) = match gain_to_vertex
+            let (moved_vertex, move_gain) = match gain_to_vertex[gain_table_idx(1)..]
                 .iter()
-                .rev()
-                .zip((-max_possible_gain..=max_possible_gain).rev())
+                .chain(gain_to_vertex[..gain_table_idx(1)].iter().rev())
+                .zip((1..=max_possible_gain).chain((-max_possible_gain..1).rev()))
                 .find_map(|(vertices, gain)| {
                     let (best_vertex, _) = vertices
                         .iter()
