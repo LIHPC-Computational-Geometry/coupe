@@ -32,10 +32,20 @@ fn main_d<const D: usize>(
         })
         .collect::<Result<_>>()?;
 
+    let show_metadata = matches.opt_present("v");
+
     for (algorithm_spec, mut algorithm) in algorithm_specs.iter().zip(algorithms) {
         let mut algorithm = algorithm.to_runner(&problem);
-        algorithm(&mut partition)
+        let metadata = algorithm(&mut partition)
             .with_context(|| format!("failed to apply algorithm {:?}", algorithm_spec))?;
+        if !show_metadata {
+            continue;
+        }
+        if let Some(metadata) = metadata {
+            eprintln!("{algorithm_spec}: {metadata:?}");
+        } else {
+            eprintln!("{algorithm_spec}:");
+        }
     }
 
     Ok(partition)
@@ -52,6 +62,7 @@ fn main() -> Result<()> {
     );
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("t", "trace", "emit a chrome trace", "FILE");
+    options.optflag("v", "verbose", "print diagnostic data");
     options.optopt("w", "weights", "weight file", "FILE");
 
     let matches = options.parse(env::args().skip(1))?;

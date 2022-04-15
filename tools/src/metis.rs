@@ -32,7 +32,7 @@ impl<const D: usize> ToRunner<D> for Recursive {
             for (dst, src) in partition.iter_mut().zip(&mut metis_partition) {
                 *dst = *src as usize;
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -64,7 +64,7 @@ impl<const D: usize> ToRunner<D> for KWay {
             for (dst, src) in partition.iter_mut().zip(&mut metis_partition) {
                 *dst = *src as usize;
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
