@@ -100,6 +100,10 @@ where
     let mut rewinded_moves_per_pass = Vec::new();
 
     for _ in 0..max_passes {
+        let old_edge_cut = best_edge_cut;
+        let mut current_edge_cut = best_edge_cut;
+        let mut move_with_best_edge_cut = None;
+
         // monitors for each pass the number of subsequent moves that increase
         // the edge cut. It may be beneficial in some situations to allow a
         // certain amount of them. Performing bad moves can open up new
@@ -110,7 +114,6 @@ where
         // of moves, so that even if bad moves are performed during the pass, we
         // can look back and pick the best partition.
         let mut move_history: Vec<Move> = Vec::new();
-        let mut edge_cut_history: Vec<i64> = Vec::new();
 
         for set in &mut *gain_to_vertex {
             set.clear();
@@ -136,7 +139,7 @@ where
         // The number of iteration of the pas loop is at most the
         // number of vertices in the mesh. However, if too many subsequent
         // bad flips are performed, the loop will break early
-        for _ in 0..max_moves_per_pass {
+        for move_num in 0..max_moves_per_pass {
             let (moved_vertex, move_gain) = match gain_to_vertex
                 .iter()
                 .rev()
@@ -188,12 +191,15 @@ where
             });
             tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
-            let new_edge_cut = *edge_cut_history.last().unwrap_or(&best_edge_cut) - move_gain;
+            current_edge_cut -= move_gain;
             debug_assert_eq!(
-                new_edge_cut,
+                current_edge_cut,
                 crate::topology::edge_cut(adjacency, partition),
             );
-            edge_cut_history.push(new_edge_cut);
+            if current_edge_cut < best_edge_cut {
+                best_edge_cut = current_edge_cut;
+                move_with_best_edge_cut = Some(move_num);
+            }
 
             for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
                 let outdated_gain = match vertex_to_gain[neighbor] {
@@ -211,41 +217,31 @@ where
             }
         }
 
-        moves_per_pass.push(move_history.len());
-
-        // Rewind history of moves to the best edge cut found in the pass.
-        let (best_pos, best_cut) = match edge_cut_history
-            .iter()
-            .cloned()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| i64::cmp(a, b))
-        {
+        let move_with_best_edge_cut = match move_with_best_edge_cut {
             Some(v) => v,
             None => {
+                moves_per_pass.push(0);
                 rewinded_moves_per_pass.push(0);
                 break;
             }
         };
 
-        rewinded_moves_per_pass.push(move_history.len() - best_pos - 1);
+        moves_per_pass.push(move_history.len());
+        rewinded_moves_per_pass.push(move_history.len() - move_with_best_edge_cut - 1);
 
         tracing::info!(
-            "rewinding flips from pos {} to pos {}",
-            best_pos + 1,
-            move_history.len()
+            "rewinding {} moves",
+            move_history.len() - move_with_best_edge_cut - 1,
         );
         for Move {
             vertex,
             initial_part,
-        } in move_history.drain(best_pos + 1..)
+        } in move_history.drain(move_with_best_edge_cut + 1..)
         {
             partition[vertex] = initial_part;
             part_weights[initial_part] += weights[vertex];
             part_weights[1 - initial_part] -= weights[vertex];
         }
-
-        let old_edge_cut = best_edge_cut;
-        best_edge_cut = best_cut;
 
         if old_edge_cut <= best_edge_cut {
             break;
