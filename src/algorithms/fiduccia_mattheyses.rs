@@ -221,7 +221,7 @@ fn fiduccia_mattheyses<W>(
         {
             partition[vertex] = initial_part;
             part_weights[initial_part] += weights[vertex];
-            part_weights[1 - initial_part] += weights[vertex];
+            part_weights[1 - initial_part] -= weights[vertex];
         }
 
         best_edge_cut = best_cut;
