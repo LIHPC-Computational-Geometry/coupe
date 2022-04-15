@@ -217,26 +217,19 @@ where
             }
         }
 
-        let move_with_best_edge_cut = match move_with_best_edge_cut {
-            Some(v) => v,
-            None => {
-                moves_per_pass.push(0);
-                rewinded_moves_per_pass.push(0);
-                break;
-            }
+        let rewind_to = match move_with_best_edge_cut {
+            Some(v) => v + 1,
+            None => 0,
         };
 
         moves_per_pass.push(move_history.len());
-        rewinded_moves_per_pass.push(move_history.len() - move_with_best_edge_cut - 1);
+        rewinded_moves_per_pass.push(move_history.len() - rewind_to);
 
-        tracing::info!(
-            "rewinding {} moves",
-            move_history.len() - move_with_best_edge_cut - 1,
-        );
+        tracing::info!("rewinding {} moves", move_history.len() - rewind_to);
         for Move {
             vertex,
             initial_part,
-        } in move_history.drain(move_with_best_edge_cut + 1..)
+        } in move_history.drain(rewind_to..)
         {
             partition[vertex] = initial_part;
             part_weights[initial_part] += weights[vertex];
