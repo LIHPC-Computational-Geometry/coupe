@@ -15,6 +15,7 @@ mod z_curve;
 
 pub use ckk::CompleteKarmarkarKarp;
 pub use fiduccia_mattheyses::FiducciaMattheyses;
+pub use fiduccia_mattheyses::Metadata as FmMetadata;
 pub use graph_growth::GraphGrowth;
 pub use greedy::Greedy;
 pub use hilbert_curve::Error as HilbertCurveError;

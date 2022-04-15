@@ -14,6 +14,17 @@ where
     }
 }
 
+/// Diagnostic data for a Fiduccia-Mattheyses run.
+#[non_exhaustive]
+#[derive(Debug, Default)]
+pub struct Metadata {
+    /// Move count for each pass, included discarded moves by history rewinds.
+    pub moves_per_pass: Vec<usize>,
+
+    /// Number of moves that have been discarded for each pass.
+    pub rewinded_moves_per_pass: Vec<usize>,
+}
+
 /// Some data used to rewind the partition array to a previous state, should the
 /// edge cut in said state is better.
 struct Move {
@@ -34,7 +45,8 @@ fn fiduccia_mattheyses<W>(
     max_moves_per_pass: usize,
     max_imbalance: Option<f64>,
     max_bad_moves_in_a_row: usize,
-) where
+) -> Metadata
+where
     W: std::fmt::Debug + Copy + PartialOrd,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive + num::Zero,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
@@ -83,6 +95,9 @@ fn fiduccia_mattheyses<W>(
     let gain_table_idx = |gain: i64| (gain + max_possible_gain) as usize;
     // Either Some(gain) or None if the vertex is locked.
     let mut vertex_to_gain = vec![None; adjacency.outer_dims()].into_boxed_slice();
+
+    let mut moves_per_pass = Vec::new();
+    let mut rewinded_moves_per_pass = Vec::new();
 
     for _ in 0..max_passes {
         // monitors for each pass the number of subsequent moves that increase
@@ -196,7 +211,7 @@ fn fiduccia_mattheyses<W>(
             }
         }
 
-        let old_edge_cut = best_edge_cut;
+        moves_per_pass.push(move_history.len());
 
         // Rewind history of moves to the best edge cut found in the pass.
         let (best_pos, best_cut) = match edge_cut_history
@@ -206,8 +221,13 @@ fn fiduccia_mattheyses<W>(
             .min_by(|(_, a), (_, b)| i64::cmp(a, b))
         {
             Some(v) => v,
-            None => break,
+            None => {
+                rewinded_moves_per_pass.push(0);
+                break;
+            }
         };
+
+        rewinded_moves_per_pass.push(move_history.len() - best_pos - 1);
 
         tracing::info!(
             "rewinding flips from pos {} to pos {}",
@@ -224,6 +244,7 @@ fn fiduccia_mattheyses<W>(
             part_weights[1 - initial_part] -= weights[vertex];
         }
 
+        let old_edge_cut = best_edge_cut;
         best_edge_cut = best_cut;
 
         if old_edge_cut <= best_edge_cut {
@@ -232,6 +253,11 @@ fn fiduccia_mattheyses<W>(
     }
 
     tracing::info!("final edge cut: {}", best_edge_cut);
+
+    Metadata {
+        moves_per_pass,
+        rewinded_moves_per_pass,
+    }
 }
 
 /// FiducciaMattheyses
@@ -251,7 +277,6 @@ fn fiduccia_mattheyses<W>(
 /// ```rust
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
-/// use sprs::CsMat;
 ///
 /// //    swap
 /// // 0  1  0  1
@@ -272,9 +297,7 @@ fn fiduccia_mattheyses<W>(
 /// let weights = [1.0; 8];
 /// let mut partition = [0, 0, 1, 1, 0, 1, 0, 1];
 ///
-/// let mut adjacency = CsMat::empty(sprs::CSR, 8);
-/// adjacency.reserve_outer_dim(8);
-/// eprintln!("shape: {:?}", adjacency.shape());
+/// let mut adjacency = sprs::CsMat::empty(sprs::CSR, 0);
 /// adjacency.insert(0, 1, 1);
 /// adjacency.insert(1, 2, 1);
 /// adjacency.insert(2, 3, 1);
@@ -326,7 +349,7 @@ where
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
-    type Metadata = ();
+    type Metadata = Metadata;
     type Error = Error;
 
     fn partition(
@@ -335,7 +358,7 @@ where
         (adjacency, weights): (CsMatView<i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
-            return Ok(());
+            return Ok(Metadata::default());
         }
         if part_ids.len() != weights.len() {
             return Err(Error::InputLenMismatch {
@@ -358,7 +381,7 @@ where
         if 1 < *part_ids.iter().max().unwrap_or(&0) {
             return Err(Error::BiPartitioningOnly);
         }
-        fiduccia_mattheyses(
+        let metadata = fiduccia_mattheyses(
             part_ids,
             weights,
             adjacency,
@@ -367,6 +390,6 @@ where
             self.max_imbalance,
             self.max_bad_move_in_a_row,
         );
-        Ok(())
+        Ok(metadata)
     }
 }
