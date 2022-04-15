@@ -10,21 +10,26 @@ run_algorithm() {
 
 	algorithm_id=$(echo "$algorithm" | cut -b4- | sed 's/ -a /-/g')
 	partition_file="${weight_file%.*}.$algorithm_id.part"
+
+	log_file="${partition_file%.*}.log"
+	out_mesh="${partition_file%.*}.mesh"
+	out_svg="${out_mesh%.*}.svg"
+	echo "$out_svg"
+
 	sayfile Computing "$partition_file"
-	mesh-part --mesh "$mesh_file" --weights "$weight_file" $algorithm >"$partition_file" || {
+	mesh-part --mesh "$mesh_file" --weights "$weight_file" $algorithm --verbose \
+			>"$partition_file" \
+			2>"$log_file" \
+			|| {
 		rm "$partition_file"
 		return 1
 	}
 
-	out_mesh="${partition_file%.*}.mesh"
 	sayfile Rendering "$out_mesh"
 	apply-part --mesh "$mesh_file" --partition "$partition_file" >"$out_mesh"
 
-	out_svg="${out_mesh%.*}.svg"
 	sayfile Rendering "$out_svg"
 	medit2svg <"$out_mesh" >"$out_svg" 2>/dev/null
-
-	echo "$out_svg"
 }
 
 HTML_REPORT="$OUTPUT_DIR/quality.html"
@@ -150,6 +155,7 @@ do
 				<div class="run">
 				Algorithm: <code>$algorithm</code>
 				<pre>
+				$(cat "${svg_file%.*}.log")
 				$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
 				mesh file: ${svg_file%.*}.mesh
 				</pre>
@@ -161,7 +167,7 @@ do
 				<div class="run">
 				Algorithm: <code>$algorithm</code>
 				<pre>
-				run failed
+				$(cat "${svg_file%.*}.log")
 				</pre>
 				</div>
 				EOF
