@@ -102,6 +102,12 @@ cat >"$HTML_REPORT" <<EOF
   margin: 1em;
   background: #eee;
 }
+
+pre {
+  word-wrap: break-word;
+  overflow-x:auto;
+  white-space: pre-wrap;
+}
 </style>
 <div class="mesh-tabs">
 EOF
