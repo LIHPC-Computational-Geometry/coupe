@@ -20,7 +20,9 @@ pub struct Problem<const D: usize> {
     pub adjacency: sprs::CsMat<f64>,
 }
 
-pub type Runner<'a> = Box<dyn FnMut(&mut [usize]) -> Result<()> + Send + Sync + 'a>;
+pub type Metadata = Option<Box<dyn std::fmt::Debug>>;
+
+pub type Runner<'a> = Box<dyn FnMut(&mut [usize]) -> Result<Metadata> + Send + Sync + 'a>;
 
 fn runner_error(message: &'static str) -> Runner {
     Box::new(move |_partition| Err(anyhow::anyhow!("{}", message)))
@@ -37,7 +39,7 @@ where
     fn to_runner<'a>(&'a mut self, _: &'a Problem<D>) -> Runner<'a> {
         Box::new(move |partition| {
             self.partition(partition, ())?;
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -56,7 +58,7 @@ impl<const D: usize> ToRunner<D> for coupe::Greedy {
                     self.partition(partition, weights)?;
                 }
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -75,7 +77,7 @@ impl<const D: usize> ToRunner<D> for coupe::KarmarkarKarp {
                     self.partition(partition, weights)?;
                 }
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -94,7 +96,7 @@ impl<const D: usize> ToRunner<D> for coupe::CompleteKarmarkarKarp {
                     self.partition(partition, weights)?;
                 }
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -103,17 +105,17 @@ impl<const D: usize> ToRunner<D> for coupe::VnBest {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         Box::new(move |partition| {
-            match &problem.weights {
+            let algo_iterations = match &problem.weights {
                 Integers(is) => {
                     let weights = is.iter().map(|weight| weight[0]);
-                    self.partition(partition, weights)?;
+                    self.partition(partition, weights)
                 }
                 Floats(fs) => {
                     let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
-                    self.partition(partition, weights)?;
+                    self.partition(partition, weights)
                 }
-            }
-            Ok(())
+            }?;
+            Ok(Some(Box::new(algo_iterations)))
         })
     }
 }
@@ -125,15 +127,15 @@ impl<const D: usize> ToRunner<D> for coupe::VnFirst {
             Integers(is) => {
                 let weights: Vec<_> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, &weights)?;
-                    Ok(())
+                    let algo_iterations = self.partition(partition, &weights)?;
+                    Ok(Some(Box::new(algo_iterations)))
                 })
             }
             Floats(fs) => {
                 let weights: Vec<_> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, &weights)?;
-                    Ok(())
+                    let algo_iterations = self.partition(partition, &weights)?;
+                    Ok(Some(Box::new(algo_iterations)))
                 })
             }
         }
@@ -155,7 +157,7 @@ impl<const D: usize> ToRunner<D> for coupe::Rcb {
                     self.partition(partition, (points, weights))?;
                 }
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -175,7 +177,7 @@ impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
                     self.partition(partition, (points, &weights))?;
-                    Ok(())
+                    Ok(None)
                 })
             }
         }
@@ -195,15 +197,15 @@ impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
             Integers(is) => {
                 let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency.view(), &weights))?;
-                    Ok(())
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
                 })
             }
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency.view(), &weights))?;
-                    Ok(())
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
                 })
             }
         }
@@ -220,7 +222,7 @@ impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
                     self.partition(partition, (adjacency, &weights))?;
-                    Ok(())
+                    Ok(None)
                 })
             }
         }

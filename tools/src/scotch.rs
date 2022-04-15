@@ -42,7 +42,7 @@ impl<const D: usize> ToRunner<D> for Standard {
             for (dst, src) in partition.iter_mut().zip(&mut scotch_partition) {
                 *dst = *src as usize;
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
