@@ -13,7 +13,7 @@ run_algorithm() {
 	sayfile Computing "$partition_file"
 	mesh-part --mesh "$mesh_file" --weights "$weight_file" $algorithm >"$partition_file" || {
 		rm "$partition_file"
-		return 0
+		return 1
 	}
 
 	out_mesh="${partition_file%.*}.mesh"
@@ -84,15 +84,18 @@ cat >"$HTML_REPORT" <<EOF
 }
 
 .mesh-tab > input:checked ~ .content {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .mesh-tab .mesh-tab > .content {
   z-index: -1;
 }
 
-img {
-  max-width: 69%;
+.run {
+  flex: 48%;
+  margin: 1em;
+  background: #eee;
 }
 </style>
 <div class="mesh-tabs">
@@ -138,23 +141,31 @@ do
 
 		echo "$ALGORITHMS" | while read -r algorithm
 		do
-			algorithm=$(echo "$algorithm" | sed 's/^#.*//')
+			algorithm=$(echo "$algorithm" | sed 's/#.*//')
 			[ -z "$algorithm" ] && continue
 
-			#algorithm_id=$(echo "$algorithm" | cut -b4- | sed 's/ -a /-/g')
-			#svg_file="${weight_file%.*}.$algorithm_id.svg"
-			svg_file=$(run_algorithm "$mesh_file" "$weight_file" "$algorithm" || true)
-
-			cat >>"$HTML_REPORT" <<-EOF
-			<p class="run">
-			Algorithm: <code>$algorithm</code>
-			<pre>
-			$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
-			mesh file: ${svg_file%.*}.mesh
-			</pre>
-			<img src="$(basename "$svg_file")" alt="$mesh_file; $weight_distribution; $algorithm">
-			</p>
-			EOF
+			if svg_file=$(run_algorithm "$mesh_file" "$weight_file" "$algorithm")
+			then
+				cat >>"$HTML_REPORT" <<-EOF
+				<div class="run">
+				Algorithm: <code>$algorithm</code>
+				<pre>
+				$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
+				mesh file: ${svg_file%.*}.mesh
+				</pre>
+				<img src="$(basename "$svg_file")" alt="$mesh_file; $weight_distribution; $algorithm">
+				</div>
+				EOF
+			else
+				cat >>"$HTML_REPORT" <<-EOF
+				<div class="run">
+				Algorithm: <code>$algorithm</code>
+				<pre>
+				run failed
+				</pre>
+				</div>
+				EOF
+			fi
 		done
 
 		cat >>"$HTML_REPORT" <<-EOF

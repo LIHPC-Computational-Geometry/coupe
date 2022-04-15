@@ -1,36 +1,23 @@
 ALGORITHMS="
-#-a kk,2
-#-a kk,2 -a fm,0.05
-
+-a kk,2
+-a kk,2 -a fm,0.05
+-a kk,2 -a fm,0.05,16
 -a rcb,1
 -a rcb,1 -a fm,0.05
-
 -a hilbert,2
 -a hilbert,2 -a fm,0.05
 
-#-a kk,3
-#-a kk,3 -a fm,0.05
-
+-a kk,3
+-a kk,3 -a fm,0.05
 -a hilbert,3
--a hilbert,3 -a fm,0.05
 
-#-a kk,4
-#-a kk,4 -a fm,0.05
-
+-a kk,4
 -a rcb,2
--a rcb,2 -a fm,0.05
-
 -a hilbert,4
--a hilbert,4 -a fm,0.05
 
-#-a kk,128
-#-a kk,128 -a fm,0.05
-
+-a kk,128
 -a rcb,7
--a rcb,7 -a fm,0.05
-
 -a hilbert,128
--a hilbert,128 -a fm,0.05
 "
 
 WEIGHT_DISTRIBUTIONS="
