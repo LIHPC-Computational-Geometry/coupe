@@ -16,6 +16,12 @@ includes the following tools:
     - apply-part encodes a partition in a mesh file for visualization.
     - apply-weight encodes a weight distribution in a mesh file for
       visualization.
+- in the `report` directory, a collection of shell scripts that aggregate
+  results into visual reports:
+    - `quality` generates an HTML report of partitioning results for a given
+      mesh directory,
+    - `efficiency` generates a CSV file and a SVG graph showing the efficiency
+      (strong scaling) of algorithms.
 
 ## Building
 

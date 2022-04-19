@@ -54,15 +54,9 @@ sayfile() {
 }
 
 command -v jq >/dev/null || {
-	echo "command 'jq' not found"
+	echo "command 'jq' not found" >&2
 	exit 1
 }
 
 TARGET_DIR=$(cargo metadata --format-version=1 | jq -r '.target_directory')
 PATH="$TARGET_DIR/release:$PATH"
-OUTPUT_DIR="$TARGET_DIR/coupe-report"
-
-cargo build --all --bins --release
-
-say mkdir "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"

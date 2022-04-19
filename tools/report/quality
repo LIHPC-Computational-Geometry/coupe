@@ -2,6 +2,11 @@
 set -e
 
 . "$(dirname "$0")"/common.sh
+cargo build --all --bins --release
+
+OUTPUT_DIR="$TARGET_DIR/coupe-report"
+say mkdir "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
 
 run_algorithm() {
 	mesh_file=$1
