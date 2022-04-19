@@ -20,10 +20,11 @@
 # trace files
 *.json
 
-# flamegraphs
+# flamegraphs and efficiency graphs
 perf.data
 perf.data.old
 *.svg
+*.csv
 
 # coverage
 *.profraw
