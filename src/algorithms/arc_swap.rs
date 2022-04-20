@@ -6,11 +6,14 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
 use std::cmp;
+use std::collections::HashMap;
 use std::mem;
-use std::sync::atomic::AtomicBool;
+use std::ops::DerefMut as _;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
 use std::sync::RwLock;
 
 //struct Defer<F>(Option<F>)
@@ -94,91 +97,192 @@ fn arc_swap<W>(
     tracing::info!("Initial edge cut: {:?}", best_edge_cut);
 
     mem::drop(enter);
+    let span = tracing::info_span!("compute gain table");
+    let enter = span.enter();
+
+    let gains: Vec<Mutex<Option<(usize, i64)>>> = partition
+        .par_iter()
+        .enumerate()
+        .filter_map(|(vertex, initial_part)| {
+            let gain: i64 = adjacency
+                .outer_view(vertex)
+                .unwrap()
+                .iter()
+                .map(|(neighbor, edge_weight)| {
+                    if partition[neighbor] == *initial_part {
+                        -*edge_weight
+                    } else {
+                        *edge_weight
+                    }
+                })
+                .sum();
+            if gain <= 0 {
+                None
+            } else {
+                Some(Mutex::new(Some((vertex, gain))))
+            }
+        })
+        .collect();
+    let vertex_to_gain: Vec<AtomicUsize> = (0..partition.len())
+        .into_par_iter()
+        .map(|_| AtomicUsize::new(usize::MAX))
+        .collect();
+    gains.par_iter().enumerate().for_each(|(i, gain_entry)| {
+        let (vertex, _) = gain_entry.try_lock().unwrap().unwrap();
+        vertex_to_gain[vertex].store(i, Ordering::Relaxed);
+    });
+
+    mem::drop(enter);
 
     let part_weights = RwLock::new(part_weights);
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
-
-    let locks = partition
-        .iter()
-        .map(|_| AtomicBool::new(false))
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
 
     let move_count = AtomicUsize::new(0);
     let race_count = AtomicUsize::new(0);
 
     (0..max_moves)
         .into_par_iter()
+        .panic_fuse()
         .try_for_each_init(rand::thread_rng, |rng, _| {
             let part_weights_copy = part_weights.read().unwrap().to_vec();
-            let start = rng.gen_range(0..partition.len());
-            let (moved_vertex, move_gain, initial_part, weight) = partition[start..]
+            let start = rng.gen_range(0..gains.len());
+            let () = gains[start..]
                 .par_iter()
-                .chain(&partition[..start])
-                .zip((start..partition.len()).into_par_iter().chain(0..start))
-                .find_map_any(|(initial_part, vertex)| {
-                    let locked = locks[vertex]
-                        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                        .is_err();
-                    if locked {
-                        tracing::info!("locked");
-                        return None;
-                    }
+                .chain(&gains[..start])
+                .panic_fuse()
+                .find_map_any(|gain_entry| {
+                    let gain_entry = gain_entry.try_lock().ok()?;
+                    let (vertex, gain) = gain_entry.as_ref()?;
 
-                    let initial_part = initial_part.load(Ordering::Relaxed);
+                    let initial_part = partition[*vertex].load(Ordering::Relaxed);
                     let target_part = 1 - initial_part;
 
-                    let gain: i64 = adjacency
-                        .outer_view(vertex)
-                        .unwrap()
-                        .iter()
-                        .map(|(neighbor, edge_weight)| {
-                            if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                                -*edge_weight
-                            } else {
-                                *edge_weight
-                            }
-                        })
-                        .sum();
-                    if gain <= 0 {
-                        locks[vertex].store(false, Ordering::Release);
-                        return None;
-                    }
-
-                    let weight = weights[vertex];
+                    let weight = weights[*vertex];
                     let target_part_weight = part_weights_copy[target_part] + weight;
                     if max_part_weight < target_part_weight {
-                        locks[vertex].store(false, Ordering::Release);
                         return None;
                     }
 
-                    let raced = adjacency
-                        .outer_view(vertex)
+                    let neighbor_gains: Result<HashMap<usize, _>, _> = adjacency
+                        .outer_view(*vertex)
                         .unwrap()
                         .iter()
-                        .any(|(neighbor, _)| locks[neighbor].load(Ordering::Acquire));
-                    if raced {
-                        tracing::info!("raced");
-                        race_count.fetch_add(1, Ordering::Relaxed);
-                        locks[vertex].store(false, Ordering::Release);
-                        return None;
-                    }
+                        .filter_map(|(neighbor, _edge_weight)| {
+                            let gain_idx = vertex_to_gain[neighbor].load(Ordering::Relaxed);
+                            if gain_idx == usize::MAX {
+                                None
+                            } else {
+                                let gains = match gains[gain_idx].try_lock() {
+                                    Ok(v) => v,
+                                    Err(err) => return Some(Err(err)),
+                                };
+                                Some(Ok((neighbor, (gain_idx, gains))))
+                            }
+                        })
+                        .collect();
+                    let mut neighbor_gains = match neighbor_gains {
+                        Ok(v) => v,
+                        Err(_) => {
+                            tracing::info!("raced");
+                            race_count.fetch_add(1, Ordering::Relaxed);
+                            return None;
+                        }
+                    };
+
+                    tracing::info!(
+                        ?move_count,
+                        ?race_count,
+                        vertex,
+                        target_part,
+                        ?best_edge_cut,
+                        gain,
+                        "ok!",
+                    );
                     move_count.fetch_add(1, Ordering::Relaxed);
 
-                    Some((vertex, gain, initial_part, weight))
+                    partition[*vertex].store(target_part, Ordering::Relaxed);
+                    best_edge_cut.fetch_sub(*gain, Ordering::Relaxed);
+                    assert_eq!(
+                        best_edge_cut.load(Ordering::Relaxed),
+                        crate::topology::edge_cut(
+                            adjacency,
+                            &partition
+                                .iter()
+                                .map(|p| p.load(Ordering::Relaxed))
+                                .collect::<Vec<_>>(),
+                        ),
+                    );
+                    {
+                        let mut part_weights = part_weights.write().unwrap();
+                        part_weights[initial_part] -= weight;
+                        part_weights[target_part] += weight;
+                    }
+
+                    let mut free_cells = Vec::new();
+
+                    // Update gains for neighbors already in the gain table.
+                    for (neighbor, edge_weight) in adjacency.outer_view(*vertex).unwrap().iter() {
+                        let (gain_idx, neighbor_gain) = match neighbor_gains.get_mut(&neighbor) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+                        let (_, gain) = neighbor_gain.unwrap();
+                        let gain = gain
+                            + if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                                2 * edge_weight
+                            } else {
+                                -2 * edge_weight
+                            };
+
+                        if gain <= 0 {
+                            *MutexGuard::deref_mut(neighbor_gain) = None;
+                            vertex_to_gain[neighbor].store(usize::MAX, Ordering::Relaxed);
+                            free_cells.push(*gain_idx);
+                        } else {
+                            *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
+                        }
+                    }
+
+                    // Add gains of neighbors not in the gain table, if there is
+                    // enough space.
+                    for (neighbor, _edge_weight) in adjacency.outer_view(*vertex).unwrap().iter() {
+                        if neighbor_gains.contains_key(&neighbor) {
+                            continue;
+                        }
+                        let initial_part = partition[neighbor].load(Ordering::Relaxed);
+                        let gain: i64 = adjacency
+                            .outer_view(neighbor)
+                            .unwrap()
+                            .iter()
+                            .map(|(neighbor, edge_weight)| {
+                                if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                                    -*edge_weight
+                                } else {
+                                    *edge_weight
+                                }
+                            })
+                            .sum();
+                        if gain <= 0 {
+                            continue;
+                        }
+                        let gain_idx = match free_cells.pop() {
+                            Some(v) => v,
+                            None => {
+                                // TODO allocate/find more space in the gain table?
+                                tracing::info!("missing space in the gain table");
+                                break;
+                            }
+                        };
+                        vertex_to_gain[neighbor].store(gain_idx, Ordering::Relaxed);
+                        let (_, (_, neighbor_gain)) = neighbor_gains
+                            .iter_mut()
+                            .find(|(_, (idx, _))| *idx == gain_idx)
+                            .unwrap();
+                        *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
+                    }
+
+                    Some(())
                 })?;
-
-            let target_part = 1 - initial_part;
-            partition[moved_vertex].store(target_part, Ordering::Relaxed);
-            best_edge_cut.fetch_sub(move_gain, Ordering::Relaxed);
-            {
-                let mut part_weights = part_weights.write().unwrap();
-                part_weights[initial_part] -= weight;
-                part_weights[target_part] += weight;
-            }
-            locks[moved_vertex].store(false, Ordering::Release);
-
-            tracing::info!(?move_count, ?race_count, moved_vertex, target_part, "ok!");
 
             Some(())
         });
