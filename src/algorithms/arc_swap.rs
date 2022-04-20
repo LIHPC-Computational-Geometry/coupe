@@ -104,20 +104,24 @@ fn arc_swap<W>(
         .collect::<Vec<_>>()
         .into_boxed_slice();
 
+    let move_count = AtomicUsize::new(0);
+    let race_count = AtomicUsize::new(0);
+
     (0..max_moves)
         .into_par_iter()
         .try_for_each_init(rand::thread_rng, |rng, _| {
             let part_weights_copy = part_weights.read().unwrap().to_vec();
             let start = rng.gen_range(0..partition.len());
-            let (moved_vertex, move_gain, initial_part) = partition[start..]
+            let (moved_vertex, move_gain, initial_part, weight) = partition[start..]
                 .par_iter()
                 .chain(&partition[..start])
                 .zip((start..partition.len()).into_par_iter().chain(0..start))
                 .find_map_any(|(initial_part, vertex)| {
                     let locked = locks[vertex]
                         .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                        .is_ok();
+                        .is_err();
                     if locked {
+                        tracing::info!("locked");
                         return None;
                     }
 
@@ -154,17 +158,27 @@ fn arc_swap<W>(
                         .iter()
                         .any(|(neighbor, _)| locks[neighbor].load(Ordering::Acquire));
                     if raced {
+                        tracing::info!("raced");
+                        race_count.fetch_add(1, Ordering::Relaxed);
                         locks[vertex].store(false, Ordering::Release);
                         return None;
                     }
+                    move_count.fetch_add(1, Ordering::Relaxed);
 
-                    Some((vertex, gain, initial_part))
+                    Some((vertex, gain, initial_part, weight))
                 })?;
 
             let target_part = 1 - initial_part;
             partition[moved_vertex].store(target_part, Ordering::Relaxed);
             best_edge_cut.fetch_sub(move_gain, Ordering::Relaxed);
+            {
+                let mut part_weights = part_weights.write().unwrap();
+                part_weights[initial_part] -= weight;
+                part_weights[target_part] += weight;
+            }
             locks[moved_vertex].store(false, Ordering::Release);
+
+            tracing::info!(?move_count, ?race_count, moved_vertex, target_part, "ok!");
 
             Some(())
         });
