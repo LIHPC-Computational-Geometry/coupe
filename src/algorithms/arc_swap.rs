@@ -151,20 +151,20 @@ fn arc_swap<W>(
                 .chain(&gains[..start])
                 .panic_fuse()
                 .find_map_any(|gain_entry| {
-                    let gain_entry = gain_entry.try_lock().ok()?;
-                    let (vertex, gain) = gain_entry.as_ref()?;
+                    let mut gain_entry = gain_entry.try_lock().ok()?;
+                    let (vertex, gain) = (*gain_entry)?;
 
-                    let initial_part = partition[*vertex].load(Ordering::Relaxed);
+                    let initial_part = partition[vertex].load(Ordering::Relaxed);
                     let target_part = 1 - initial_part;
 
-                    let weight = weights[*vertex];
+                    let weight = weights[vertex];
                     let target_part_weight = part_weights_copy[target_part] + weight;
                     if max_part_weight < target_part_weight {
                         return None;
                     }
 
                     let neighbor_gains: Result<HashMap<usize, _>, _> = adjacency
-                        .outer_view(*vertex)
+                        .outer_view(vertex)
                         .unwrap()
                         .iter()
                         .filter_map(|(neighbor, _edge_weight)| {
@@ -200,8 +200,8 @@ fn arc_swap<W>(
                     );
                     move_count.fetch_add(1, Ordering::Relaxed);
 
-                    partition[*vertex].store(target_part, Ordering::Relaxed);
-                    best_edge_cut.fetch_sub(*gain, Ordering::Relaxed);
+                    partition[vertex].store(target_part, Ordering::Relaxed);
+                    best_edge_cut.fetch_sub(gain, Ordering::Relaxed);
                     assert_eq!(
                         best_edge_cut.load(Ordering::Relaxed),
                         crate::topology::edge_cut(
@@ -219,21 +219,27 @@ fn arc_swap<W>(
                     }
 
                     let mut free_cells = Vec::new();
+                    {
+                        let gain_idx = vertex_to_gain[vertex].swap(usize::MAX, Ordering::Relaxed);
+                        *MutexGuard::deref_mut(&mut gain_entry) = None;
+                        free_cells.push(gain_idx);
+                        neighbor_gains.insert(vertex, (gain_idx, gain_entry));
+                    }
 
                     // Update gains for neighbors already in the gain table.
-                    for (neighbor, edge_weight) in adjacency.outer_view(*vertex).unwrap().iter() {
+                    for (neighbor, edge_weight) in adjacency.outer_view(vertex).unwrap().iter() {
                         let (gain_idx, neighbor_gain) = match neighbor_gains.get_mut(&neighbor) {
                             Some(v) => v,
                             None => continue,
                         };
                         let (_, gain) = neighbor_gain.unwrap();
-                        let gain = gain
-                            + if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                                2 * edge_weight
-                            } else {
-                                -2 * edge_weight
-                            };
+                        let gain = if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                            gain + 2 * edge_weight
+                        } else {
+                            gain - 2 * edge_weight
+                        };
 
+                        assert_eq!(vertex_to_gain[neighbor].load(Ordering::Relaxed), *gain_idx);
                         if gain <= 0 {
                             *MutexGuard::deref_mut(neighbor_gain) = None;
                             vertex_to_gain[neighbor].store(usize::MAX, Ordering::Relaxed);
@@ -245,7 +251,7 @@ fn arc_swap<W>(
 
                     // Add gains of neighbors not in the gain table, if there is
                     // enough space.
-                    for (neighbor, _edge_weight) in adjacency.outer_view(*vertex).unwrap().iter() {
+                    for (neighbor, _edge_weight) in adjacency.outer_view(vertex).unwrap().iter() {
                         if neighbor_gains.contains_key(&neighbor) {
                             continue;
                         }
