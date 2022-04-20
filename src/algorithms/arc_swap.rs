@@ -8,6 +8,7 @@ use sprs::CsMatView;
 use std::cmp;
 use std::collections::HashMap;
 use std::mem;
+use std::ops::Deref as _;
 use std::ops::DerefMut as _;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
@@ -176,6 +177,10 @@ fn arc_swap<W>(
                                     Ok(v) => v,
                                     Err(err) => return Some(Err(err)),
                                 };
+                                assert_eq!(
+                                    gain_idx,
+                                    vertex_to_gain[neighbor].load(Ordering::Relaxed),
+                                );
                                 Some(Ok((neighbor, (gain_idx, gains))))
                             }
                         })
@@ -202,7 +207,7 @@ fn arc_swap<W>(
 
                     partition[vertex].store(target_part, Ordering::Relaxed);
                     best_edge_cut.fetch_sub(gain, Ordering::Relaxed);
-                    assert_eq!(
+                    debug_assert_eq!(
                         best_edge_cut.load(Ordering::Relaxed),
                         crate::topology::edge_cut(
                             adjacency,
@@ -232,14 +237,19 @@ fn arc_swap<W>(
                             Some(v) => v,
                             None => continue,
                         };
-                        let (_, gain) = neighbor_gain.unwrap();
+                        let (n, gain) = neighbor_gain.unwrap();
+                        assert_eq!(n, neighbor);
                         let gain = if partition[neighbor].load(Ordering::Relaxed) == initial_part {
                             gain + 2 * edge_weight
                         } else {
                             gain - 2 * edge_weight
                         };
 
-                        assert_eq!(vertex_to_gain[neighbor].load(Ordering::Relaxed), *gain_idx);
+                        assert_eq!(
+                            vertex_to_gain[neighbor].load(Ordering::Relaxed),
+                            *gain_idx,
+                            "{neighbor} {vertex}"
+                        );
                         if gain <= 0 {
                             *MutexGuard::deref_mut(neighbor_gain) = None;
                             vertex_to_gain[neighbor].store(usize::MAX, Ordering::Relaxed);
@@ -285,6 +295,37 @@ fn arc_swap<W>(
                             .find(|(_, (idx, _))| *idx == gain_idx)
                             .unwrap();
                         *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
+                    }
+
+                    if rand::random::<f64>() < 0.1 {
+                        let old: Vec<_> = neighbor_gains
+                            .iter()
+                            .map(|(neighbor, (neighbor_gain_idx, neighbor_gain))| {
+                                let neighbor_gain_idx2 =
+                                    vertex_to_gain[*neighbor].load(Ordering::Relaxed);
+                                (
+                                    *neighbor,
+                                    *neighbor_gain_idx,
+                                    neighbor_gain_idx2,
+                                    *MutexGuard::deref(neighbor_gain),
+                                )
+                            })
+                            .collect();
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                        let new: Vec<_> = neighbor_gains
+                            .iter()
+                            .map(|(neighbor, (neighbor_gain_idx, neighbor_gain))| {
+                                let neighbor_gain_idx2 =
+                                    vertex_to_gain[*neighbor].load(Ordering::Relaxed);
+                                (
+                                    *neighbor,
+                                    *neighbor_gain_idx,
+                                    neighbor_gain_idx2,
+                                    *MutexGuard::deref(neighbor_gain),
+                                )
+                            })
+                            .collect();
+                        assert_eq!(old, new, "{vertex}");
                     }
 
                     Some(())
