@@ -8,7 +8,6 @@ use sprs::CsMatView;
 use std::cmp;
 use std::collections::HashMap;
 use std::mem;
-use std::ops::Deref as _;
 use std::ops::DerefMut as _;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
@@ -101,27 +100,44 @@ fn arc_swap<W>(
     let span = tracing::info_span!("compute gain table");
     let enter = span.enter();
 
-    let gains: Vec<Mutex<Option<(usize, i64)>>> = partition
+    let cut: HashMap<usize, usize> = partition
         .par_iter()
         .enumerate()
+        .flat_map(|(vertex, initial_part)| {
+            let is_on_edge_cut = adjacency
+                .outer_view(vertex)
+                .unwrap()
+                .iter()
+                .any(|(neighbor, _edge_weight)| partition[neighbor] != *initial_part);
+            if is_on_edge_cut {
+                adjacency
+                    .outer_view(vertex)
+                    .unwrap()
+                    .iter()
+                    .map(|(neighbor, _)| (neighbor, partition[neighbor]))
+                    .chain(Some((vertex, *initial_part)))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
+    let gains: Vec<Mutex<Option<(usize, i64)>>> = cut
+        .into_par_iter()
         .filter_map(|(vertex, initial_part)| {
             let gain: i64 = adjacency
                 .outer_view(vertex)
                 .unwrap()
                 .iter()
                 .map(|(neighbor, edge_weight)| {
-                    if partition[neighbor] == *initial_part {
+                    if partition[neighbor] == initial_part {
                         -*edge_weight
                     } else {
                         *edge_weight
                     }
                 })
                 .sum();
-            if gain <= 0 {
-                None
-            } else {
-                Some(Mutex::new(Some((vertex, gain))))
-            }
+            Some(Mutex::new(Some((vertex, gain))))
         })
         .collect();
     let vertex_to_gain: Vec<AtomicUsize> = (0..partition.len())
@@ -134,6 +150,8 @@ fn arc_swap<W>(
     });
 
     mem::drop(enter);
+    let span = tracing::info_span!("doing moves");
+    let _enter = span.enter();
 
     let part_weights = RwLock::new(part_weights);
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
@@ -154,6 +172,9 @@ fn arc_swap<W>(
                 .find_map_any(|gain_entry| {
                     let mut gain_entry = gain_entry.try_lock().ok()?;
                     let (vertex, gain) = (*gain_entry)?;
+                    if gain <= 0 {
+                        return None;
+                    }
 
                     let initial_part = partition[vertex].load(Ordering::Relaxed);
                     let target_part = 1 - initial_part;
@@ -164,31 +185,29 @@ fn arc_swap<W>(
                         return None;
                     }
 
-                    let neighbor_gains: Result<HashMap<usize, _>, _> = adjacency
+                    let neighbor_gains: Option<HashMap<usize, _>> = adjacency
                         .outer_view(vertex)
                         .unwrap()
                         .iter()
-                        .filter_map(|(neighbor, _edge_weight)| {
+                        .map(|(neighbor, _edge_weight)| {
                             let gain_idx = vertex_to_gain[neighbor].load(Ordering::Relaxed);
                             if gain_idx == usize::MAX {
+                                tracing::info!(gain, vertex, "what");
                                 None
                             } else {
-                                let gains = match gains[gain_idx].try_lock() {
-                                    Ok(v) => v,
-                                    Err(err) => return Some(Err(err)),
-                                };
-                                assert_eq!(
+                                let gains = gains[gain_idx].try_lock().ok()?;
+                                debug_assert_eq!(
                                     gain_idx,
                                     vertex_to_gain[neighbor].load(Ordering::Relaxed),
                                 );
-                                Some(Ok((neighbor, (gain_idx, gains))))
+                                Some((neighbor, (gain_idx, gains)))
                             }
                         })
                         .collect();
                     let mut neighbor_gains = match neighbor_gains {
-                        Ok(v) => v,
-                        Err(_) => {
-                            tracing::info!("raced");
+                        Some(v) => v,
+                        None => {
+                            //tracing::info!("raced");
                             race_count.fetch_add(1, Ordering::Relaxed);
                             return None;
                         }
@@ -223,13 +242,9 @@ fn arc_swap<W>(
                         part_weights[target_part] += weight;
                     }
 
+                    *MutexGuard::deref_mut(&mut gain_entry) = Some((vertex, -gain));
+
                     let mut free_cells = Vec::new();
-                    {
-                        let gain_idx = vertex_to_gain[vertex].swap(usize::MAX, Ordering::Relaxed);
-                        *MutexGuard::deref_mut(&mut gain_entry) = None;
-                        free_cells.push(gain_idx);
-                        neighbor_gains.insert(vertex, (gain_idx, gain_entry));
-                    }
 
                     // Update gains for neighbors already in the gain table.
                     for (neighbor, edge_weight) in adjacency.outer_view(vertex).unwrap().iter() {
@@ -238,24 +253,33 @@ fn arc_swap<W>(
                             None => continue,
                         };
                         let (n, gain) = neighbor_gain.unwrap();
-                        assert_eq!(n, neighbor);
-                        let gain = if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                        debug_assert_eq!(n, neighbor);
+                        let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
+                        let gain = if neighbor_part == initial_part {
                             gain + 2 * edge_weight
                         } else {
                             gain - 2 * edge_weight
                         };
 
-                        assert_eq!(
+                        debug_assert_eq!(
                             vertex_to_gain[neighbor].load(Ordering::Relaxed),
                             *gain_idx,
                             "{neighbor} {vertex}"
                         );
-                        if gain <= 0 {
+                        let is_on_edge_cut =
+                            adjacency
+                                .outer_view(neighbor)
+                                .unwrap()
+                                .iter()
+                                .any(|(neighbor, _)| {
+                                    partition[neighbor].load(Ordering::Relaxed) != neighbor_part
+                                });
+                        if is_on_edge_cut {
+                            *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
+                        } else {
                             *MutexGuard::deref_mut(neighbor_gain) = None;
                             vertex_to_gain[neighbor].store(usize::MAX, Ordering::Relaxed);
                             free_cells.push(*gain_idx);
-                        } else {
-                            *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
                         }
                     }
 
@@ -278,14 +302,12 @@ fn arc_swap<W>(
                                 }
                             })
                             .sum();
-                        if gain <= 0 {
-                            continue;
-                        }
                         let gain_idx = match free_cells.pop() {
                             Some(v) => v,
                             None => {
                                 // TODO allocate/find more space in the gain table?
                                 tracing::info!("missing space in the gain table");
+                                panic!("\n\n\n\n\n\nUQOI\n\n\n\n\n\n");
                                 break;
                             }
                         };
@@ -297,39 +319,10 @@ fn arc_swap<W>(
                         *MutexGuard::deref_mut(neighbor_gain) = Some((neighbor, gain));
                     }
 
-                    if rand::random::<f64>() < 0.1 {
-                        let old: Vec<_> = neighbor_gains
-                            .iter()
-                            .map(|(neighbor, (neighbor_gain_idx, neighbor_gain))| {
-                                let neighbor_gain_idx2 =
-                                    vertex_to_gain[*neighbor].load(Ordering::Relaxed);
-                                (
-                                    *neighbor,
-                                    *neighbor_gain_idx,
-                                    neighbor_gain_idx2,
-                                    *MutexGuard::deref(neighbor_gain),
-                                )
-                            })
-                            .collect();
-                        std::thread::sleep(std::time::Duration::from_millis(2));
-                        let new: Vec<_> = neighbor_gains
-                            .iter()
-                            .map(|(neighbor, (neighbor_gain_idx, neighbor_gain))| {
-                                let neighbor_gain_idx2 =
-                                    vertex_to_gain[*neighbor].load(Ordering::Relaxed);
-                                (
-                                    *neighbor,
-                                    *neighbor_gain_idx,
-                                    neighbor_gain_idx2,
-                                    *MutexGuard::deref(neighbor_gain),
-                                )
-                            })
-                            .collect();
-                        assert_eq!(old, new, "{vertex}");
-                    }
-
                     Some(())
                 })?;
+
+            tracing::info!("ok");
 
             Some(())
         });
