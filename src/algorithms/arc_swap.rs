@@ -103,7 +103,7 @@ fn arc_swap<W>(
     loop {
         let old_edge_cut = best_edge_cut.load(Ordering::Relaxed);
 
-        let span = tracing::info_span!("compute cut");
+        let span = tracing::info_span!("compute gains");
         let enter = span.enter();
 
         let gains: Vec<Mutex<Option<(usize, i64)>>> = partition
@@ -187,7 +187,7 @@ fn arc_swap<W>(
                             return None;
                         }
 
-                        let neighbor_gains: Option<HashMap<_, _>> = adjacency
+                        let neighbor_locks: Option<HashMap<_, _>> = adjacency
                             .outer_view(vertex)
                             .unwrap()
                             .iter()
@@ -200,7 +200,7 @@ fn arc_swap<W>(
                                         Ok(v) => v,
                                         Err(_) => return Some(None),
                                     };
-                                    debug_assert_eq!(
+                                    assert_eq!(
                                         gain_idx,
                                         vertex_to_gain[neighbor].load(Ordering::Relaxed),
                                     );
@@ -208,7 +208,7 @@ fn arc_swap<W>(
                                 }
                             })
                             .collect();
-                        let mut neighbor_gains = match neighbor_gains {
+                        let mut neighbor_gains = match neighbor_locks {
                             Some(v) => v,
                             None => {
                                 //tracing::info!("raced");
@@ -241,19 +241,19 @@ fn arc_swap<W>(
 
                         for (neighbor, edge_weight) in adjacency.outer_view(vertex).unwrap().iter()
                         {
-                            let mut gain_entry = match neighbor_gains.remove(&neighbor) {
+                            let gain_entry = match neighbor_gains.get_mut(&neighbor) {
                                 Some(v) => v,
                                 None => continue,
                             };
                             let (_, neighbor_gain) =
-                                MutexGuard::deref_mut(&mut gain_entry).as_mut().unwrap();
+                                MutexGuard::deref_mut(&mut *gain_entry).as_mut().unwrap();
                             if partition[neighbor].load(Ordering::Relaxed) == initial_part {
                                 *neighbor_gain += 2 * edge_weight;
                             } else {
                                 *neighbor_gain -= 2 * edge_weight;
                             }
                             if *neighbor_gain < 0 {
-                                *MutexGuard::deref_mut(&mut gain_entry) = None;
+                                *MutexGuard::deref_mut(gain_entry) = None;
                                 vertex_to_gain[neighbor].store(usize::MAX, Ordering::Relaxed);
                             }
                         }
