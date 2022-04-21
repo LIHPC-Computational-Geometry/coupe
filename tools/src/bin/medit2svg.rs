@@ -58,12 +58,18 @@ fn add_element_and_neighbors_to_path<'a>(
     element_fn: impl Fn(usize) -> (ElementType, &'a [usize], isize) + Copy,
     adjacency: sprs::CsMatView<f64>,
 ) {
-    let (_el_type, _el_nodes, el_ref) = element_fn(el);
-    if el_ref != path_ref || !el_set.insert(el) {
-        return;
-    }
-    for (neighbor, _) in adjacency.outer_view(el).unwrap().iter() {
-        add_element_and_neighbors_to_path(el_set, path_ref, neighbor, element_fn, adjacency);
+    let mut queue = Vec::new();
+    queue.push(el);
+    while let Some(el) = queue.pop() {
+        if !el_set.insert(el) {
+            continue;
+        }
+        for (neighbor, _) in adjacency.outer_view(el).unwrap().iter() {
+            let (_el_type, _el_nodes, el_ref) = element_fn(el);
+            if el_ref == path_ref {
+                queue.push(neighbor);
+            }
+        }
     }
 }
 
