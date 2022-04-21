@@ -50,10 +50,16 @@ fn main_d<const D: usize>(
     mesh: Mesh,
     weights: weight::Array,
 ) -> Result<Vec<usize>> {
+    println!("Making dual graph...");
+    let adjacency = coupe_tools::dual(&mesh);
+
+    println!("Computing element barycentres...");
+    let points = coupe_tools::barycentres::<D>(&mesh);
+
     let problem = coupe_tools::Problem {
-        points: coupe_tools::barycentres::<D>(&mesh),
+        points,
         weights,
-        adjacency: coupe_tools::dual(&mesh),
+        adjacency,
     };
     let mut partition = vec![0; problem.points.len()];
 
@@ -66,6 +72,7 @@ fn main_d<const D: usize>(
         })
         .collect::<Result<_>>()?;
 
+    println!("Converting data into each algorithm's prefered format...");
     let mut runners: Vec<_> = algorithms
         .iter_mut()
         .map(|algorithm| algorithm.to_runner(&problem))
@@ -144,7 +151,6 @@ fn main() -> Result<()> {
     println!(" -> Dimension: {}", mesh.dimension());
     println!(" -> Number of nodes: {}", mesh.node_count());
     println!(" -> Number of elements: {}", mesh.element_count());
-    println!();
 
     let weight_file = matches
         .opt_str("w")
