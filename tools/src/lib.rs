@@ -4,8 +4,11 @@ use coupe::Partition as _;
 use coupe::PointND;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use rayon::iter::IndexedParallelIterator as _;
+use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
+use rayon::slice::ParallelSlice as _;
 use std::any;
 use std::mem;
 
@@ -370,38 +373,36 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
             .enumerate()
     };
 
-    let element_to_nodes = {
-        // To speed up node lookup, we store topology information in a more
-        // compact array of element chunks.  Chunks store the nodes of elements
-        // of the same type, and their start offset.
-        struct ElementChunk<'a> {
-            start_idx: usize,
-            node_per_element: usize,
-            nodes: &'a [usize],
-        }
-        let topology: Vec<ElementChunk> = mesh
-            .topology()
-            .iter()
-            .filter(|(el_type, _nodes, _refs)| el_type.dimension() == dimension)
-            .scan(0, |start_idx, (el_type, nodes, _refs)| {
-                let item = ElementChunk {
-                    start_idx: *start_idx,
-                    node_per_element: el_type.node_count(),
-                    nodes,
-                };
-                *start_idx += nodes.len() / item.node_per_element;
-                Some(item)
-            })
-            .collect();
-        move |e: usize| -> &[usize] {
-            for item in &topology {
-                let e = (e - item.start_idx) * item.node_per_element;
-                if e < item.nodes.len() {
-                    return &item.nodes[e..e + item.node_per_element];
-                }
+    // To speed up node lookup, we store topology information in a more
+    // compact array of element chunks.  Chunks store the nodes of elements
+    // of the same type, and their start offset.
+    struct ElementChunk<'a> {
+        start_idx: usize,
+        node_per_element: usize,
+        nodes: &'a [usize],
+    }
+    let topology: Vec<ElementChunk> = mesh
+        .topology()
+        .iter()
+        .filter(|(el_type, _nodes, _refs)| el_type.dimension() == dimension)
+        .scan(0, |start_idx, (el_type, nodes, _refs)| {
+            let item = ElementChunk {
+                start_idx: *start_idx,
+                node_per_element: el_type.node_count(),
+                nodes,
+            };
+            *start_idx += nodes.len() / item.node_per_element;
+            Some(item)
+        })
+        .collect();
+    let element_to_nodes = |e: usize| -> &[usize] {
+        for item in &topology {
+            let e = (e - item.start_idx) * item.node_per_element;
+            if e < item.nodes.len() {
+                return &item.nodes[e..e + item.node_per_element];
             }
-            unreachable!();
         }
+        unreachable!();
     };
 
     let mut node_to_elements = vec![Vec::new(); mesh.node_count()];
@@ -417,29 +418,61 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
         }
     }
 
-    let mut adjacency = sprs::CsMat::empty(sprs::CSR, mesh.element_count());
-    adjacency.reserve_nnz(mesh.element_count());
+    let el_count: usize = topology
+        .iter()
+        .map(|chunk| chunk.nodes.len() / chunk.node_per_element)
+        .sum();
+    let indice_locks = vec![Vec::new(); el_count];
+    topology.par_iter().for_each(|chunk| {
+        let end_idx = chunk.start_idx + chunk.nodes.len() / chunk.node_per_element;
+        chunk
+            .nodes
+            .par_chunks_exact(chunk.node_per_element)
+            .zip(chunk.start_idx..end_idx)
+            .for_each(|(e1_nodes, e1)| {
+                let mut neighbors: Vec<usize> = e1_nodes
+                    .iter()
+                    .flat_map(|node| &node_to_elements[*node])
+                    .cloned()
+                    .filter(|e2| {
+                        e1 != *e2 && {
+                            let e2_nodes = element_to_nodes(*e2);
+                            let nodes_in_common = e1_nodes
+                                .iter()
+                                .filter(|e1_node| e2_nodes.contains(e1_node))
+                                .count();
+                            dimension <= nodes_in_common
+                        }
+                    })
+                    .collect();
+                neighbors.sort_unstable();
+                neighbors.dedup();
+                let ptr = &indice_locks[e1] as *const Vec<usize> as *mut Vec<usize>;
+                unsafe { ptr.write(neighbors) }
+            })
+    });
 
-    for (e1, e1_nodes) in elements() {
-        let neighbors = e1_nodes
-            .iter()
-            .flat_map(|node| &node_to_elements[*node])
-            .cloned();
-        for e2 in neighbors {
-            if e1 == e2 {
-                continue;
-            }
-            let e2_nodes = element_to_nodes(e2);
-            let nodes_in_common = e1_nodes
-                .iter()
-                .filter(|e1_node| e2_nodes.contains(e1_node))
-                .count();
-            let are_neighbors = dimension <= nodes_in_common;
-            if are_neighbors {
-                adjacency.insert(e1, e2, 1.0);
-            }
-        }
+    let mut indptr: Vec<usize> = Some(0)
+        .into_par_iter()
+        .chain(indice_locks.par_iter().map(|neighbors| neighbors.len()))
+        .collect();
+    for i in 1..indptr.len() {
+        indptr[i] += indptr[i - 1];
     }
 
-    adjacency
+    let size = indptr.len() - 1;
+    let indices = vec![0; indptr[indptr.len() - 1]];
+    indptr
+        .par_iter()
+        .zip(&indptr[1..])
+        .zip(indice_locks)
+        .for_each(|((start, end), neighbors)| {
+            let src = neighbors.as_ptr();
+            let dst = indices[*start..*end].as_ptr() as *mut usize;
+            unsafe { std::ptr::copy_nonoverlapping(src, dst, end - start) }
+        });
+
+    let data = vec![1.0; indices.len()];
+
+    sprs::CsMat::new((size, size), indptr, indices, data)
 }
