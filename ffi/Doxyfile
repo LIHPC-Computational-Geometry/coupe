@@ -1,0 +1,10 @@
+# Doxyfile 1.9.3
+
+PROJECT_NAME           = coupe
+PROJECT_BRIEF          = the concurrent partitioner
+OUTPUT_DIRECTORY       = build
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = YES
+QUIET                  = YES
+INPUT                  = README.md include/
+USE_MDFILE_AS_MAINPAGE = README.md

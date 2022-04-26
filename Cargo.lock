@@ -206,6 +206,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coupe-ffi"
+version = "0.1.0"
+dependencies = [
+ "coupe",
+ "nalgebra",
+ "num",
+ "rayon",
+ "sprs",
+]
+
+[[package]]
 name = "coupe-tools"
 version = "0.1.0"
 dependencies = [
