@@ -120,22 +120,25 @@ fn arc_swap<W>(
 
     let (cut, (gains, locks)) = rayon::join(
         || {
+            let cut_init: Vec<usize> = partition
+                .par_iter()
+                .enumerate()
+                .filter(|(vertex, initial_part)| {
+                    adjacency
+                        .outer_view(*vertex)
+                        .unwrap()
+                        .iter()
+                        .any(|(neighbor, _edge_weight)| partition[neighbor] != **initial_part)
+                })
+                .map(|(vertex, _)| vertex)
+                .collect();
             // Allocate enough room so that push operations *should* never fail.
             // They could because we only make sure items are eventually unique.
             let cut = ArrayQueue::new(partition.len());
-            partition
-                .iter() // avoid contention on the poor ArrayQueue
-                .enumerate()
-                .for_each(|(vertex, initial_part)| {
-                    let is_on_edge_cut = adjacency
-                        .outer_view(vertex)
-                        .unwrap()
-                        .iter()
-                        .any(|(neighbor, _edge_weight)| partition[neighbor] != *initial_part);
-                    if is_on_edge_cut {
-                        let _ = cut.push(vertex);
-                    }
-                });
+            for vertex in cut_init {
+                // Sequential loop to avoid contention on ArrayQueue
+                let _ = cut.push(vertex);
+            }
             cut
         },
         || {
