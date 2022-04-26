@@ -55,6 +55,25 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    pub fn from_raw_parts(
+        dimension: usize,
+        coordinates: Vec<f64>,
+        node_refs: Vec<Ref>,
+        topology: Vec<(ElementType, Vec<usize>, Vec<Ref>)>,
+    ) -> Self {
+        assert_ne!(dimension, 0);
+        assert_eq!(coordinates.len(), dimension * node_refs.len());
+        for (el_type, el_nodes, el_refs) in &topology {
+            assert_eq!(el_nodes.len(), el_refs.len() * el_type.node_count());
+        }
+        Self {
+            dimension,
+            coordinates,
+            node_refs,
+            topology,
+        }
+    }
+
     /// Returns the dimension of the mesh (2D, 3D, ...)
     pub fn dimension(&self) -> usize {
         self.dimension
@@ -64,6 +83,13 @@ impl Mesh {
     /// e.g. [x1, y1, x2, y2, ...]
     pub fn coordinates(&self) -> &[f64] {
         &self.coordinates
+    }
+
+    /// Returns the references to the points of the mesh.
+    ///
+    /// Its length is `dimension` times smaller than the `coordinates` slice.
+    pub fn node_refs(&self) -> &[Ref] {
+        &self.node_refs
     }
 
     pub fn node(&self, idx: usize) -> &[f64] {
