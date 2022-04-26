@@ -50,6 +50,15 @@ fn main_d<const D: usize>(
     mesh: Mesh,
     weights: weight::Array,
 ) -> Result<Vec<usize>> {
+    let algorithm_specs = matches.opt_strs("a");
+    let mut algorithms: Vec<_> = algorithm_specs
+        .iter()
+        .map(|algorithm_spec| {
+            coupe_tools::parse_algorithm(algorithm_spec)
+                .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
+        })
+        .collect::<Result<_>>()?;
+
     println!("Making dual graph...");
     let adjacency = coupe_tools::dual(&mesh);
 
@@ -62,15 +71,6 @@ fn main_d<const D: usize>(
         adjacency,
     };
     let mut partition = vec![0; problem.points.len()];
-
-    let algorithm_specs = matches.opt_strs("a");
-    let mut algorithms: Vec<_> = algorithm_specs
-        .iter()
-        .map(|algorithm_spec| {
-            coupe_tools::parse_algorithm(algorithm_spec)
-                .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
-        })
-        .collect::<Result<_>>()?;
 
     println!("Converting data into each algorithm's prefered format...");
     let mut runners: Vec<_> = algorithms
