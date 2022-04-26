@@ -476,3 +476,55 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
 
     sprs::CsMat::new((size, size), indptr, indices, data)
 }
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum EdgeWeightDistribution {
+    Uniform,
+    Linear,
+    Sqrt,
+}
+
+#[derive(Debug)]
+pub struct EdgeWeightDistError;
+
+impl std::fmt::Display for EdgeWeightDistError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "expected 'uniform', 'linear' or 'sqrt'")
+    }
+}
+impl std::error::Error for EdgeWeightDistError {}
+
+impl std::str::FromStr for EdgeWeightDistribution {
+    type Err = EdgeWeightDistError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match &*s.to_ascii_lowercase() {
+            "uniform" => EdgeWeightDistribution::Uniform,
+            "linear" => EdgeWeightDistribution::Linear,
+            "sqrt" => EdgeWeightDistribution::Sqrt,
+            _ => return Err(EdgeWeightDistError),
+        })
+    }
+}
+
+pub fn set_edge_weights(
+    adjacency: &mut sprs::CsMat<f64>,
+    vertex_weights: &weight::Array,
+    distribution: EdgeWeightDistribution,
+) {
+    let vertex_weights = |vertex: usize| match vertex_weights {
+        weight::Array::Integers(is) => is[vertex][0] as f64,
+        weight::Array::Floats(fs) => fs[vertex][0],
+    };
+    for (node, mut neighbors) in adjacency.outer_iterator_mut().enumerate() {
+        for (neighbor, edge_weight) in neighbors.iter_mut() {
+            let node_weight = vertex_weights(node);
+            let neighbor_weight = vertex_weights(neighbor);
+            *edge_weight = match distribution {
+                EdgeWeightDistribution::Uniform => 1.0,
+                EdgeWeightDistribution::Linear => node_weight + neighbor_weight,
+                EdgeWeightDistribution::Sqrt => node_weight.sqrt() + neighbor_weight.sqrt(),
+            };
+        }
+    }
+}

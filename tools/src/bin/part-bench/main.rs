@@ -47,6 +47,7 @@ fn build_pool(thread_count: usize) -> rayon::ThreadPool {
 
 fn main_d<const D: usize>(
     matches: getopts::Matches,
+    edge_weights: coupe_tools::EdgeWeightDistribution,
     mesh: Mesh,
     weights: weight::Array,
 ) -> Result<Vec<usize>> {
@@ -60,7 +61,10 @@ fn main_d<const D: usize>(
         .collect::<Result<_>>()?;
 
     println!("Making dual graph...");
-    let adjacency = coupe_tools::dual(&mesh);
+    let mut adjacency = coupe_tools::dual(&mesh);
+    if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
+        coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
+    }
 
     println!("Computing element barycentres...");
     let points = coupe_tools::barycentres::<D>(&mesh);
@@ -128,6 +132,12 @@ fn main() -> Result<()> {
         "NAME",
     );
     options.optflag("e", "efficiency", "Benchmark efficiency");
+    options.optopt(
+        "E",
+        "edge-weights",
+        "Change how edge weights are set",
+        "VARIANT",
+    );
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("w", "weights", "weight file", "FILE");
     criterion_options(&mut options);
@@ -138,6 +148,11 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage("Usage: part-bench [options]"));
         return Ok(());
     }
+
+    let edge_weights = matches
+        .opt_get("E")
+        .context("invalid value for -E, --edge-weights")?
+        .unwrap_or(coupe_tools::EdgeWeightDistribution::Uniform);
 
     let mesh_file = matches
         .opt_str("m")
@@ -157,8 +172,8 @@ fn main() -> Result<()> {
     let weights = weight::read(weights).context("failed to read weight file")?;
 
     match mesh.dimension() {
-        2 => main_d::<2>(matches, mesh, weights)?,
-        3 => main_d::<3>(matches, mesh, weights)?,
+        2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
+        3 => main_d::<3>(matches, edge_weights, mesh, weights)?,
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
 

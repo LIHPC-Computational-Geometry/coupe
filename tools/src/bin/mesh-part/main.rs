@@ -13,6 +13,7 @@ use tracing_tree::HierarchicalLayer;
 
 fn main_d<const D: usize>(
     matches: getopts::Matches,
+    edge_weights: coupe_tools::EdgeWeightDistribution,
     mesh: Mesh,
     weights: weight::Array,
 ) -> Result<Vec<usize>> {
@@ -25,10 +26,15 @@ fn main_d<const D: usize>(
         })
         .collect::<Result<_>>()?;
 
+    let mut adjacency = coupe_tools::dual(&mesh);
+    if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
+        coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
+    }
+
     let problem = coupe_tools::Problem {
         points: coupe_tools::barycentres::<D>(&mesh),
         weights,
-        adjacency: coupe_tools::dual(&mesh),
+        adjacency,
     };
     let mut partition = vec![0; problem.points.len()];
 
@@ -59,6 +65,12 @@ fn main() -> Result<()> {
         "algorithm",
         "name of the algorithm to run, see ALGORITHMS",
         "NAME",
+    );
+    options.optopt(
+        "E",
+        "edge-weights",
+        "Change how edge weights are set",
+        "VARIANT",
     );
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("t", "trace", "emit a chrome trace", "FILE");
@@ -92,6 +104,11 @@ fn main() -> Result<()> {
         }
     };
 
+    let edge_weights = matches
+        .opt_get("E")
+        .context("invalid value for -E, --edge-weights")?
+        .unwrap_or(coupe_tools::EdgeWeightDistribution::Uniform);
+
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
@@ -105,8 +122,8 @@ fn main() -> Result<()> {
     let weights = weight::read(weight_file).context("failed to read weight file")?;
 
     let partition = match mesh.dimension() {
-        2 => main_d::<2>(matches, mesh, weights)?,
-        3 => main_d::<3>(matches, mesh, weights)?,
+        2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
+        3 => main_d::<3>(matches, edge_weights, mesh, weights)?,
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
 
