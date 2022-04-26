@@ -1,6 +1,11 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
-use sprs::{CsMat, CsMatView, TriMat};
+use rayon::iter::IndexedParallelIterator as _;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
+use sprs::CsMat;
+use sprs::CsMatView;
+use sprs::TriMat;
 use std::iter::Sum;
 
 /// The edge cut of a partition.
@@ -23,17 +28,24 @@ use std::iter::Sum;
 /// ```
 pub fn edge_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
 where
-    T: Copy + Sum,
+    T: Copy + Sum + Send + Sync + PartialEq,
 {
-    adjacency
-        .outer_iterator()
+    let indptr = adjacency.indptr().into_raw_storage();
+    let indices = adjacency.indices();
+    let data = adjacency.data();
+    indptr
+        .par_iter()
+        .zip(&indptr[1..])
         .enumerate()
-        .map(|(node, neighbors)| {
+        .map(|(node, (start, end))| {
+            let neighbors = &indices[*start..*end];
+            let edge_weights = &data[*start..*end];
             let node_part = partition[node];
             neighbors
                 .iter()
-                .take_while(|(neighbor, _edge_weight)| *neighbor < node)
-                .filter(|(neighbor, _edge_weight)| node_part != partition[*neighbor])
+                .zip(edge_weights)
+                .take_while(|(neighbor, _edge_weight)| **neighbor < node)
+                .filter(|(neighbor, _edge_weight)| node_part != partition[**neighbor])
                 .map(|(_neighbor, edge_weight)| *edge_weight)
                 .sum()
         })
