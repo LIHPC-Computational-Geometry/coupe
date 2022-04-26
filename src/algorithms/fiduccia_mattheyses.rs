@@ -1,4 +1,6 @@
 use super::Error;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -47,7 +49,7 @@ fn fiduccia_mattheyses<W>(
     max_bad_moves_in_a_row: usize,
 ) -> Metadata
 where
-    W: std::fmt::Debug + Copy + PartialOrd,
+    W: std::fmt::Debug + Copy + PartialOrd + Send + Sync,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive + num::Zero,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
@@ -60,7 +62,7 @@ where
     debug_assert!(part_count <= 2);
 
     let mut part_weights =
-        crate::imbalance::compute_parts_load(partition, part_count, weights.iter().cloned());
+        crate::imbalance::compute_parts_load(partition, part_count, weights.par_iter().cloned());
 
     // Enforce part weights to be below this value.
     let max_part_weight = match max_imbalance {
@@ -334,7 +336,7 @@ pub struct FiducciaMattheyses {
 
 impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
 where
-    W: std::fmt::Debug + Copy + PartialOrd + num::Zero,
+    W: std::fmt::Debug + Copy + PartialOrd + Send + Sync + num::Zero,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {

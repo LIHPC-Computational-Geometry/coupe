@@ -3,6 +3,8 @@ use crate::Error;
 use itertools::Itertools;
 use num::One;
 use num::Zero;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Mul;
@@ -17,7 +19,7 @@ where
     W: IntoIterator<Item = T>,
     T: AddAssign + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
     T: Zero + One,
-    T: Ord + Copy,
+    T: Ord + Copy + Send + Sync,
 {
     let two = {
         let mut two = T::one();
@@ -55,7 +57,7 @@ where
     let mut part_loads = compute_parts_load(
         partition,
         nb_parts,
-        criterion.iter().map(|(weight, _weight_id)| *weight),
+        criterion.par_iter().map(|(weight, _weight_id)| *weight),
     );
     criterion.sort_unstable();
 
@@ -170,7 +172,7 @@ where
     W: IntoIterator,
     W::Item: AddAssign + Sub<Output = W::Item> + Div<Output = W::Item> + Mul<Output = W::Item>,
     W::Item: Zero + One,
-    W::Item: Ord + Copy,
+    W::Item: Ord + Copy + Send + Sync,
 {
     type Metadata = usize;
     type Error = Error;
@@ -217,10 +219,10 @@ mod tests {
                         prop::collection::vec(0..1usize, num_weights))
                 })
         ) {
-            let imb_ini = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
+            let imb_ini = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
             vn_best_mono::<_, u64>(&mut partition, weights.iter().cloned(), 2)
                 .unwrap();
-            let imb_end = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
+            let imb_end = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini, "{} < {}", imb_ini, imb_end);
         }

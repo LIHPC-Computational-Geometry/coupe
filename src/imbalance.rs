@@ -1,27 +1,40 @@
+use itertools::Itertools;
+use num::FromPrimitive;
+use num::ToPrimitive;
+use num::Zero;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Sub;
 
-use itertools::Itertools;
-
-use num::FromPrimitive;
-use num::ToPrimitive;
-use num::Zero;
-
-pub fn compute_parts_load<T: Zero + Clone + AddAssign>(
-    partition: &[usize],
-    num_parts: usize,
-    weights: impl IntoIterator<Item = T>,
-) -> Vec<T> {
-    debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
+pub fn compute_parts_load<W>(partition: &[usize], num_parts: usize, weights: W) -> Vec<W::Item>
+where
+    W: IntoParallelIterator,
+    W::Iter: IndexedParallelIterator,
+    W::Item: Zero + Clone + AddAssign,
+{
+    debug_assert!(*partition.par_iter().max().unwrap_or(&0) < num_parts);
     partition
-        .iter()
+        .par_iter()
         .zip(weights)
-        .fold(vec![T::zero(); num_parts], |mut acc, (&part, w)| {
-            acc[part] += w;
-            acc
+        .fold(
+            || vec![W::Item::zero(); num_parts],
+            |mut acc, (&part, w)| {
+                acc[part] += w;
+                acc
+            },
+        )
+        .reduce_with(|mut weights0, weights1| {
+            for (w0, w1) in weights0.iter_mut().zip(weights1) {
+                *w0 += w1;
+            }
+            weights0
         })
+        .unwrap_or_else(|| vec![W::Item::zero(); num_parts])
 }
 
 /// Compute the imbalance of the given partition.
@@ -61,31 +74,31 @@ where
     }
 }
 
-pub fn imbalance_target<T: Zero + Sum + Clone + AddAssign + Sub<Output = T> + PartialOrd + Copy>(
-    targets: &[T],
-    partition: &[usize],
-    weights: impl IntoIterator<Item = T>,
-) -> T {
+pub fn imbalance_target<W>(targets: &[W::Item], partition: &[usize], weights: W) -> W::Item
+where
+    W: IntoParallelIterator,
+    W::Iter: IndexedParallelIterator,
+    W::Item: Zero + Sum + Copy + AddAssign + Sub<Output = W::Item> + PartialOrd,
+{
     let num_parts = targets.len();
     debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
     compute_parts_load(partition, num_parts, weights)
         .iter()
         .zip(targets)
         .map(|(x, t)| *x - *t)
-        .minmax() // Use `itertools.minmax()` as it works with PartialOrd
-        .into_option()
-        .unwrap_or((T::zero(), T::zero()))
-        .1
+        .max_by(|imb0, imb1| W::Item::partial_cmp(imb0, imb1).unwrap())
+        .unwrap_or_else(W::Item::zero)
 }
 
-pub fn max_imbalance<T: Zero + Clone + Copy + AddAssign + Sum + PartialOrd + Sub<Output = T>>(
-    num_parts: usize,
-    partition: &[usize],
-    weights: impl IntoIterator<Item = T>,
-) -> T {
+pub fn max_imbalance<W>(num_parts: usize, partition: &[usize], weights: W) -> W::Item
+where
+    W: IntoParallelIterator,
+    W::Iter: IndexedParallelIterator,
+    W::Item: Zero + Sum + Copy + AddAssign + Sub<Output = W::Item> + PartialOrd,
+{
     compute_parts_load(partition, num_parts, weights)
         .iter()
         .minmax()
         .into_option()
-        .map_or_else(T::zero, |m| *m.1 - *m.0)
+        .map_or_else(W::Item::zero, |m| *m.1 - *m.0)
 }
