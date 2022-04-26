@@ -3,6 +3,8 @@ use itertools::Itertools as _;
 use num::FromPrimitive;
 use num::One;
 use num::Zero;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -16,7 +18,7 @@ fn vn_first_mono<T>(
 where
     T: AddAssign + Sub<Output = T> + Sum,
     T: Zero + One + FromPrimitive,
-    T: Clone + PartialOrd,
+    T: Clone + PartialOrd + Send + Sync,
 {
     if weights.len() != partition.len() {
         return Err(Error::InputLenMismatch {
@@ -30,7 +32,7 @@ where
     }
 
     let mut part_loads =
-        crate::imbalance::compute_parts_load(partition, num_parts, weights.iter().cloned());
+        crate::imbalance::compute_parts_load(partition, num_parts, weights.par_iter().cloned());
     let total_weight: T = part_loads.iter().cloned().sum();
     if total_weight.is_zero() {
         return Ok(0);
@@ -233,7 +235,7 @@ impl<'a, W> crate::Partition<&'a [W]> for VnFirst
 where
     W: AddAssign + Sub<Output = W> + Sum,
     W: Zero + One + FromPrimitive,
-    W: Clone + PartialOrd,
+    W: Clone + PartialOrd + Send + Sync,
 {
     type Metadata = usize;
     type Error = Error;
@@ -277,9 +279,9 @@ mod tests {
                         prop::collection::vec(0..1_usize, num_weights))
                 })
         ) {
-            let imb_ini = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
+            let imb_ini = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
             vn_first_mono(&mut partition, &weights, 2).unwrap();
-            let imb_end = imbalance::max_imbalance(2, &partition, weights.iter().cloned());
+            let imb_end = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini);
         }
@@ -293,11 +295,11 @@ mod tests {
 
         vn_first(&mut part, &W, 1);
         let imbs_ini: Vec<i32> = (0..W[0].len())
-            .map(|c| imbalance::max_imbalance(2, &part, W.iter().map(|w| w[c])))
+            .map(|c| imbalance::max_imbalance(2, &part, W.par_iter().map(|w| w[c])))
             .collect();
         vn_first(&mut part, &W, 2);
         let imbs_end =
-            (0..W[0].len()).map(|c| imbalance::max_imbalance(2, &part, W.iter().map(|w| w[c])));
+            (0..W[0].len()).map(|c| imbalance::max_imbalance(2, &part, W.par_iter().map(|w| w[c])));
         for (imb_ini, imb_end) in imbs_ini.into_iter().zip(imbs_end) {
             assert!(imb_end <= imb_ini);
             println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -320,11 +322,11 @@ mod tests {
                 })
         ) {
             let imbs_ini: Vec<i32> = (0..C)
-                .map(|c| imbalance::max_imbalance(2, &partition, weights.iter().map(|w| w[c])))
+                .map(|c| imbalance::max_imbalance(2, &partition, weights.par_iter().map(|w| w[c])))
                 .collect();
             vn_first(&mut partition, &weights, 2);
             let imbs_end: Vec<i32> = (0..C)
-                .map(|c| imbalance::max_imbalance(2, &partition, weights.iter().map(|w| w[c])))
+                .map(|c| imbalance::max_imbalance(2, &partition, weights.par_iter().map(|w| w[c])))
                 .collect();
             for (imb_ini, imb_end) in imbs_ini.into_iter().zip(imbs_end) {
                 proptest::prop_assert!(imb_end <= imb_ini);
