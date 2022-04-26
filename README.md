@@ -20,9 +20,10 @@ example usages of the library.
 
 ### From other languages
 
-Coupe can only be used from Rust, for now.  Interoperability with other
-languages will be available through C bindings, and is a work in progress.  See
-[the relevant PR][67] for more information.
+Coupe offers a C interface which can be found in the `ffi/` directory.
+
+Bindings for other languages have not been made yet.  If you end up developing
+such bindings, please send us a note so they can be shown here!
 
 ## Contributing
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "ffi",
     "tools",
     "tools/mesh-io",
     "tools/mesh-io/ffi",
