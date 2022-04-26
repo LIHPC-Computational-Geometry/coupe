@@ -69,6 +69,7 @@ fn compute_gains(adjacency: sprs::CsMatView<i64>, partition: &[usize]) -> Vec<At
 
 fn arc_swap<W>(
     partition: &mut [usize],
+    part_count: usize,
     weights: &[W],
     adjacency: sprs::CsMatBase<i64, usize, &[usize], &[usize], &[i64]>,
     max_moves: usize,
@@ -82,8 +83,6 @@ fn arc_swap<W>(
     debug_assert_eq!(partition.len(), weights.len());
     debug_assert_eq!(partition.len(), adjacency.rows());
     debug_assert_eq!(partition.len(), adjacency.cols());
-
-    let part_count = 1 + *partition.iter().max().unwrap();
     debug_assert!(part_count <= 2);
 
     let span = tracing::info_span!("compute part_weights");
@@ -303,11 +302,13 @@ where
                 actual: adjacency.cols(),
             });
         }
-        if 1 < *part_ids.iter().max().unwrap_or(&0) {
+        let part_count = 1 + *part_ids.par_iter().max().unwrap_or(&0);
+        if 2 < part_count {
             return Err(Error::BiPartitioningOnly);
         }
         arc_swap(
             part_ids,
+            part_count,
             weights,
             adjacency,
             self.max_moves.unwrap_or(usize::MAX),
