@@ -55,6 +55,13 @@ Options specific to *part-bench*:
 	Measure strong scaling by running the algorithm with different amounts of
 	threads.
 
+*-E, --edge-weights* <variant>
+	Change how edge weights are set.  Possible values are:
+
+	- _uniform_ (default): all edges have the same weight,
+	- _linear_: edge weights are the sum of the vertex weights,
+	- _sqrt_: edge weights are the sum of the vertex weights' square roots.
+
 *-b, --baseline* <name>
 *-s, --save-baseline* <name>
 	Compare against a named baseline.  If *--save-baseline* is specified, the
