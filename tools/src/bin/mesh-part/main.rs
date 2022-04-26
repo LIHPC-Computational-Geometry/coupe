@@ -16,13 +16,6 @@ fn main_d<const D: usize>(
     mesh: Mesh,
     weights: weight::Array,
 ) -> Result<Vec<usize>> {
-    let problem = coupe_tools::Problem {
-        points: coupe_tools::barycentres::<D>(&mesh),
-        weights,
-        adjacency: coupe_tools::dual(&mesh),
-    };
-    let mut partition = vec![0; problem.points.len()];
-
     let algorithm_specs = matches.opt_strs("a");
     let algorithms: Vec<_> = algorithm_specs
         .iter()
@@ -31,6 +24,13 @@ fn main_d<const D: usize>(
                 .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
         })
         .collect::<Result<_>>()?;
+
+    let problem = coupe_tools::Problem {
+        points: coupe_tools::barycentres::<D>(&mesh),
+        weights,
+        adjacency: coupe_tools::dual(&mesh),
+    };
+    let mut partition = vec![0; problem.points.len()];
 
     let show_metadata = matches.opt_present("v");
 
