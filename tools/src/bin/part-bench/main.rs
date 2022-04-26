@@ -99,11 +99,7 @@ fn main_d<const D: usize>(
         format!("{mesh_file}:{weight_file}:{}", algorithm_specs.join(":"))
     };
     if matches.opt_present("e") {
-        let max_threads = matches.opt_get("e")?.unwrap_or_else(|| {
-            let t = rayon::current_num_threads();
-            println!("Number of threads available: {t}");
-            t
-        });
+        let max_threads = rayon::current_num_threads();
         let mut g = c.benchmark_group(benchmark_name);
         let mut thread_count = 1;
         while thread_count <= max_threads {
@@ -131,7 +127,7 @@ fn main() -> Result<()> {
         "name of the algorithm to run, see ALGORITHMS",
         "NAME",
     );
-    options.optflagopt("e", "efficiency", "Benchmark efficiency", "MAX_THREADS");
+    options.optflag("e", "efficiency", "Benchmark efficiency");
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("w", "weights", "weight file", "FILE");
     criterion_options(&mut options);
