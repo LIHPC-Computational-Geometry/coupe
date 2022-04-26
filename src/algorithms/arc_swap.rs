@@ -45,28 +45,6 @@ where
     }
 }
 
-fn compute_gains(adjacency: sprs::CsMatView<i64>, partition: &[usize]) -> Vec<AtomicI64> {
-    partition
-        .par_iter()
-        .enumerate()
-        .map(|(vertex, initial_part)| {
-            let gain: i64 = adjacency
-                .outer_view(vertex)
-                .unwrap()
-                .iter()
-                .map(|(neighbor, edge_weight)| {
-                    if partition[neighbor] == *initial_part {
-                        -*edge_weight
-                    } else {
-                        *edge_weight
-                    }
-                })
-                .sum();
-            AtomicI64::new(gain)
-        })
-        .collect()
-}
-
 fn arc_swap<W>(
     partition: &mut [usize],
     part_count: usize,
@@ -85,73 +63,105 @@ fn arc_swap<W>(
     debug_assert_eq!(partition.len(), adjacency.cols());
     debug_assert!(part_count <= 2);
 
-    let span = tracing::info_span!("compute part_weights");
-    let enter = span.enter();
+    let compute_cut = || {
+        let span = tracing::info_span!("compute cut");
+        let _enter = span.enter();
 
-    let part_weights =
-        crate::imbalance::compute_parts_load(partition, part_count, weights.par_iter().cloned());
-
-    mem::drop(enter);
-    let span = tracing::info_span!("compute max_part_weight");
-    let enter = span.enter();
-
-    // Enforce part weights to be below this value.
-    let max_part_weight = match max_imbalance {
-        Some(max_imbalance) => {
-            let total_weight: W = part_weights.iter().cloned().sum();
-            let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
-            W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
+        let cut_init: Vec<usize> = partition
+            .par_iter()
+            .enumerate()
+            .filter(|(vertex, initial_part)| {
+                adjacency
+                    .outer_view(*vertex)
+                    .unwrap()
+                    .iter()
+                    .any(|(neighbor, _edge_weight)| partition[neighbor] != **initial_part)
+            })
+            .map(|(vertex, _)| vertex)
+            .collect();
+        // Allocate enough room so that push operations *should* never fail.
+        // They could because we only make sure items are eventually unique.
+        let cut = ArrayQueue::new(partition.len());
+        for vertex in cut_init {
+            // Sequential loop to avoid contention on ArrayQueue
+            let _ = cut.push(vertex);
         }
-        None => *part_weights.iter().max_by(partial_cmp).unwrap(),
+        cut
+    };
+    let compute_part_weights_and_max_part_weight = || {
+        let span = tracing::info_span!("compute part_weights and max_part_weight");
+        let _enter = span.enter();
+
+        let part_weights = crate::imbalance::compute_parts_load(
+            partition,
+            part_count,
+            weights.par_iter().cloned(),
+        );
+
+        // Enforce part weights to be below this value.
+        let max_part_weight = match max_imbalance {
+            Some(max_imbalance) => {
+                let total_weight: W = part_weights.iter().cloned().sum();
+                let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+                W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
+            }
+            None => *part_weights.iter().max_by(partial_cmp).unwrap(),
+        };
+        (part_weights, max_part_weight)
+    };
+    let compute_best_edge_cut = || {
+        let span = tracing::info_span!("compute best_edge_cut");
+        let _enter = span.enter();
+
+        let best_edge_cut = crate::topology::edge_cut(adjacency, partition);
+        tracing::info!("Initial edge cut: {}", best_edge_cut);
+        AtomicI64::new(best_edge_cut)
+    };
+    let compute_gains = || {
+        let span = tracing::info_span!("compute gains");
+        let _enter = span.enter();
+
+        partition
+            .par_iter()
+            .enumerate()
+            .map(|(vertex, initial_part)| {
+                let gain: i64 = adjacency
+                    .outer_view(vertex)
+                    .unwrap()
+                    .iter()
+                    .map(|(neighbor, edge_weight)| {
+                        if partition[neighbor] == *initial_part {
+                            -*edge_weight
+                        } else {
+                            *edge_weight
+                        }
+                    })
+                    .sum();
+                AtomicI64::new(gain)
+            })
+            .collect::<Vec<AtomicI64>>()
+    };
+    let compute_locks = || {
+        let span = tracing::info_span!("compute locks");
+        let _enter = span.enter();
+
+        partition
+            .par_iter()
+            .map(|_| AtomicBool::new(false))
+            .collect::<Vec<AtomicBool>>()
     };
 
-    mem::drop(enter);
-    let span = tracing::info_span!("compute best_edge_cut");
-    let enter = span.enter();
+    let (cut, ((part_weights, max_part_weight), (best_edge_cut, (gains, locks)))) =
+        rayon::join(compute_cut, || {
+            rayon::join(compute_part_weights_and_max_part_weight, || {
+                rayon::join(compute_best_edge_cut, || {
+                    rayon::join(compute_gains, compute_locks)
+                })
+            })
+        });
 
-    let best_edge_cut = crate::topology::edge_cut(adjacency, partition);
-    let best_edge_cut = AtomicI64::new(best_edge_cut);
-    tracing::info!("Initial edge cut: {:?}", best_edge_cut);
-
-    mem::drop(enter);
     let span = tracing::info_span!("compute cut, gains and locks");
     let enter = span.enter();
-
-    let (cut, (gains, locks)) = rayon::join(
-        || {
-            let cut_init: Vec<usize> = partition
-                .par_iter()
-                .enumerate()
-                .filter(|(vertex, initial_part)| {
-                    adjacency
-                        .outer_view(*vertex)
-                        .unwrap()
-                        .iter()
-                        .any(|(neighbor, _edge_weight)| partition[neighbor] != **initial_part)
-                })
-                .map(|(vertex, _)| vertex)
-                .collect();
-            // Allocate enough room so that push operations *should* never fail.
-            // They could because we only make sure items are eventually unique.
-            let cut = ArrayQueue::new(partition.len());
-            for vertex in cut_init {
-                // Sequential loop to avoid contention on ArrayQueue
-                let _ = cut.push(vertex);
-            }
-            cut
-        },
-        || {
-            rayon::join(
-                || compute_gains(adjacency, partition),
-                || {
-                    partition
-                        .par_iter()
-                        .map(|_| AtomicBool::new(false))
-                        .collect::<Vec<AtomicBool>>()
-                },
-            )
-        },
-    );
 
     mem::drop(enter);
     let span = tracing::info_span!("doing moves");
