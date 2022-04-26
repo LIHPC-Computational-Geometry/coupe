@@ -23,7 +23,7 @@ svg="$BASELINE.strong.svg"
 bg_path() {
 	benchmark_group=$1
 
-	benchmark_dir=$(echo "$benchmark_group" | tr ':' '_')
+	benchmark_dir=$(echo "$benchmark_group" | tr ':' '_' | cut -b-64)
 	echo "$TARGET_DIR/criterion/$benchmark_dir"
 }
 
