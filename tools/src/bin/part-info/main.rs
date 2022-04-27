@@ -1,32 +1,30 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use itertools::Itertools as _;
 use mesh_io::medit::Mesh;
+use rayon::iter::IntoParallelIterator as _;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::env;
 use std::fs;
 use std::io;
 
 fn imbalance<T>(part_count: usize, part_ids: &[usize], weights: &[Vec<T>]) -> Vec<f64>
 where
-    T: Copy
-        + num::FromPrimitive
-        + num::ToPrimitive
-        + PartialOrd
-        + num::Zero
-        + PartialEq
-        + std::ops::Div<Output = T>
-        + std::ops::Sub<Output = T>
-        + std::iter::Sum,
+    T: Copy + Send + Sync,
+    T: num::FromPrimitive + num::ToPrimitive + num::Zero,
+    T: std::ops::Div<Output = T> + std::ops::Sub<Output = T> + std::iter::Sum,
 {
     let criterion_count = match weights.first() {
         Some(w) => w.len(),
         None => return Vec::new(),
     };
     (0..criterion_count)
+        .into_par_iter()
         .map(|criterion| {
-            let total_weight: T = weights.iter().map(|weight| weight[criterion]).sum();
+            let total_weight: T = weights.par_iter().map(|weight| weight[criterion]).sum();
             let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
             (0..part_count)
+                .into_par_iter()
                 .map(|part| {
                     let part_weight: T = part_ids
                         .iter()
@@ -37,42 +35,12 @@ where
                     let part_weight = part_weight.to_f64().unwrap();
                     (part_weight - ideal_part_weight) / ideal_part_weight
                 })
-                .minmax()
-                .into_option()
+                .max_by(|part_weight0, part_weight1| {
+                    f64::partial_cmp(part_weight0, part_weight1).unwrap()
+                })
                 .unwrap()
-                .1
         })
         .collect()
-}
-
-fn edge_cut(adjacency: sprs::CsMatView<f64>, parts: &[usize]) -> f64 {
-    let mut cut = 0.0;
-    for (edge_weight, (el1, el2)) in adjacency {
-        if parts[el1] != parts[el2] {
-            cut += edge_weight;
-        }
-    }
-    // Divide by 2 because we counted the elements twice.
-    cut / 2.0
-}
-
-fn lambda_cut(adjacency: sprs::CsMatView<f64>, parts: &[usize]) -> f64 {
-    use std::collections::BTreeSet;
-
-    let mut cut = 0.0;
-    let mut neighbor_parts = BTreeSet::new();
-    for (el1, el1_neighbors) in adjacency.outer_iterator().enumerate() {
-        neighbor_parts.clear();
-        for (el2, _edge_weight) in el1_neighbors.iter() {
-            if parts[el1] != parts[el2] {
-                neighbor_parts.insert(parts[el2]);
-            }
-        }
-        // TODO multiply by communication cost of el1
-        cut += neighbor_parts.len() as f64;
-    }
-
-    cut
 }
 
 fn main() -> Result<()> {
@@ -121,8 +89,14 @@ fn main() -> Result<()> {
         mesh_io::weight::Array::Floats(v) => imbalance(part_count, &parts, v),
     };
     println!("imbalances: {:?}", imbs);
-    println!("edge cut: {}", edge_cut(adjacency.view(), &parts));
-    println!("lambda cut: {}", lambda_cut(adjacency.view(), &parts));
+    println!(
+        "edge cut: {}",
+        coupe::topology::edge_cut(adjacency.view(), &parts),
+    );
+    println!(
+        "lambda cut: {}",
+        coupe::topology::lambda_cut(adjacency.view(), &parts),
+    );
 
     Ok(())
 }
