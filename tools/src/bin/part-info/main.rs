@@ -61,34 +61,53 @@ fn main() -> Result<()> {
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
-    let mesh = Mesh::from_file(mesh_file).context("failed to read mesh file")?;
+    let mesh_file = fs::File::open(mesh_file).context("failed to open mesh file")?;
+    let mesh_file = io::BufReader::new(mesh_file);
 
     let partition_file = matches
         .opt_str("p")
         .context("missing required option 'partition'")?;
     let partition_file = fs::File::open(partition_file).context("failed to open partition file")?;
     let partition_file = io::BufReader::new(partition_file);
-    let parts =
-        mesh_io::partition::read(partition_file).context("failed to read partition file")?;
 
     let weight_file = matches
         .opt_str("w")
         .context("missing required option 'weight'")?;
     let weight_file = fs::File::open(weight_file).context("failed to open weight file")?;
     let weight_file = io::BufReader::new(weight_file);
-    let weights = mesh_io::weight::read(weight_file).context("failed to read weight file")?;
 
-    let part_count = matches
-        .opt_get("n")?
-        .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
+    let (adjacency, parts) = rayon::join(
+        || -> Result<_> {
+            let mesh = Mesh::from_reader(mesh_file).context("failed to read mesh file")?;
+            let adjacency = coupe_tools::dual(&mesh);
+            Ok(adjacency)
+        },
+        || -> Result<_> {
+            let (parts, weights) = rayon::join(
+                || {
+                    mesh_io::partition::read(partition_file)
+                        .context("failed to read partition file")
+                },
+                || mesh_io::weight::read(weight_file).context("failed to read weight file"),
+            );
+            let parts = parts?;
+            let weights = weights?;
 
-    let adjacency = coupe_tools::dual(&mesh);
+            let part_count = matches
+                .opt_get("n")?
+                .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
 
-    let imbs = match &weights {
-        mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
-        mesh_io::weight::Array::Floats(v) => imbalance(part_count, &parts, v),
-    };
-    println!("imbalances: {:?}", imbs);
+            let imbs = match &weights {
+                mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
+                mesh_io::weight::Array::Floats(v) => imbalance(part_count, &parts, v),
+            };
+            println!("imbalances: {:?}", imbs);
+            Ok(parts)
+        },
+    );
+    let adjacency = adjacency?;
+    let parts = parts?;
+
     println!(
         "edge cut: {}",
         coupe::topology::edge_cut(adjacency.view(), &parts),
