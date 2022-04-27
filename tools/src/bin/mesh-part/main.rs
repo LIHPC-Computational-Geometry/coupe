@@ -26,13 +26,19 @@ fn main_d<const D: usize>(
         })
         .collect::<Result<_>>()?;
 
-    let mut adjacency = coupe_tools::dual(&mesh);
-    if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
-        coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
-    }
+    let (adjacency, points) = rayon::join(
+        || {
+            let mut adjacency = coupe_tools::dual(&mesh);
+            if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
+                coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
+            }
+            adjacency
+        },
+        || coupe_tools::barycentres::<D>(&mesh),
+    );
 
     let problem = coupe_tools::Problem {
-        points: coupe_tools::barycentres::<D>(&mesh),
+        points,
         weights,
         adjacency,
     };
@@ -112,14 +118,21 @@ fn main() -> Result<()> {
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
-    let mesh = Mesh::from_file(mesh_file).context("failed to read mesh file")?;
+    let mesh_file = fs::File::open(mesh_file).context("failed to open mesh file")?;
+    let mesh_file = io::BufReader::new(mesh_file);
 
     let weight_file = matches
         .opt_str("w")
         .context("missing required option 'weights'")?;
-    let weight_file = fs::File::open(weight_file).context("failed to open weight file")?;
-    let weight_file = io::BufReader::new(weight_file);
-    let weights = weight::read(weight_file).context("failed to read weight file")?;
+    let weights = fs::File::open(&weight_file).context("failed to open weight file")?;
+    let weights = io::BufReader::new(weights);
+
+    let (mesh, weights) = rayon::join(
+        || Mesh::from_reader(mesh_file).context("failed to read mesh file"),
+        || weight::read(weights).context("failed to read weight file"),
+    );
+    let mesh = mesh?;
+    let weights = weights?;
 
     let partition = match mesh.dimension() {
         2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
