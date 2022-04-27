@@ -60,14 +60,16 @@ fn main_d<const D: usize>(
         })
         .collect::<Result<_>>()?;
 
-    println!("Making dual graph...");
-    let mut adjacency = coupe_tools::dual(&mesh);
-    if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
-        coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
-    }
-
-    println!("Computing element barycentres...");
-    let points = coupe_tools::barycentres::<D>(&mesh);
+    let (adjacency, points) = rayon::join(
+        || {
+            let mut adjacency = coupe_tools::dual(&mesh);
+            if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
+                coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
+            }
+            adjacency
+        },
+        || coupe_tools::barycentres::<D>(&mesh),
+    );
 
     let problem = coupe_tools::Problem {
         points,
@@ -76,7 +78,6 @@ fn main_d<const D: usize>(
     };
     let mut partition = vec![0; problem.points.len()];
 
-    println!("Converting data into each algorithm's prefered format...");
     let mut runners: Vec<_> = algorithms
         .iter_mut()
         .map(|algorithm| algorithm.to_runner(&problem))
@@ -157,19 +158,25 @@ fn main() -> Result<()> {
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
-    println!("Reading {mesh_file:?}...");
-    let mesh = Mesh::from_file(&mesh_file).context("failed to read mesh file")?;
-    println!(" -> Dimension: {}", mesh.dimension());
-    println!(" -> Number of nodes: {}", mesh.node_count());
-    println!(" -> Number of elements: {}", mesh.element_count());
+    let mesh_file = fs::File::open(mesh_file).context("failed to open mesh file")?;
+    let mesh_file = io::BufReader::new(mesh_file);
 
     let weight_file = matches
         .opt_str("w")
         .context("missing required option 'weights'")?;
-    println!("Reading {weight_file:?}...");
     let weights = fs::File::open(&weight_file).context("failed to open weight file")?;
     let weights = io::BufReader::new(weights);
-    let weights = weight::read(weights).context("failed to read weight file")?;
+
+    let (mesh, weights) = rayon::join(
+        || Mesh::from_reader(mesh_file).context("failed to read mesh file"),
+        || weight::read(weights).context("failed to read weight file"),
+    );
+    let mesh = mesh?;
+    let weights = weights?;
+
+    println!(" -> Dimension: {}", mesh.dimension());
+    println!(" -> Number of nodes: {}", mesh.node_count());
+    println!(" -> Number of elements: {}", mesh.element_count());
 
     match mesh.dimension() {
         2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
