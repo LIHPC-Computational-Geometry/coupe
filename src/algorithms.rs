@@ -15,6 +15,7 @@ mod vn;
 mod z_curve;
 
 pub use arc_swap::ArcSwap;
+pub use arc_swap::Metadata as AsMetadata;
 pub use ckk::CkkWeight;
 pub use ckk::CompleteKarmarkarKarp;
 pub use fiduccia_mattheyses::FiducciaMattheyses;

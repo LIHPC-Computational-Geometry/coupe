@@ -49,6 +49,76 @@ where
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Metadata {
+    /// By how much the edge cut has been reduced by the algorithm.
+    /// Positive values mean reduced edge cut.
+    edge_cut_gain: i64,
+    /// Number of times vertices has been moved.
+    move_count: usize,
+    /// Number of times threads found out the vertex they picked had a locked
+    /// neighbor.
+    race_count: usize,
+    /// Number of times threads have called `ArrayQueue::pop` from their own
+    /// queue.
+    pop_from_self_count: usize,
+    /// Number of times threads have called `ArrayQueue::pop` from another's
+    /// queue.
+    pop_from_others_count: usize,
+    /// Number of times threads have poped a locked vertex.
+    locked_count: usize,
+    /// Number of times threads have poped a vertex with negative gain.
+    no_gain_count: usize,
+    /// Number of times threads have poped a vertex that would disrupt balance.
+    bad_balance_count: usize,
+}
+
+#[derive(Default)]
+struct AtomicMetadata {
+    edge_cut_gain: AtomicI64,
+    move_count: AtomicUsize,
+    race_count: AtomicUsize,
+    pop_from_self_count: AtomicUsize,
+    pop_from_others_count: AtomicUsize,
+    locked_count: AtomicUsize,
+    no_gain_count: AtomicUsize,
+    bad_balance_count: AtomicUsize,
+}
+
+impl AtomicMetadata {
+    pub fn add(&self, m: Metadata) {
+        self.edge_cut_gain
+            .fetch_add(m.edge_cut_gain, Ordering::Relaxed);
+        self.move_count.fetch_add(m.move_count, Ordering::Relaxed);
+        self.race_count.fetch_add(m.race_count, Ordering::Relaxed);
+        self.pop_from_self_count
+            .fetch_add(m.pop_from_self_count, Ordering::Relaxed);
+        self.pop_from_others_count
+            .fetch_add(m.pop_from_others_count, Ordering::Relaxed);
+        self.locked_count
+            .fetch_add(m.locked_count, Ordering::Relaxed);
+        self.no_gain_count
+            .fetch_add(m.no_gain_count, Ordering::Relaxed);
+        self.bad_balance_count
+            .fetch_add(m.bad_balance_count, Ordering::Relaxed);
+    }
+}
+
+impl From<AtomicMetadata> for Metadata {
+    fn from(a: AtomicMetadata) -> Metadata {
+        Metadata {
+            edge_cut_gain: a.edge_cut_gain.load(Ordering::Relaxed),
+            move_count: a.move_count.load(Ordering::Relaxed),
+            race_count: a.race_count.load(Ordering::Relaxed),
+            pop_from_self_count: a.pop_from_self_count.load(Ordering::Relaxed),
+            pop_from_others_count: a.pop_from_others_count.load(Ordering::Relaxed),
+            locked_count: a.locked_count.load(Ordering::Relaxed),
+            no_gain_count: a.no_gain_count.load(Ordering::Relaxed),
+            bad_balance_count: a.bad_balance_count.load(Ordering::Relaxed),
+        }
+    }
+}
+
 fn arc_swap<W>(
     partition: &mut [usize],
     part_count: usize,
@@ -56,7 +126,8 @@ fn arc_swap<W>(
     adjacency: sprs::CsMatBase<i64, usize, &[usize], &[usize], &[i64]>,
     max_moves: usize,
     max_imbalance: Option<f64>,
-) where
+) -> Metadata
+where
     W: std::fmt::Debug + Copy + PartialOrd + Send + Sync + num::Zero,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
@@ -174,23 +245,27 @@ fn arc_swap<W>(
     let part_weights = RwLock::new(part_weights);
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
 
-    let move_count = AtomicUsize::new(0);
-    let race_count = AtomicUsize::new(0);
-    let stop = AtomicBool::new(false);
-
+    let metadata = AtomicMetadata::default();
     (0..max_moves)
         .into_par_iter()
-        .try_for_each_init(rand::thread_rng, |rng, _| {
+        .try_fold(Metadata::default, |mut metadata, _| {
             let thread_idx = rayon::current_thread_index().unwrap() % thread_count;
+            let mut rng = rand::thread_rng();
             let part_weights_copy = part_weights.read().unwrap().to_vec();
 
             let (moved_vertex, move_gain, initial_part, weight, _lock) = loop {
                 let vertex = match cuts[thread_idx].pop() {
-                    Some(v) => v,
+                    Some(v) => {
+                        metadata.pop_from_self_count += 1;
+                        v
+                    }
                     None => match cuts[rng.gen_range(0..thread_count)].pop() {
-                        Some(v) => v,
+                        Some(v) => {
+                            metadata.pop_from_others_count += 1;
+                            v
+                        }
                         None => {
-                            return None;
+                            return Err(metadata);
                         }
                     },
                 };
@@ -198,6 +273,7 @@ fn arc_swap<W>(
                     .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
                     .is_err();
                 if locked {
+                    metadata.locked_count += 1;
                     continue;
                 }
                 let lock_guard = defer({
@@ -212,6 +288,7 @@ fn arc_swap<W>(
                 if gain <= 0 {
                     // Don't push it back now, it will when its gain is updated
                     // positively (due to a neighbor moving).
+                    metadata.no_gain_count += 1;
                     continue;
                 }
 
@@ -220,6 +297,7 @@ fn arc_swap<W>(
                 if max_part_weight < target_part_weight {
                     // TODO fix infinite loops
                     //cut.push(vertex).unwrap();
+                    metadata.bad_balance_count += 1;
                     continue;
                 }
 
@@ -230,16 +308,15 @@ fn arc_swap<W>(
                     .any(|(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire));
                 if raced {
                     cuts[thread_idx].push(vertex).unwrap();
-                    race_count.fetch_add(1, Ordering::Relaxed);
+                    metadata.race_count += 1;
                     continue;
                 }
 
                 break (vertex, gain, initial_part, weight, lock_guard);
             };
 
-            if max_moves <= 1 + move_count.fetch_add(1, Ordering::Release) {
-                stop.store(true, Ordering::Release);
-            }
+            metadata.move_count += 1;
+            metadata.edge_cut_gain += move_gain;
 
             let target_part = 1 - initial_part;
             partition[moved_vertex].store(target_part, Ordering::Relaxed);
@@ -253,23 +330,29 @@ fn arc_swap<W>(
             best_edge_cut.fetch_sub(move_gain, Ordering::Relaxed);
             for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
                 if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                    cuts[thread_idx].push(neighbor).unwrap();
-                    gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
+                    let old_gain = gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
+                    if 0 <= old_gain + 2 * edge_weight {
+                        cuts[thread_idx].push(neighbor).unwrap();
+                    }
                 } else {
                     gains[neighbor].fetch_sub(2 * edge_weight, Ordering::Relaxed);
                 }
             }
 
-            Some(())
+            Ok(metadata)
+        })
+        .try_for_each(|mdpart| {
+            let err = mdpart.is_err();
+            let (Ok(mdpart) | Err(mdpart)) = mdpart;
+            metadata.add(mdpart);
+            if err {
+                Some(())
+            } else {
+                None
+            }
         });
 
-    tracing::info!(
-        ?best_edge_cut,
-        ?move_count,
-        ?race_count,
-        "cut.len()={}",
-        cuts.len(),
-    );
+    metadata.into()
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -284,7 +367,7 @@ where
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
 {
-    type Metadata = ();
+    type Metadata = Metadata;
     type Error = Error;
 
     fn partition(
@@ -293,7 +376,7 @@ where
         (adjacency, weights): (CsMatView<i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
-            return Ok(());
+            return Ok(Metadata::default());
         }
         if part_ids.len() != weights.len() {
             return Err(Error::InputLenMismatch {
@@ -317,14 +400,13 @@ where
         if 2 < part_count {
             return Err(Error::BiPartitioningOnly);
         }
-        arc_swap(
+        Ok(arc_swap(
             part_ids,
             part_count,
             weights,
             adjacency,
             self.max_moves.unwrap_or(usize::MAX),
             self.max_imbalance,
-        );
-        Ok(())
+        ))
     }
 }

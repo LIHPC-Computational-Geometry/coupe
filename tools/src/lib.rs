@@ -202,15 +202,15 @@ impl<const D: usize> ToRunner<D> for coupe::ArcSwap {
             Integers(is) => {
                 let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency.view(), &weights))?;
-                    Ok(None)
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
                 })
             }
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency.view(), &weights))?;
-                    Ok(None)
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
                 })
             }
         }
