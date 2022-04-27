@@ -6,6 +6,7 @@ use rayon::iter::ParallelIterator as _;
 use sprs::CsMat;
 use sprs::CsMatView;
 use sprs::TriMat;
+use std::collections::HashSet;
 use std::iter::Sum;
 
 /// The edge cut of a partition.
@@ -48,6 +49,29 @@ where
                 .filter(|(neighbor, _edge_weight)| node_part != partition[**neighbor])
                 .map(|(_neighbor, edge_weight)| *edge_weight)
                 .sum()
+        })
+        .sum()
+}
+
+pub fn lambda_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> usize {
+    let indptr = adjacency.indptr().into_raw_storage();
+    let indices = adjacency.indices();
+    indptr
+        .par_iter()
+        .zip(&indptr[1..])
+        .enumerate()
+        .map_with(HashSet::new(), |neighbor_parts, (node, (start, end))| {
+            let neighbors = &indices[*start..*end];
+            let node_part = partition[node];
+            neighbor_parts.clear();
+            for neighbor in neighbors {
+                let neighbor_part = partition[*neighbor];
+                if neighbor_part == node_part {
+                    continue;
+                }
+                neighbor_parts.insert(neighbor_part);
+            }
+            neighbor_parts.len()
         })
         .sum()
 }
