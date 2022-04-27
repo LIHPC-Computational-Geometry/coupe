@@ -65,7 +65,7 @@ fn add_element_and_neighbors_to_path<'a>(
             continue;
         }
         for (neighbor, _) in adjacency.outer_view(el).unwrap().iter() {
-            let (_el_type, _el_nodes, el_ref) = element_fn(el);
+            let (_el_type, _el_nodes, el_ref) = element_fn(neighbor);
             if el_ref == path_ref {
                 queue.push(neighbor);
             }
