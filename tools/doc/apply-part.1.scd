@@ -20,12 +20,16 @@ distribution) can be visualized with medit tools.
 
 The output mesh is written on standard output.
 
-Only MEDIT ASCII meshes are supported, for now.
+Only MEDIT meshes are supported, for now.  See *INPUT FORMAT* for details.
 
 # OPTIONS
 
 *-h, --help*
 	Show a help message and exit.
+
+*-f, --format* <format>
+	Set the output format.  See *OUTPUT FORMAT* for the list of accepted
+	values.
 
 *-m, --mesh* <path>
 	Use the given mesh file as template.
@@ -37,6 +41,23 @@ Only MEDIT ASCII meshes are supported, for now.
 *-w --weights* <path>
 	Use the given weight file.  This file is expected to come from
 	*weight-gen*(1) with the same mesh.
+
+# INPUT FORMAT
+
+These programs can accept both ASCII and binary MEDIT meshes, and will detect
+automatically the correct version to use, regardless of file extension.  There
+is currently no way to force a particular format.
+
+# OUTPUT FORMAT
+
+The *-f, --format* option changes the output format of the program.  These
+values are currently accepted:
+
+- _meshb_ (default): output MEDIT binary,
+- _mesh_: output MEDIT ASCII.
+
+In general, you'll want the default _meshb_ format.  It is faster to read from and
+write to.  Use the ASCII format for debugging or for compatibility.
 
 # SEE ALSO
 

@@ -3,11 +3,11 @@ use anyhow::Result;
 use std::env;
 use std::fs;
 use std::io;
-use std::io::Write as _;
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optopt("f", "format", "output format", "EXT");
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("p", "partition", "partition file", "FILE");
 
@@ -17,6 +17,11 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage("Usage: apply-part [options]"));
         return Ok(());
     }
+
+    let format: coupe_tools::MeshFormat = matches
+        .opt_get("f")
+        .context("invalid value for option 'format'")?
+        .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
 
     let mesh_file = matches
         .opt_str("m")
@@ -40,10 +45,7 @@ fn main() -> Result<()> {
         *element_ref = part as isize;
     }
 
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let mut stdout = io::BufWriter::new(stdout);
-    write!(stdout, "{}", mesh).context("failed to write mesh")?;
+    coupe_tools::write_mesh(&mesh, format)?;
 
     Ok(())
 }

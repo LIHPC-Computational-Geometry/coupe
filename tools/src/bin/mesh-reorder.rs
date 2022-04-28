@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use anyhow::Result;
 use mesh_io::medit::Mesh;
 use std::env;
@@ -61,6 +62,7 @@ where
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optopt("f", "format", "output format", "EXT");
     options.optopt("s", "seed", "RNG seed (default: 0)", "STRING");
 
     let matches = options.parse(env::args().skip(1))?;
@@ -69,6 +71,11 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage("Usage: mesh-refine [options]"));
         return Ok(());
     }
+
+    let format: coupe_tools::MeshFormat = matches
+        .opt_get("f")
+        .context("invalid value for option 'format'")?
+        .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
 
     eprintln!("Reading mesh...");
     let stdin = io::stdin();
@@ -80,7 +87,7 @@ fn main() -> Result<()> {
     mesh = shuffle(rand::thread_rng(), mesh);
 
     eprintln!("Writing mesh...");
-    println!("{}", mesh);
+    coupe_tools::write_mesh(&mesh, format)?;
 
     Ok(())
 }

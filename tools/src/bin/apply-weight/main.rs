@@ -4,7 +4,6 @@ use mesh_io::medit::Mesh;
 use std::env;
 use std::fs;
 use std::io;
-use std::io::Write as _;
 
 fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
     let mesh_dimension = mesh.dimension();
@@ -19,6 +18,7 @@ fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optopt("f", "format", "output format", "EXT");
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("w", "weights", "weight file", "FILE");
 
@@ -28,6 +28,11 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage("Usage: apply-weights [options]"));
         return Ok(());
     }
+
+    let format: coupe_tools::MeshFormat = matches
+        .opt_get("f")
+        .context("invalid value for option 'format'")?
+        .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
 
     let mesh_file = matches
         .opt_str("m")
@@ -50,10 +55,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let mut stdout = io::BufWriter::new(stdout);
-    write!(stdout, "{}", mesh).context("failed to write mesh")?;
+    coupe_tools::write_mesh(&mesh, format)?;
 
     Ok(())
 }
