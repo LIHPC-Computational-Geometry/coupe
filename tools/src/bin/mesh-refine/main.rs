@@ -7,6 +7,7 @@ use std::io;
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optopt("f", "format", "output format", "EXT");
     options.optopt(
         "n",
         "times",
@@ -20,6 +21,11 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage("Usage: mesh-refine [options]"));
         return Ok(());
     }
+
+    let format: coupe_tools::MeshFormat = matches
+        .opt_get("f")
+        .context("invalid value for option 'format'")?
+        .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
 
     let n: usize = matches
         .opt_get("n")
@@ -45,7 +51,7 @@ fn main() -> Result<()> {
     eprintln!(" -> Elements: {}", mesh.element_count());
 
     eprintln!("Writing mesh...");
-    println!("{}", mesh);
+    coupe_tools::write_mesh(&mesh, format)?;
 
     Ok(())
 }

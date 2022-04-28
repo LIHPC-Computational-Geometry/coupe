@@ -16,7 +16,8 @@ writes the output weight distribution in standard output.
 Unless *-i, --integers* is specified, the generated weights are floating-point
 numbers.
 
-Only MEDIT ASCII meshes are supported, for now.
+Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
+for details.
 
 See *WEIGHT FILE* for a description of the output format.
 

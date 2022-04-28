@@ -10,6 +10,7 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice as _;
 use std::any;
+use std::io;
 use std::mem;
 
 #[cfg(feature = "metis")]
@@ -527,4 +528,44 @@ pub fn set_edge_weights(
             };
         }
     }
+}
+
+pub enum MeshFormat {
+    MeditAscii,
+    MeditBinary,
+}
+
+#[derive(Debug)]
+pub struct MeshFormatError;
+
+impl std::fmt::Display for MeshFormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "expected 'mesh' or 'meshb'")
+    }
+}
+impl std::error::Error for MeshFormatError {}
+
+impl std::str::FromStr for MeshFormat {
+    type Err = MeshFormatError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match &*s.to_ascii_lowercase() {
+            "mesh" => Self::MeditAscii,
+            "meshb" => Self::MeditBinary,
+            _ => return Err(MeshFormatError),
+        })
+    }
+}
+
+pub fn write_mesh(mesh: &Mesh, format: MeshFormat) -> Result<()> {
+    match format {
+        MeshFormat::MeditAscii => println!("{mesh}"),
+        MeshFormat::MeditBinary => {
+            let stdout = io::stdout();
+            let stdout = stdout.lock();
+            let stdout = io::BufWriter::new(stdout);
+            mesh.write_to(stdout).context("failed to write mesh")?;
+        }
+    }
+    Ok(())
 }

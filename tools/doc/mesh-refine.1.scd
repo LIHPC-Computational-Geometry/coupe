@@ -18,12 +18,17 @@ mesh-refine only works on 2D meshes composed exclusively of triangles and
 quadrilaterals.  It splits either of them into four equal parts at each
 iteration.
 
-Only MEDIT ASCII meshes are supported, for now.
+Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
+for details.
 
 # OPTIONS
 
 *-h, --help*
 	Show a help message and exit.
+
+*-f, --format* <format>
+	Set the output format.  See *apply-part(1)*'s *OUTPUT FORMAT* for the list
+	of accepted values.
 
 *-n, --times* <n>
 	Iterate a given number of times.  By default, only once.
