@@ -241,7 +241,6 @@ where
         .try_fold(Metadata::default, |mut metadata, _| {
             let thread_idx = rayon::current_thread_index().unwrap() % thread_count;
             let mut rng = rand::thread_rng();
-            let part_weights_copy = part_weights.read().unwrap().to_vec();
 
             let (moved_vertex, move_gain, initial_part, weight, _lock) = loop {
                 let vertex = match cuts[thread_idx].pop() {
@@ -283,7 +282,7 @@ where
                 }
 
                 let weight = weights[vertex];
-                let target_part_weight = part_weights_copy[target_part] + weight;
+                let target_part_weight = part_weights.read().unwrap()[target_part] + weight;
                 if max_part_weight < target_part_weight {
                     // TODO fix infinite loops
                     //cut.push(vertex).unwrap();
