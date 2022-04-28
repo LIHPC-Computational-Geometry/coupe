@@ -8,13 +8,44 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice;
 use sprs::CsMatView;
+use std::cell::UnsafeCell;
 use std::cmp;
 use std::mem;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::RwLock;
+
+#[derive(Debug)]
+struct RaceCell<T> {
+    value: UnsafeCell<T>,
+}
+
+impl<T> RaceCell<T> {
+    pub const fn new(value: T) -> Self {
+        Self {
+            value: UnsafeCell::new(value),
+        }
+    }
+}
+
+impl<T> RaceCell<T>
+where
+    T: Copy,
+{
+    pub fn get(&self) -> T {
+        unsafe { self.value.get().read() }
+    }
+
+    pub fn set(&self, value: T) {
+        unsafe {
+            self.value.get().write(value);
+        }
+    }
+}
+
+unsafe impl<T> Send for RaceCell<T> {}
+unsafe impl<T> Sync for RaceCell<T> {}
 
 struct Defer<F>(Option<F>)
 where
@@ -163,7 +194,7 @@ where
                 })
                 .collect::<Vec<_>>()
         };
-    let compute_part_weights_and_max_part_weight = || {
+    let compute_part_weights = || {
         let span = tracing::info_span!("compute part_weights and max_part_weight");
         let _enter = span.enter();
 
@@ -173,16 +204,17 @@ where
             weights.par_iter().cloned(),
         );
 
+        let total_weight: W = part_weights.iter().cloned().sum();
+
         // Enforce part weights to be below this value.
         let max_part_weight = match max_imbalance {
             Some(max_imbalance) => {
-                let total_weight: W = part_weights.iter().cloned().sum();
                 let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
                 W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
             }
             None => *part_weights.iter().max_by(partial_cmp).unwrap(),
         };
-        (part_weights, max_part_weight)
+        (total_weight, part_weights[0], max_part_weight)
     };
     let compute_gains = || {
         let span = tracing::info_span!("compute gains");
@@ -218,9 +250,9 @@ where
             .collect::<Vec<AtomicBool>>()
     };
 
-    let (cuts, ((part_weights, max_part_weight), (gains, locks))) =
+    let (cuts, ((total_weight, part0_weight, max_part_weight), (gains, locks))) =
         rayon::join(compute_cut, || {
-            rayon::join(compute_part_weights_and_max_part_weight, || {
+            rayon::join(compute_part_weights, || {
                 rayon::join(compute_gains, compute_locks)
             })
         });
@@ -232,7 +264,10 @@ where
     let span = tracing::info_span!("doing moves");
     let _enter = span.enter();
 
-    let part_weights = RwLock::new(part_weights);
+    let weight_contributions = (0..thread_count)
+        .map(|_| RaceCell::new(W::zero()))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
 
     let metadata = AtomicMetadata::default();
@@ -242,7 +277,7 @@ where
             let thread_idx = rayon::current_thread_index().unwrap() % thread_count;
             let mut rng = rand::thread_rng();
 
-            let (moved_vertex, move_gain, initial_part, weight, _lock) = loop {
+            let (moved_vertex, move_gain, initial_part, _lock) = loop {
                 let vertex = match cuts[thread_idx].pop() {
                     Some(v) => {
                         metadata.pop_from_self_count += 1;
@@ -281,15 +316,6 @@ where
                     continue;
                 }
 
-                let weight = weights[vertex];
-                let target_part_weight = part_weights.read().unwrap()[target_part] + weight;
-                if max_part_weight < target_part_weight {
-                    // TODO fix infinite loops
-                    //cut.push(vertex).unwrap();
-                    metadata.bad_balance_count += 1;
-                    continue;
-                }
-
                 let raced = adjacency
                     .outer_view(vertex)
                     .unwrap()
@@ -301,7 +327,29 @@ where
                     continue;
                 }
 
-                break (vertex, gain, initial_part, weight, lock_guard);
+                let weight = weights[vertex];
+                let part0_weight =
+                    part0_weight + weight_contributions.iter().map(|cell| cell.get()).sum();
+                let target_part_weight = weight
+                    + if target_part == 0 {
+                        part0_weight
+                    } else {
+                        total_weight - part0_weight
+                    };
+                if max_part_weight < target_part_weight {
+                    // TODO fix infinite loops
+                    //cut.push(vertex).unwrap();
+                    metadata.bad_balance_count += 1;
+                    continue;
+                }
+
+                weight_contributions[thread_idx].set(if initial_part == 0 {
+                    part0_weight - weight
+                } else {
+                    part0_weight + weight
+                });
+
+                break (vertex, gain, initial_part, lock_guard);
             };
 
             metadata.move_count += 1;
@@ -310,11 +358,6 @@ where
             let target_part = 1 - initial_part;
             partition[moved_vertex].store(target_part, Ordering::Relaxed);
             gains[moved_vertex].store(-move_gain, Ordering::Relaxed);
-            {
-                let mut part_weights = part_weights.write().unwrap();
-                part_weights[initial_part] -= weight;
-                part_weights[target_part] += weight;
-            }
 
             for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
                 if partition[neighbor].load(Ordering::Relaxed) == initial_part {
