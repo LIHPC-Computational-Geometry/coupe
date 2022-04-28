@@ -39,15 +39,15 @@ impl fmt::Display for Mesh {
             self.dimension,
             self.node_count(),
         )?;
-        for vertex in self.coordinates.chunks(self.dimension) {
-            for coordinate in vertex {
+        for (coordinates, node_ref) in self.nodes() {
+            for coordinate in coordinates {
                 write!(f, " {}", coordinate)?;
             }
-            writeln!(f, " 0")?;
+            writeln!(f, " {}", node_ref)?;
         }
         for (element_type, nodes, refs) in &self.topology {
-            let num_elements = nodes.len() / element_type.node_count();
-            write!(f, "\n{}\n\t{}\n", element_type, num_elements)?;
+            let element_count = refs.len();
+            write!(f, "\n{}\n\t{}\n", element_type, element_count)?;
             for (element, element_ref) in nodes.chunks(element_type.node_count()).zip(refs) {
                 for node in element {
                     write!(f, " {}", node + 1)?;
