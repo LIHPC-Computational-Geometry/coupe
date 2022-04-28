@@ -8,44 +8,13 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice;
 use sprs::CsMatView;
-use std::cell::UnsafeCell;
 use std::cmp;
 use std::mem;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-
-#[derive(Debug)]
-struct RaceCell<T> {
-    value: UnsafeCell<T>,
-}
-
-impl<T> RaceCell<T> {
-    pub const fn new(value: T) -> Self {
-        Self {
-            value: UnsafeCell::new(value),
-        }
-    }
-}
-
-impl<T> RaceCell<T>
-where
-    T: Copy,
-{
-    pub fn get(&self) -> T {
-        unsafe { self.value.get().read() }
-    }
-
-    pub fn set(&self, value: T) {
-        unsafe {
-            self.value.get().write(value);
-        }
-    }
-}
-
-unsafe impl<T> Send for RaceCell<T> {}
-unsafe impl<T> Sync for RaceCell<T> {}
+use std::sync::Mutex;
 
 struct Defer<F>(Option<F>)
 where
@@ -162,6 +131,7 @@ where
     W: std::fmt::Debug + Copy + PartialOrd + Send + Sync + num::Zero,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
+    W: std::ops::Div<Output = W>,
 {
     debug_assert!(!partition.is_empty());
     debug_assert_eq!(partition.len(), weights.len());
@@ -264,8 +234,10 @@ where
     let span = tracing::info_span!("doing moves");
     let _enter = span.enter();
 
-    let weight_contributions = (0..thread_count)
-        .map(|_| RaceCell::new(W::zero()))
+    let max_part_weight =
+        part0_weight + (max_part_weight - part0_weight) / W::from_usize(thread_count).unwrap();
+    let part0_weight = (0..thread_count)
+        .map(|_| Mutex::new(part0_weight))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
@@ -328,13 +300,12 @@ where
                 }
 
                 let weight = weights[vertex];
-                let part0_weight =
-                    part0_weight + weight_contributions.iter().map(|cell| cell.get()).sum();
+                let mut part0_weight = part0_weight[thread_idx].try_lock().unwrap();
                 let target_part_weight = weight
                     + if target_part == 0 {
-                        part0_weight
+                        *part0_weight
                     } else {
-                        total_weight - part0_weight
+                        total_weight - *part0_weight
                     };
                 if max_part_weight < target_part_weight {
                     // TODO fix infinite loops
@@ -343,11 +314,11 @@ where
                     continue;
                 }
 
-                weight_contributions[thread_idx].set(if initial_part == 0 {
-                    part0_weight - weight
+                *part0_weight = if initial_part == 0 {
+                    *part0_weight - weight
                 } else {
-                    part0_weight + weight
-                });
+                    *part0_weight + weight
+                };
 
                 break (vertex, gain, initial_part, lock_guard);
             };
@@ -397,6 +368,7 @@ where
     W: std::fmt::Debug + Copy + PartialOrd + Send + Sync + num::Zero,
     W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
     W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
+    W: std::ops::Div<Output = W>,
 {
     type Metadata = Metadata;
     type Error = Error;
