@@ -184,14 +184,6 @@ where
         };
         (part_weights, max_part_weight)
     };
-    let compute_best_edge_cut = || {
-        let span = tracing::info_span!("compute best_edge_cut");
-        let _enter = span.enter();
-
-        let best_edge_cut = crate::topology::edge_cut(adjacency, partition);
-        tracing::info!("Initial edge cut: {}", best_edge_cut);
-        AtomicI64::new(best_edge_cut)
-    };
     let compute_gains = || {
         let span = tracing::info_span!("compute gains");
         let _enter = span.enter();
@@ -226,12 +218,10 @@ where
             .collect::<Vec<AtomicBool>>()
     };
 
-    let (cuts, ((part_weights, max_part_weight), (best_edge_cut, (gains, locks)))) =
+    let (cuts, ((part_weights, max_part_weight), (gains, locks))) =
         rayon::join(compute_cut, || {
             rayon::join(compute_part_weights_and_max_part_weight, || {
-                rayon::join(compute_best_edge_cut, || {
-                    rayon::join(compute_gains, compute_locks)
-                })
+                rayon::join(compute_gains, compute_locks)
             })
         });
 
@@ -327,7 +317,6 @@ where
                 part_weights[target_part] += weight;
             }
 
-            best_edge_cut.fetch_sub(move_gain, Ordering::Relaxed);
             for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
                 if partition[neighbor].load(Ordering::Relaxed) == initial_part {
                     let old_gain = gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
