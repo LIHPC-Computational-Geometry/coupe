@@ -551,7 +551,7 @@ fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
                 let mut refs = Vec::with_capacity(element_count);
                 for _ in 0..element_count {
                     for _ in 0..nodes_per_element {
-                        nodes.push(read_int(&mut input)? as usize);
+                        nodes.push(read_int(&mut input)? as usize - 1);
                     }
                     refs.push(read_int(&mut input)? as isize);
                 }
