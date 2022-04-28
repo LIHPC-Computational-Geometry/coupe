@@ -1,5 +1,8 @@
-use super::{ElementType, Mesh};
+use super::parser::code;
+use super::ElementType;
+use super::Mesh;
 use std::fmt;
+use std::io;
 
 impl fmt::Display for ElementType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -11,6 +14,19 @@ impl fmt::Display for ElementType {
             ElementType::Quadrilateral => write!(f, "Quadrilaterals"),
             ElementType::Tetrahedron => write!(f, "Tetrahedra"),
             ElementType::Hexahedron => write!(f, "Hexahedra"),
+        }
+    }
+}
+
+impl ElementType {
+    fn code(self) -> i64 {
+        match self {
+            ElementType::Vertex => code::VERTEX,
+            ElementType::Edge => code::EDGE,
+            ElementType::Triangle => code::TRIANGLE,
+            ElementType::Quadrangle | ElementType::Quadrilateral => code::QUAD,
+            ElementType::Tetrahedron => code::TETRAHEDRON,
+            ElementType::Hexahedron => code::HEXAHEDRON,
         }
     }
 }
@@ -40,6 +56,51 @@ impl fmt::Display for Mesh {
             }
         }
         write!(f, "\nEnd")
+    }
+}
+
+impl Mesh {
+    pub fn write_to<W: io::Write>(&self, mut w: W) -> io::Result<()> {
+        // Header
+        w.write_all(&i32::to_le_bytes(1))?; // magic code
+        w.write_all(&i32::to_le_bytes(4))?; // version
+        w.write_all(&i32::to_le_bytes(code::DIMENSION as i32))?;
+        let mut bitpos = 4 + 4 + 4 + 8 + 4; // byte position of the vertices
+        w.write_all(&i64::to_le_bytes(bitpos as i64))?;
+        w.write_all(&i32::to_le_bytes(self.dimension as i32))?;
+
+        // Nodes
+        w.write_all(&i32::to_le_bytes(code::VERTEX as i32))?;
+        let node_count = self.node_refs.len();
+        bitpos += 8 * node_count * (self.dimension + 1);
+        w.write_all(&i64::to_le_bytes(bitpos as i64))?;
+        w.write_all(&i64::to_le_bytes(node_count as i64))?;
+        for (coordinates, node_ref) in self.nodes() {
+            for coordinate in coordinates {
+                w.write_all(&f64::to_le_bytes(*coordinate))?;
+            }
+            w.write_all(&i64::to_le_bytes(node_ref as i64))?;
+        }
+
+        // Elements
+        for (element_type, nodes, refs) in &self.topology {
+            w.write_all(&i32::to_le_bytes(element_type.code() as i32))?;
+            let element_count = refs.len();
+            let nodes_per_element = element_type.node_count();
+            bitpos += 8 * element_count * (nodes_per_element + 1);
+            w.write_all(&i64::to_le_bytes(bitpos as i64))?;
+            w.write_all(&i64::to_le_bytes(element_count as i64))?;
+            for (element, element_ref) in nodes.chunks(nodes_per_element).zip(refs) {
+                for node in element {
+                    w.write_all(&i64::to_le_bytes(*node as i64 + 1))?;
+                }
+                w.write_all(&i64::to_le_bytes(*element_ref as i64))?;
+            }
+        }
+
+        w.write_all(&i32::to_le_bytes(54))?; // End
+
+        Ok(())
     }
 }
 
