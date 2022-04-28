@@ -97,6 +97,30 @@ impl str::FromStr for ElementType {
     }
 }
 
+pub(super) mod code {
+    pub const DIMENSION: i64 = 3;
+    pub const VERTEX: i64 = 4;
+    pub const EDGE: i64 = 5;
+    pub const TRIANGLE: i64 = 6;
+    pub const QUAD: i64 = 7;
+    pub const TETRAHEDRON: i64 = 8;
+    pub const HEXAHEDRON: i64 = 9;
+    pub const END: i64 = 54;
+}
+
+impl ElementType {
+    fn from_code(code: i64) -> Option<Self> {
+        Some(match code {
+            code::EDGE => Self::Edge,
+            code::TRIANGLE => Self::Triangle,
+            code::QUAD => Self::Quadrilateral,
+            code::TETRAHEDRON => Self::Tetrahedron,
+            code::HEXAHEDRON => Self::Hexahedron,
+            _ => return None,
+        })
+    }
+}
+
 /// a token separator
 fn is_separator(b: u8) -> bool {
     b == b' ' || b == b'\t' || b == b'\r' || b == b'\n'
@@ -176,7 +200,7 @@ where
     }
 }
 
-pub fn parse<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
+fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
     enum Read {
         T,
         L,
@@ -359,6 +383,198 @@ pub fn parse<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
         }
     }
     Ok(mesh)
+}
+
+// Taken from nschloe's meshio[0] implementation. It seems medit binary files
+// are encoded like so:
+//
+//     file    := magic version *field
+//     magic   := %x01  ; magic byte, to tell whether the file is encoded in
+//                      ; little- or big-endian.
+//     version := %x01-04  ; sets the size of ints, floats and bitpos
+//     field   := code next *1( count )  values
+//     code    := key    ; %x03 for dimension, %x04 for vertices, etc.
+//     next    := bitpos ; the bit position of the next field code in the file
+//     count   := int    ; the number of values that follows
+//     values  := ...    ; depends on the field. For the dimension, it's a key,
+//                       ; for vertices it's a list of floats and ints.
+//     key     := i32       ; type for codes and the version
+//     bitpos  := i32 / i64 ; depends on the file version
+//     int     := i32 / i64 ; depends on the file version
+//     float   := f32 / f64 ; depends on the file version
+//
+// [0] https://github.com/nschloe/meshio
+fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
+    let mut magic = [0; 4];
+    input.read_exact(&mut magic)?;
+    let magic = u32::from_le_bytes(magic);
+    let little_endian = if magic == 1 {
+        true
+    } else if magic == 1 << 24 {
+        false
+    } else {
+        return Err(Error {
+            kind: ErrorKind::UnexpectedToken {
+                found: magic.to_string(),
+                expected: "1".to_string(),
+            },
+            lineno: 0,
+        });
+    };
+
+    macro_rules! up {
+        ( i32 ) => {
+            i64
+        };
+        ( i64 ) => {
+            i64
+        };
+        ( f32 ) => {
+            f64
+        };
+        ( f64 ) => {
+            f64
+        };
+    }
+    macro_rules! read_fn {
+        ( $little_endian:expr, $type_:ident ) => {
+            if $little_endian {
+                |input: &mut R| -> io::Result<up!($type_)> {
+                    let mut buf = [0; std::mem::size_of::<$type_>()];
+                    input.read_exact(&mut buf)?;
+                    Ok($type_::from_le_bytes(buf) as up!($type_))
+                }
+            } else {
+                |input: &mut R| -> io::Result<up!($type_)> {
+                    let mut buf = [0; std::mem::size_of::<$type_>()];
+                    input.read_exact(&mut buf)?;
+                    Ok($type_::from_be_bytes(buf) as up!($type_))
+                }
+            }
+        };
+    }
+
+    let read_key = read_fn!(little_endian, i32);
+
+    let version = read_key(&mut input)?;
+    let read_int;
+    let read_float;
+    let read_pos;
+    match version {
+        1 => {
+            read_int = read_fn!(little_endian, i32);
+            read_float = read_fn!(little_endian, f32);
+            read_pos = read_fn!(little_endian, i32);
+        }
+        2 => {
+            read_int = read_fn!(little_endian, i32);
+            read_float = read_fn!(little_endian, f64);
+            read_pos = read_fn!(little_endian, i32);
+        }
+        3 => {
+            read_int = read_fn!(little_endian, i32);
+            read_float = read_fn!(little_endian, f64);
+            read_pos = read_fn!(little_endian, i64);
+        }
+        4 => {
+            read_int = read_fn!(little_endian, i64);
+            read_float = read_fn!(little_endian, f64);
+            read_pos = read_fn!(little_endian, i64);
+        }
+        _ => {
+            return Err(Error {
+                kind: ErrorKind::UnexpectedToken {
+                    found: version.to_string(),
+                    expected: "4".to_string(),
+                },
+                lineno: 0,
+            })
+        }
+    }
+
+    let dimension_code = read_key(&mut input)?;
+    if dimension_code != code::DIMENSION {
+        return Err(Error {
+            kind: ErrorKind::UnexpectedToken {
+                found: dimension_code.to_string(),
+                expected: "3".to_string(),
+            },
+            lineno: 0,
+        });
+    }
+
+    let _ = read_pos(&mut input)?;
+
+    let dimension = read_key(&mut input)? as usize;
+    let mut mesh = Mesh {
+        dimension,
+        ..Mesh::default()
+    };
+
+    loop {
+        let code = match read_key(&mut input) {
+            Ok(v) => v,
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
+            Err(err) => return Err(err.into()),
+        };
+        match code {
+            code::END => break,
+            code::VERTEX => {
+                let _ = read_pos(&mut input)?;
+                let vertex_count = read_int(&mut input)? as usize;
+                mesh.coordinates = Vec::with_capacity(vertex_count * dimension);
+                mesh.node_refs = Vec::with_capacity(vertex_count);
+                for _ in 0..vertex_count {
+                    for _ in 0..dimension {
+                        mesh.coordinates.push(read_float(&mut input)?);
+                    }
+                    mesh.node_refs.push(read_int(&mut input)? as isize);
+                }
+            }
+            code => {
+                let element_type = match ElementType::from_code(code) {
+                    Some(v) => v,
+                    None => {
+                        return Err(Error {
+                            kind: ErrorKind::UnexpectedToken {
+                                found: code.to_string(),
+                                expected: "54".to_string(),
+                            },
+                            lineno: 0,
+                        })
+                    }
+                };
+                let _ = read_pos(&mut input)?;
+                let element_count = read_int(&mut input)? as usize;
+                let nodes_per_element = element_type.node_count();
+                let mut nodes = Vec::with_capacity(nodes_per_element * element_count);
+                let mut refs = Vec::with_capacity(element_count);
+                for _ in 0..element_count {
+                    for _ in 0..nodes_per_element {
+                        nodes.push(read_int(&mut input)? as usize);
+                    }
+                    refs.push(read_int(&mut input)? as isize);
+                }
+                mesh.topology.push((element_type, nodes, refs));
+            }
+        }
+    }
+
+    Ok(mesh)
+}
+
+fn parse<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
+    let buf = input.fill_buf()?;
+    if buf.len() < 4 {
+        return Err(Error::from(io::ErrorKind::UnexpectedEof));
+    }
+    let binary_magic = &buf[0..4];
+    let is_binary = binary_magic == [1, 0, 0, 0] || binary_magic == [0, 0, 0, 1];
+    if is_binary {
+        parse_binary(input)
+    } else {
+        parse_ascii(input)
+    }
 }
 
 impl Mesh {
