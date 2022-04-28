@@ -1,12 +1,9 @@
 use super::Error;
 use crate::algorithms::recursive_bisection::work_share;
 use crossbeam_queue::ArrayQueue;
-use rand::Rng;
 use rayon::iter::IndexedParallelIterator as _;
-use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
-use rayon::slice::ParallelSlice;
 use sprs::CsMatView;
 use std::cmp;
 use std::mem;
@@ -14,7 +11,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::Mutex;
 
 struct Defer<F>(Option<F>)
 where
@@ -141,29 +137,7 @@ where
 
     let (items_per_thread, thread_count) =
         work_share(partition.len(), rayon::current_num_threads());
-    let compute_cut =
-        || {
-            let span = tracing::info_span!("compute cut");
-            let _enter = span.enter();
 
-            partition
-                .par_chunks(items_per_thread)
-                .enumerate()
-                .map(|(start_idx, vertex_chunk)| {
-                    let cut_chunk = ArrayQueue::new(items_per_thread);
-                    vertex_chunk
-                        .iter()
-                        .zip(start_idx * items_per_thread..)
-                        .filter(|(initial_part, vertex)| {
-                            adjacency.outer_view(*vertex).unwrap().iter().any(
-                                |(neighbor, _edge_weight)| partition[neighbor] != **initial_part,
-                            )
-                        })
-                        .for_each(|(_, vertex)| cut_chunk.push(vertex).unwrap());
-                    cut_chunk
-                })
-                .collect::<Vec<_>>()
-        };
     let compute_part_weights = || {
         let span = tracing::info_span!("compute part_weights and max_part_weight");
         let _enter = span.enter();
@@ -179,10 +153,16 @@ where
         // Enforce part weights to be below this value.
         let max_part_weight = match max_imbalance {
             Some(max_imbalance) => {
+                let max_imbalance = max_imbalance / thread_count as f64;
                 let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
                 W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
             }
-            None => *part_weights.iter().max_by(partial_cmp).unwrap(),
+            None => {
+                let max_part_weight = *part_weights.iter().max_by(partial_cmp).unwrap();
+                max_part_weight
+                    + (max_part_weight + max_part_weight - total_weight)
+                        / W::from_usize(2 * thread_count).unwrap()
+            }
         };
         (total_weight, part_weights[0], max_part_weight)
     };
@@ -220,139 +200,132 @@ where
             .collect::<Vec<AtomicBool>>()
     };
 
-    let (cuts, ((total_weight, part0_weight, max_part_weight), (gains, locks))) =
-        rayon::join(compute_cut, || {
-            rayon::join(compute_part_weights, || {
-                rayon::join(compute_gains, compute_locks)
-            })
+    let ((total_weight, part0_weight, max_part_weight), (gains, locks)) =
+        rayon::join(compute_part_weights, || {
+            rayon::join(compute_gains, compute_locks)
         });
 
-    let span = tracing::info_span!("compute cut, gains and locks");
-    let enter = span.enter();
-
-    mem::drop(enter);
-    let span = tracing::info_span!("doing moves");
-    let _enter = span.enter();
-
-    let max_part_weight =
-        part0_weight + (max_part_weight - part0_weight) / W::from_usize(thread_count).unwrap();
-    let part0_weight = (0..thread_count)
-        .map(|_| Mutex::new(part0_weight))
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+    let stop = AtomicBool::new(false);
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
-
     let metadata = AtomicMetadata::default();
-    (0..max_moves)
-        .into_par_iter()
-        .try_fold(Metadata::default, |mut metadata, _| {
-            let thread_idx = rayon::current_thread_index().unwrap() % thread_count;
-            let mut rng = rand::thread_rng();
+    let global_metadata = &metadata;
 
-            let (moved_vertex, move_gain, initial_part, _lock) = loop {
-                let vertex = match cuts[thread_idx].pop() {
-                    Some(v) => {
-                        metadata.pop_from_self_count += 1;
-                        v
-                    }
-                    None => match cuts[rng.gen_range(0..thread_count)].pop() {
-                        Some(v) => {
-                            metadata.pop_from_others_count += 1;
-                            v
-                        }
-                        None => {
-                            return Err(metadata);
-                        }
-                    },
-                };
-                let locked = locks[vertex]
-                    .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                    .is_err();
-                if locked {
-                    metadata.locked_count += 1;
-                    continue;
-                }
-                let lock_guard = defer({
-                    let locks = &locks;
-                    move || locks[vertex].store(false, Ordering::Release)
-                });
-
-                let initial_part = partition[vertex].load(Ordering::Relaxed);
-                let target_part = 1 - initial_part;
-
-                let gain = gains[vertex].load(Ordering::Relaxed);
-                if gain <= 0 {
-                    // Don't push it back now, it will when its gain is updated
-                    // positively (due to a neighbor moving).
-                    metadata.no_gain_count += 1;
-                    continue;
-                }
-
-                let raced = adjacency
-                    .outer_view(vertex)
-                    .unwrap()
+    rayon::in_place_scope(|s| {
+        for (i, vertex_chunk) in partition.chunks(items_per_thread).enumerate() {
+            let gains = &gains;
+            let locks = &locks;
+            let stop = &stop;
+            s.spawn(move |_| {
+                let cut = ArrayQueue::new(items_per_thread);
+                vertex_chunk
                     .iter()
-                    .any(|(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire));
-                if raced {
-                    cuts[thread_idx].push(vertex).unwrap();
-                    metadata.race_count += 1;
-                    continue;
-                }
+                    .zip(i * items_per_thread..)
+                    .filter(|(initial_part, vertex)| {
+                        let initial_part = initial_part.load(Ordering::Relaxed);
+                        adjacency.outer_view(*vertex).unwrap().iter().any(
+                            |(neighbor, _edge_weight)| {
+                                partition[neighbor].load(Ordering::Relaxed) != initial_part
+                            },
+                        )
+                    })
+                    .for_each(|(_, vertex)| cut.push(vertex).unwrap());
+                let mut thread_part0_weight = part0_weight;
 
-                let weight = weights[vertex];
-                let mut part0_weight = part0_weight[thread_idx].try_lock().unwrap();
-                let target_part_weight = weight
-                    + if target_part == 0 {
-                        *part0_weight
-                    } else {
-                        total_weight - *part0_weight
+                let mut thread_metadata = Metadata::default();
+                'thread_loop: while !stop.load(Ordering::Relaxed)
+                    && thread_metadata.move_count < max_moves / thread_count
+                {
+                    let (moved_vertex, move_gain, initial_part, _lock) = loop {
+                        let vertex = match cut.pop() {
+                            Some(v) => {
+                                thread_metadata.pop_from_self_count += 1;
+                                v
+                            }
+                            None => {
+                                break 'thread_loop;
+                            }
+                        };
+                        let locked = locks[vertex]
+                            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                            .is_err();
+                        if locked {
+                            thread_metadata.locked_count += 1;
+                            continue;
+                        }
+                        let lock_guard = defer({
+                            let locks = &locks;
+                            move || locks[vertex].store(false, Ordering::Release)
+                        });
+
+                        let initial_part = partition[vertex].load(Ordering::Relaxed);
+                        let target_part = 1 - initial_part;
+
+                        let gain = gains[vertex].load(Ordering::Relaxed);
+                        if gain <= 0 {
+                            // Don't push it back now, it will when its gain is updated
+                            // positively (due to a neighbor moving).
+                            thread_metadata.no_gain_count += 1;
+                            continue;
+                        }
+
+                        let raced = adjacency.outer_view(vertex).unwrap().iter().any(
+                            |(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire),
+                        );
+                        if raced {
+                            cut.push(vertex).unwrap();
+                            thread_metadata.race_count += 1;
+                            continue;
+                        }
+
+                        let weight = weights[vertex];
+                        let target_part_weight = weight
+                            + if target_part == 0 {
+                                thread_part0_weight
+                            } else {
+                                total_weight - thread_part0_weight
+                            };
+                        if max_part_weight < target_part_weight {
+                            // TODO fix infinite loops
+                            //cut.push(vertex).unwrap();
+                            thread_metadata.bad_balance_count += 1;
+                            continue;
+                        }
+
+                        thread_part0_weight = if initial_part == 0 {
+                            thread_part0_weight - weight
+                        } else {
+                            thread_part0_weight + weight
+                        };
+
+                        break (vertex, gain, initial_part, lock_guard);
                     };
-                if max_part_weight < target_part_weight {
-                    // TODO fix infinite loops
-                    //cut.push(vertex).unwrap();
-                    metadata.bad_balance_count += 1;
-                    continue;
-                }
 
-                *part0_weight = if initial_part == 0 {
-                    *part0_weight - weight
-                } else {
-                    *part0_weight + weight
-                };
+                    thread_metadata.move_count += 1;
+                    thread_metadata.edge_cut_gain += move_gain;
 
-                break (vertex, gain, initial_part, lock_guard);
-            };
+                    let target_part = 1 - initial_part;
+                    partition[moved_vertex].store(target_part, Ordering::Relaxed);
+                    gains[moved_vertex].store(-move_gain, Ordering::Relaxed);
 
-            metadata.move_count += 1;
-            metadata.edge_cut_gain += move_gain;
-
-            let target_part = 1 - initial_part;
-            partition[moved_vertex].store(target_part, Ordering::Relaxed);
-            gains[moved_vertex].store(-move_gain, Ordering::Relaxed);
-
-            for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
-                if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                    let old_gain = gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
-                    if 0 <= old_gain + 2 * edge_weight {
-                        cuts[thread_idx].push(neighbor).unwrap();
+                    for (neighbor, edge_weight) in
+                        adjacency.outer_view(moved_vertex).unwrap().iter()
+                    {
+                        if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                            let old_gain =
+                                gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
+                            if 0 <= old_gain + 2 * edge_weight {
+                                cut.push(neighbor).unwrap();
+                            }
+                        } else {
+                            gains[neighbor].fetch_sub(2 * edge_weight, Ordering::Relaxed);
+                        }
                     }
-                } else {
-                    gains[neighbor].fetch_sub(2 * edge_weight, Ordering::Relaxed);
                 }
-            }
-
-            Ok(metadata)
-        })
-        .try_for_each(|mdpart| {
-            let err = mdpart.is_err();
-            let (Ok(mdpart) | Err(mdpart)) = mdpart;
-            metadata.add(mdpart);
-            if err {
-                Some(())
-            } else {
-                None
-            }
-        });
+                stop.store(true, Ordering::Relaxed);
+                global_metadata.add(thread_metadata);
+            });
+        }
+    });
 
     metadata.into()
 }
