@@ -66,6 +66,8 @@ pub struct Metadata {
     no_gain_count: usize,
     /// Number of times threads have poped a vertex that would disrupt balance.
     bad_balance_count: usize,
+    /// Number of vertices distributed to each thread at the start of the run.
+    vertices_per_thread: usize,
 }
 
 #[derive(Default)]
@@ -78,6 +80,7 @@ struct AtomicMetadata {
     locked_count: AtomicUsize,
     no_gain_count: AtomicUsize,
     bad_balance_count: AtomicUsize,
+    vertices_per_thread: AtomicUsize,
 }
 
 impl AtomicMetadata {
@@ -96,6 +99,8 @@ impl AtomicMetadata {
             .fetch_add(m.no_gain_count, Ordering::Relaxed);
         self.bad_balance_count
             .fetch_add(m.bad_balance_count, Ordering::Relaxed);
+        self.vertices_per_thread
+            .fetch_add(m.vertices_per_thread, Ordering::Relaxed);
     }
 }
 
@@ -110,6 +115,7 @@ impl From<AtomicMetadata> for Metadata {
             locked_count: a.locked_count.load(Ordering::Relaxed),
             no_gain_count: a.no_gain_count.load(Ordering::Relaxed),
             bad_balance_count: a.bad_balance_count.load(Ordering::Relaxed),
+            vertices_per_thread: a.vertices_per_thread.load(Ordering::Relaxed),
         }
     }
 }
@@ -233,6 +239,9 @@ where
         })
     });
 
+    let span = tracing::info_span!("doing moves");
+    let _enter = span.enter();
+
     let stop = AtomicBool::new(false);
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
     let metadata = AtomicMetadata::default();
@@ -343,7 +352,9 @@ where
         }
     });
 
-    metadata.into()
+    let mut metadata = Metadata::from(metadata);
+    metadata.vertices_per_thread = items_per_thread;
+    metadata
 }
 
 #[derive(Debug, Clone, Copy, Default)]
