@@ -2,6 +2,7 @@ use super::Error;
 use crate::algorithms::recursive_bisection::work_share;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelExtend;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
 use std::cmp;
@@ -10,6 +11,166 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+
+use std::collections::LinkedList;
+struct VecListConsumer;
+struct VecListFolder<T>(Vec<T>);
+struct VecListReducer;
+
+impl<T> rayon::iter::plumbing::Consumer<T> for VecListConsumer
+where
+    T: Clone + Send,
+{
+    type Folder = VecListFolder<T>;
+    type Reducer = VecListReducer;
+    type Result = LinkedList<Vec<T>>;
+
+    fn split_at(self, _index: usize) -> (Self, Self, Self::Reducer) {
+        (Self, Self, VecListReducer)
+    }
+
+    fn into_folder(self) -> Self::Folder {
+        VecListFolder(Vec::with_capacity(4096))
+    }
+
+    fn full(&self) -> bool {
+        false
+    }
+}
+
+impl<T> rayon::iter::plumbing::UnindexedConsumer<T> for VecListConsumer
+where
+    T: Clone + Send,
+{
+    fn split_off_left(&self) -> Self {
+        Self
+    }
+
+    fn to_reducer(&self) -> Self::Reducer {
+        VecListReducer
+    }
+}
+
+impl<T> rayon::iter::plumbing::Folder<T> for VecListFolder<T>
+where
+    T: Send,
+{
+    type Result = LinkedList<Vec<T>>;
+
+    fn consume(mut self, item: T) -> Self {
+        self.0.push(item);
+        self
+    }
+
+    fn consume_iter<I>(mut self, iter: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        self.0.extend(iter);
+        self
+    }
+
+    fn complete(self) -> Self::Result {
+        let mut list = LinkedList::new();
+        let vec = self.0;
+        if !vec.is_empty() {
+            list.push_back(vec);
+        }
+        list
+    }
+
+    fn full(&self) -> bool {
+        false
+    }
+}
+
+impl<T> rayon::iter::plumbing::Reducer<LinkedList<Vec<T>>> for VecListReducer
+where
+    T: Clone,
+{
+    fn reduce(
+        self,
+        mut left: LinkedList<Vec<T>>,
+        mut right: LinkedList<Vec<T>>,
+    ) -> LinkedList<Vec<T>> {
+        // Try and reduce the number of vecs each list has, by merging them
+        // while they don't hold 4096 elements.
+        while let Some(mut vec_left) = left.pop_front() {
+            let old_len = vec_left.len();
+            while let Some(mut vec_right) = right.pop_front() {
+                if vec_left.capacity() < vec_left.len() + vec_right.len() {
+                    right.push_back(vec_right);
+                    break;
+                }
+                vec_left.extend_from_slice(&mut vec_right);
+            }
+            let new_len = vec_left.len();
+            left.push_back(vec_left);
+            if new_len == old_len {
+                break;
+            }
+        }
+        left.append(&mut right);
+        left
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+struct VecList<T> {
+    inner: LinkedList<Vec<T>>,
+}
+
+impl<T> ParallelExtend<T> for VecList<T>
+where
+    T: Clone + Send,
+{
+    fn par_extend<I>(&mut self, par_iter: I)
+    where
+        I: rayon::iter::IntoParallelIterator<Item = T>,
+    {
+        let mut extension = par_iter.into_par_iter().drive_unindexed(VecListConsumer);
+        self.inner.append(&mut extension);
+    }
+}
+
+impl<T> rayon::iter::FromParallelIterator<T> for VecList<T>
+where
+    T: Default + Clone + Send,
+{
+    fn from_par_iter<I>(par_iter: I) -> Self
+    where
+        I: rayon::iter::IntoParallelIterator<Item = T>,
+    {
+        let mut list = VecList::default();
+        list.par_extend(par_iter);
+        list
+    }
+}
+
+impl<T> VecList<T> {
+    pub fn len(&self) -> usize {
+        self.inner.iter().map(|list| list.len()).sum()
+    }
+
+    pub fn chunks(&self, chunk_size: usize) -> impl Iterator<Item = Vec<&'_ [T]>> + '_ {
+        let mut list_iter = self.inner.iter();
+        let mut cur_vec: &[T] = &[];
+        std::iter::from_fn(move || {
+            let mut chunk = Vec::new();
+            let mut chunk_size = chunk_size;
+            while chunk_size != 0 {
+                while cur_vec.is_empty() {
+                    cur_vec = list_iter.next()?;
+                }
+                let len = usize::min(cur_vec.len(), chunk_size);
+                chunk.push(&cur_vec[0..len]);
+                chunk_size -= len;
+                cur_vec = &cur_vec[len..];
+            }
+            Some(chunk)
+        })
+    }
+}
 
 struct Defer<F>(Option<F>)
 where
@@ -155,7 +316,7 @@ where
                     .any(|(neighbor, _edge_weight)| partition[neighbor] != **initial_part)
             })
             .map(|(vertex, _)| vertex)
-            .collect::<Vec<usize>>()
+            .collect::<VecList<usize>>()
     };
     let compute_part_weights = |thread_count: usize| {
         let span = tracing::info_span!("compute part_weights and max_part_weight");
@@ -253,7 +414,7 @@ where
             let locks = &locks;
             let stop = &stop;
             s.spawn(move |_| {
-                let mut cut = cut.to_vec();
+                let mut cut: Vec<usize> = cut.into_iter().flatten().cloned().collect();
                 let mut thread_part0_weight = part0_weight;
 
                 let mut thread_metadata = Metadata::default();
