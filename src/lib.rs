@@ -36,6 +36,7 @@ mod nextafter;
 mod real;
 pub mod topology;
 mod uid;
+mod work_share;
 
 pub use crate::algorithms::*;
 pub use crate::geometry::Aabb;
@@ -43,6 +44,7 @@ pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
 pub use crate::uid::uid;
+use crate::work_share::work_share;
 
 /// The `Partition` trait allows for partitioning data.
 ///
