@@ -93,24 +93,18 @@ where
         mut left: LinkedList<Vec<T>>,
         mut right: LinkedList<Vec<T>>,
     ) -> LinkedList<Vec<T>> {
-        // Try and reduce the number of vecs each list has, by merging them
-        // while they don't hold 4096 elements.
-        while let Some(mut vec_left) = left.pop_front() {
-            let old_len = vec_left.len();
-            while let Some(mut vec_right) = right.pop_front() {
-                if vec_left.capacity() < vec_left.len() + vec_right.len() {
-                    right.push_back(vec_right);
-                    break;
-                }
-                vec_left.extend_from_slice(&mut vec_right);
+        if left.len() == 1 && right.len() == 1 {
+            let mut vec_left = left.pop_front().unwrap();
+            let vec_right = right.pop_front().unwrap();
+            if vec_left.len() + vec_right.len() < vec_left.capacity() {
+                vec_left.extend_from_slice(&vec_right);
+            } else {
+                left.push_back(vec_right);
             }
-            let new_len = vec_left.len();
             left.push_back(vec_left);
-            if new_len == old_len {
-                break;
-            }
+        } else {
+            left.append(&mut right);
         }
-        left.append(&mut right);
         left
     }
 }
