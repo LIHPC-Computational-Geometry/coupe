@@ -818,9 +818,14 @@ where
 pub struct Rcb {
     /// The number of iterations of the algorithm. This will yield a partition
     /// of at most `2^num_iter` parts.
+    ///
+    /// If this equals zero, RCB will not do anything.
     pub iter_count: usize,
 
-    /// Tolerance on the normalized imbalance.
+    /// Tolerance on the normalized imbalance, for each split.  Please note that
+    /// the overall imbalance might end up above this threshold.
+    ///
+    /// Negative values are interpreted as zeroes.
     pub tolerance: f64,
 
     /// Use a faster, experimental implementation of the algorithm.
