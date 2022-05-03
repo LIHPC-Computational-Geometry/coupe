@@ -72,7 +72,8 @@ impl Mesh {
         // Nodes
         w.write_all(&i32::to_le_bytes(code::VERTEX as i32))?;
         let node_count = self.node_refs.len();
-        bitpos += 8 * node_count * (self.dimension + 1);
+        bitpos += 8 * node_count * (self.dimension + 1); // +1 for the int ref
+        bitpos += 4 + 8 + 8; // take into account the code, bitpos and node_count
         w.write_all(&i64::to_le_bytes(bitpos as i64))?;
         w.write_all(&i64::to_le_bytes(node_count as i64))?;
         for (coordinates, node_ref) in self.nodes() {
@@ -87,7 +88,8 @@ impl Mesh {
             w.write_all(&i32::to_le_bytes(element_type.code() as i32))?;
             let element_count = refs.len();
             let nodes_per_element = element_type.node_count();
-            bitpos += 8 * element_count * (nodes_per_element + 1);
+            bitpos += 8 * element_count * (nodes_per_element + 1); // +1 for the int ref
+            bitpos += 4 + 8 + 8; // take into account the code, bitpos and element_count
             w.write_all(&i64::to_le_bytes(bitpos as i64))?;
             w.write_all(&i64::to_le_bytes(element_count as i64))?;
             for (element, element_ref) in nodes.chunks(nodes_per_element).zip(refs) {
