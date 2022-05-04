@@ -882,6 +882,7 @@ fn rib<const D: usize, W>(
     points: &[PointND<D>],
     weights: W,
     n_iter: usize,
+    tolerance: f64,
 ) -> Result<(), Error>
 where
     Const<D>: DimSub<Const<1>>,
@@ -896,7 +897,7 @@ where
     let mbr = Mbr::from_points(points);
     let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
     // When the rotation is done, we just apply RCB
-    rcb(partition, points, weights, n_iter, 0.05)
+    rcb(partition, points, weights, n_iter, tolerance)
 }
 
 /// # Recursive Inertial Bisection algorithm
@@ -926,7 +927,7 @@ where
 /// let mut partition = [0; 4];
 ///
 /// // Generate a partition of 2 parts (1 split).
-/// coupe::Rib { iter_count: 1 }
+/// coupe::Rib { iter_count: 1, ..Default::default() }
 ///     .partition(&mut partition, (&points, weights))
 ///     .unwrap();
 ///
@@ -945,10 +946,14 @@ where
 /// Williams, Roy D., 1991. Performance of dynamic load balancing algorithms for
 /// unstructured mesh calculations. *Concurrency: Practice and Experience*,
 /// 3(5):457–481. <doi:10.1002/cpe.4330030502>.
+#[derive(Default)]
 pub struct Rib {
     /// The number of iterations of the algorithm. This will yield a partition
     /// of at most `2^num_iter` parts.
     pub iter_count: usize,
+
+    /// Same meaning as [`Rcb::tolerance`].
+    pub tolerance: f64,
 }
 
 impl<'a, const D: usize, W> crate::Partition<(&'a [PointND<D>], W)> for Rib
@@ -970,7 +975,7 @@ where
         part_ids: &mut [usize],
         (points, weights): (&'a [PointND<D>], W),
     ) -> Result<Self::Metadata, Self::Error> {
-        rib(part_ids, points, weights, self.iter_count)
+        rib(part_ids, points, weights, self.iter_count, self.tolerance)
     }
 }
 
