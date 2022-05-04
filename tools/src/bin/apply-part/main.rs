@@ -38,12 +38,10 @@ fn main() -> Result<()> {
         mesh_io::partition::read(partition_file).context("failed to read partition file")?;
 
     let mesh_dimension = mesh.dimension();
-    for ((element_type, _nodes, element_ref), part) in mesh.elements_mut().zip(parts) {
-        if element_type.dimension() != mesh_dimension {
-            continue;
-        }
-        *element_ref = part as isize;
-    }
+    mesh.elements_mut()
+        .filter(|(element_type, _, _)| element_type.dimension() == mesh_dimension)
+        .zip(parts)
+        .for_each(|((_, _, element_ref), part)| *element_ref = part as isize);
 
     coupe_tools::write_mesh(&mesh, format)?;
 

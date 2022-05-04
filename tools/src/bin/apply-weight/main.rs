@@ -7,12 +7,10 @@ use std::io;
 
 fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
     let mesh_dimension = mesh.dimension();
-    for ((element_type, _nodes, element_ref), weight) in mesh.elements_mut().zip(weights) {
-        if element_type.dimension() != mesh_dimension {
-            continue;
-        }
-        *element_ref = weight;
-    }
+    mesh.elements_mut()
+        .filter(|(element_type, _, _)| element_type.dimension() == mesh_dimension)
+        .zip(weights)
+        .for_each(|((_, _, element_ref), weight)| *element_ref = weight);
 }
 
 fn main() -> Result<()> {
