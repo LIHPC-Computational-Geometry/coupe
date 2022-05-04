@@ -328,9 +328,21 @@ where
 /// Automation Conference*.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FiducciaMattheyses {
+    /// If `Some(max)` then the algorithm will not do more than `max` passes.
+    /// If `None` then it will stop on the first non-fruitful pass.
     pub max_passes: Option<usize>,
+
+    /// If `Some(max)` then the algorithm will not do more than `max` moves per
+    /// pass.  If `None` then passes will stop when no more vertices yield a
+    /// positive gain, and no more bad moves can be made.
     pub max_moves_per_pass: Option<usize>,
+
+    /// If `Some(max)` then the algorithm will not move vertices in ways that
+    /// the imbalance goes over `max`.  If `None`, then it will default to the
+    /// imbalance of the input partition.
     pub max_imbalance: Option<f64>,
+
+    /// How many moves that yield negative gains can be made before a pass ends.
     pub max_bad_move_in_a_row: usize,
 }
 
