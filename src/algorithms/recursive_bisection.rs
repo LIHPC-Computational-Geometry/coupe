@@ -889,7 +889,7 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Copy + std::fmt::Debug + Default + Sync,
     W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
     W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
@@ -897,7 +897,7 @@ where
     let mbr = Mbr::from_points(points);
     let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
     // When the rotation is done, we just apply RCB
-    rcb(partition, points, weights, n_iter, tolerance)
+    simple_rcb(partition, points, weights, n_iter, tolerance)
 }
 
 /// # Recursive Inertial Bisection algorithm
@@ -962,7 +962,7 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default,
+    W::Item: Copy + std::fmt::Debug + Default + Sync,
     W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
     W::Item: num::ToPrimitive,
     W::Iter: rayon::iter::IndexedParallelIterator,
