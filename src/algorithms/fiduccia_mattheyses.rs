@@ -140,7 +140,7 @@ where
         // enter pass loop
         // The number of iteration of the pas loop is at most the
         // number of vertices in the mesh. However, if too many subsequent
-        // bad flips are performed, the loop will break early
+        // bad moves are performed, the loop will break early
         for move_num in 0..max_moves_per_pass {
             let (moved_vertex, move_gain) = match gain_to_vertex
                 .iter()
@@ -260,7 +260,7 @@ where
 /// This algorithm repeats an iterative pass during which a set of graph
 /// vertices are assigned to a new part, reducing the overall cutsize of the
 /// partition. As opposed to the Kernighan-Lin algorithm, during each pass
-/// iteration, only one vertex is flipped at a time. The algorithm thus does not
+/// iteration, only one vertex is moved at a time. The algorithm thus does not
 /// preserve partition weights balance and may produce an unbalanced partition.
 ///
 /// # Example
@@ -329,7 +329,7 @@ where
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FiducciaMattheyses {
     pub max_passes: Option<usize>,
-    pub max_flips_per_pass: Option<usize>,
+    pub max_moves_per_pass: Option<usize>,
     pub max_imbalance: Option<f64>,
     pub max_bad_move_in_a_row: usize,
 }
@@ -377,7 +377,7 @@ where
             weights,
             adjacency,
             self.max_passes.unwrap_or(usize::MAX),
-            self.max_flips_per_pass.unwrap_or(usize::MAX),
+            self.max_moves_per_pass.unwrap_or(usize::MAX),
             self.max_imbalance,
             self.max_bad_move_in_a_row,
         );
