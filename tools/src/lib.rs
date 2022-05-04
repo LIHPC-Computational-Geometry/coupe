@@ -307,15 +307,15 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
             if max_passes == Some(0) {
                 max_passes = None;
             }
-            let mut max_flips_per_pass = parse(args.next()).transpose()?;
-            if max_flips_per_pass == Some(0) {
-                max_flips_per_pass = None;
+            let mut max_moves_per_pass = parse(args.next()).transpose()?;
+            if max_moves_per_pass == Some(0) {
+                max_moves_per_pass = None;
             }
             Box::new(coupe::FiducciaMattheyses {
                 max_imbalance,
                 max_bad_move_in_a_row,
                 max_passes,
-                max_flips_per_pass,
+                max_moves_per_pass,
             })
         }
         "kl" => Box::new(coupe::KernighanLin {

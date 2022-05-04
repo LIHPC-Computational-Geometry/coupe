@@ -135,7 +135,7 @@ These algorithms improve partitions using the topology of the mesh.
 		- MAX_IMBALANCE (default: initial imbalance)
 		- MAX_BAD_MOVES_IN_A_ROW (default: 0)
 		- MAX_PASSES (default: 0, i.e. UINTPTR_MAX)
-		- MAX_FLIPS_PER_PASS (default: 0, i.e. UINTPTR_MAX)
+		- MAX_MOVES_PER_PASS (default: 0, i.e. UINTPTR_MAX)
 
 	*kl*,[MAX_BAD_MOVES_IN_A_ROW=1]
 		Kernighan-Lin algorithm
