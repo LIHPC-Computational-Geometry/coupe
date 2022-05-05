@@ -22,7 +22,7 @@ run_algorithm() {
 	echo "$out_svg"
 
 	sayfile Computing "$partition_file"
-	mesh-part --mesh "$mesh_file" --weights "$weight_file" $algorithm --verbose \
+	mesh-part --mesh "$mesh_file" --weights "$weight_file" --edge-weights linear $algorithm --verbose \
 			>"$partition_file" \
 			2>"$log_file" \
 			|| {
