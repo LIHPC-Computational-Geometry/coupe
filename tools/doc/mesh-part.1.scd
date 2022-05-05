@@ -37,6 +37,13 @@ See *PARTITION FILE* for a description of the output format of mesh-part.
 	*ALGORITHMS* for information on the _spec_ argument and a list of supported
 	algorithms.
 
+*-E, --edge-weights* <variant>
+	Change how edge weights are set.  Possible values are:
+
+	- _uniform_ (default): all edges have the same weight,
+	- _linear_: edge weights are the sum of the vertex weights,
+	- _sqrt_: edge weights are the sum of the vertex weights' square roots.
+
 *-m, --mesh* <path>
 	Required.  Partition the given mesh file.
 
@@ -55,13 +62,6 @@ Options specific to *part-bench*:
 *-e, --efficiency*
 	Measure strong scaling by running the algorithm with different amounts of
 	threads.
-
-*-E, --edge-weights* <variant>
-	Change how edge weights are set.  Possible values are:
-
-	- _uniform_ (default): all edges have the same weight,
-	- _linear_: edge weights are the sum of the vertex weights,
-	- _sqrt_: edge weights are the sum of the vertex weights' square roots.
 
 *-b, --baseline* <name>
 *-s, --save-baseline* <name>
