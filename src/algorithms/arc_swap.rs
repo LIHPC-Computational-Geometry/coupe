@@ -1,5 +1,4 @@
 use super::Error;
-use crate::algorithms::recursive_bisection::work_share;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelExtend;
@@ -381,7 +380,7 @@ where
         rayon::join(compute_locks, || {
             let cut = compute_cut();
             let (items_per_thread, thread_count) =
-                work_share(cut.len(), rayon::current_num_threads());
+                crate::work_share(cut.len(), rayon::current_num_threads());
             let (total_weight, part0_weight, max_part_weight) = compute_part_weights(thread_count);
             (
                 cut,
