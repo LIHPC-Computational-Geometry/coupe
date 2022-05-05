@@ -339,30 +339,6 @@ where
         };
         (total_weight, part_weights[0], max_part_weight)
     };
-    let compute_gains = || {
-        let span = tracing::info_span!("compute gains");
-        let _enter = span.enter();
-
-        partition
-            .par_iter()
-            .enumerate()
-            .map(|(vertex, initial_part)| {
-                let gain: i64 = adjacency
-                    .outer_view(vertex)
-                    .unwrap()
-                    .iter()
-                    .map(|(neighbor, edge_weight)| {
-                        if partition[neighbor] == *initial_part {
-                            -*edge_weight
-                        } else {
-                            *edge_weight
-                        }
-                    })
-                    .sum();
-                AtomicI64::new(gain)
-            })
-            .collect::<Vec<AtomicI64>>()
-    };
     let compute_locks = || {
         let span = tracing::info_span!("compute locks");
         let _enter = span.enter();
@@ -373,10 +349,7 @@ where
             .collect::<Vec<AtomicBool>>()
     };
 
-    let (
-        gains,
-        (locks, (cut, items_per_thread, thread_count, total_weight, part0_weight, max_part_weight)),
-    ) = rayon::join(compute_gains, || {
+    let (locks, (cut, items_per_thread, thread_count, total_weight, part0_weight, max_part_weight)) =
         rayon::join(compute_locks, || {
             let cut = compute_cut();
             let (items_per_thread, thread_count) =
@@ -390,8 +363,7 @@ where
                 part0_weight,
                 max_part_weight,
             )
-        })
-    });
+        });
 
     let span = tracing::info_span!("doing moves");
     let _enter = span.enter();
@@ -403,7 +375,6 @@ where
 
     rayon::in_place_scope(|s| {
         for cut in cut.chunks(items_per_thread) {
-            let gains = &gains;
             let locks = &locks;
             let stop = &stop;
             s.spawn(move |_| {
@@ -438,8 +409,18 @@ where
 
                         let initial_part = partition[vertex].load(Ordering::Relaxed);
                         let target_part = 1 - initial_part;
+                        let neighbors = adjacency.outer_view(vertex).unwrap();
 
-                        let gain = gains[vertex].load(Ordering::Relaxed);
+                        let gain: i64 = neighbors
+                            .iter()
+                            .map(|(neighbor, edge_weight)| {
+                                if partition[neighbor].load(Ordering::Relaxed) == initial_part {
+                                    -*edge_weight
+                                } else {
+                                    *edge_weight
+                                }
+                            })
+                            .sum();
                         if gain <= 0 {
                             // Don't push it back now, it will when its gain is updated
                             // positively (due to a neighbor moving).
@@ -447,9 +428,9 @@ where
                             continue;
                         }
 
-                        let raced = adjacency.outer_view(vertex).unwrap().iter().any(
-                            |(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire),
-                        );
+                        let raced = neighbors.iter().any(|(neighbor, _edge_weight)| {
+                            locks[neighbor].load(Ordering::Acquire)
+                        });
                         if raced {
                             cut.push(vertex);
                             thread_metadata.race_count += 1;
@@ -484,19 +465,25 @@ where
 
                     let target_part = 1 - initial_part;
                     partition[moved_vertex].store(target_part, Ordering::Relaxed);
-                    gains[moved_vertex].store(-move_gain, Ordering::Relaxed);
 
-                    for (neighbor, edge_weight) in
+                    for (neighbor, _edge_weight) in
                         adjacency.outer_view(moved_vertex).unwrap().iter()
                     {
-                        if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                            let old_gain =
-                                gains[neighbor].fetch_add(2 * edge_weight, Ordering::Relaxed);
-                            if 0 <= old_gain + 2 * edge_weight {
-                                cut.push(neighbor);
-                            }
-                        } else {
-                            gains[neighbor].fetch_sub(2 * edge_weight, Ordering::Relaxed);
+                        let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
+                        let neighbor_gain: i64 = adjacency
+                            .outer_view(neighbor)
+                            .unwrap()
+                            .iter()
+                            .map(|(neighbor2, edge_weight)| {
+                                if partition[neighbor2].load(Ordering::Relaxed) == neighbor_part {
+                                    -*edge_weight
+                                } else {
+                                    *edge_weight
+                                }
+                            })
+                            .sum();
+                        if 0 < neighbor_gain {
+                            cut.push(neighbor);
                         }
                     }
                 }
