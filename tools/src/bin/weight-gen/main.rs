@@ -1,8 +1,18 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use itertools::Itertools as _;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
+use std::cmp;
 use std::env;
 use std::io;
+
+fn partial_cmp(a: &f64, b: &f64) -> cmp::Ordering {
+    if a < b {
+        cmp::Ordering::Less
+    } else {
+        cmp::Ordering::Greater
+    }
+}
 
 #[derive(Clone, Copy)]
 #[repr(usize)]
@@ -77,12 +87,11 @@ fn apply_distribution(d: Distribution, points: &[Vec<f64>]) -> Box<dyn Fn(&[f64]
     match d {
         Distribution::Constant(value) => Box::new(move |_coordinates| value),
         Distribution::Linear(axis, from, to) => {
-            let (min, max) = points
-                .iter()
-                .map(|point| point[axis as usize])
-                .minmax()
-                .into_option()
-                .unwrap();
+            let axis_iter = points.par_iter().map(|point| point[axis as usize]);
+            let (min, max) = rayon::join(
+                || axis_iter.clone().min_by(partial_cmp).unwrap(),
+                || axis_iter.clone().max_by(partial_cmp).unwrap(),
+            );
             let alpha = (to - from) / (max - min);
             let beta = -min * alpha;
             Box::new(move |coordinates| {
