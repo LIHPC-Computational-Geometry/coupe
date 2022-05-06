@@ -31,6 +31,8 @@ pub fn edge_cut<T>(adjacency: CsMatView<'_, T>, partition: &[usize]) -> T
 where
     T: Copy + Sum + Send + Sync + PartialEq,
 {
+    debug_assert_eq!(adjacency.shape(), (partition.len(), partition.len()));
+
     let indptr = adjacency.indptr().into_raw_storage();
     let indices = adjacency.indices();
     let data = adjacency.data();
@@ -54,6 +56,8 @@ where
 }
 
 pub fn lambda_cut<T>(adjacency: CsMatView<'_, T>, partition: &[usize]) -> usize {
+    debug_assert_eq!(adjacency.shape(), (partition.len(), partition.len()));
+
     let indptr = adjacency.indptr().into_raw_storage();
     let indices = adjacency.indices();
     indptr

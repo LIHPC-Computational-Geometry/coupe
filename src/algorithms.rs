@@ -52,23 +52,52 @@ pub enum Error {
 
     /// When a partition improving algorithm is given more than 2 parts.
     BiPartitioningOnly,
+
+    /// Conversion between types failed.
+    Conversion {
+        src_type: &'static str,
+        dst_type: &'static str,
+    },
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NotFound => write!(f, "no partition found"),
-            Error::InputLenMismatch { expected, actual } => write!(
+            Self::NotFound => write!(f, "no partition found"),
+            Self::InputLenMismatch { expected, actual } => write!(
                 f,
                 "input sets don't have the same length (expected {expected} items, got {actual})",
             ),
-            Error::NegativeValues => write!(f, "input contains negative values"),
-            Error::BiPartitioningOnly => write!(f, "expected no more than two parts"),
+            Self::NegativeValues => write!(f, "input contains negative values"),
+            Self::BiPartitioningOnly => write!(f, "expected no more than two parts"),
+            Self::Conversion { src_type, dst_type } => {
+                write!(f, "failed conversion from {src_type} to {dst_type}")
+            }
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+fn try_from_f64<T>(f: f64) -> Result<T, Error>
+where
+    T: num::FromPrimitive,
+{
+    T::from_f64(f).ok_or_else(|| Error::Conversion {
+        src_type: std::any::type_name::<f64>(),
+        dst_type: std::any::type_name::<T>(),
+    })
+}
+
+fn try_to_f64<T>(t: &T) -> Result<f64, Error>
+where
+    T: num::ToPrimitive,
+{
+    T::to_f64(t).ok_or_else(|| Error::Conversion {
+        src_type: std::any::type_name::<T>(),
+        dst_type: std::any::type_name::<f64>(),
+    })
+}
 
 /// Map elements to parts randomly.
 ///
