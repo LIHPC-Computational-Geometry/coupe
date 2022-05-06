@@ -31,6 +31,7 @@ pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;
+use std::collections::TryReserveError;
 pub use vn::VnBest;
 pub use vn::VnBestWeight;
 pub use vn::VnFirst;
@@ -41,6 +42,9 @@ pub use z_curve::ZCurve;
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    /// An allocation failed, out of memory error.
+    Alloc,
+
     /// No partition that matches the given criteria could been found.
     NotFound,
 
@@ -63,6 +67,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Alloc => write!(f, "out of memory"),
             Self::NotFound => write!(f, "no partition found"),
             Self::InputLenMismatch { expected, actual } => write!(
                 f,
@@ -78,6 +83,12 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<TryReserveError> for Error {
+    fn from(_: TryReserveError) -> Self {
+        Self::Alloc
+    }
+}
 
 fn try_from_f64<T>(f: f64) -> Result<T, Error>
 where
