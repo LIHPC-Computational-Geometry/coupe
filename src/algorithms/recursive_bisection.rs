@@ -1,3 +1,4 @@
+use super::try_to_f64;
 use super::Error;
 use crate::geometry::OrientedBoundingBox;
 use crate::geometry::PointND;
@@ -188,7 +189,7 @@ fn par_rcb_split<const D: usize, W>(
     mut min: f32,
     mut max: f32,
     sum: W,
-) -> SplitResult<'_, D, W>
+) -> Result<SplitResult<'_, D, W>, Error>
 where
     W: RcbWeight,
 {
@@ -254,7 +255,7 @@ where
             // too loosely, so we let it happen once. If this happens twice,
             // then `prev_count_left` will be the equal to `count_left`.
             None if prev_count_left == count_left => {
-                return SplitResult {
+                return Ok(SplitResult {
                     left: items,
                     right: Items {
                         points: array_init(|_| &mut [][..]),
@@ -263,7 +264,7 @@ where
                     },
                     weight_left: sum,
                     split_pos: max,
-                };
+                });
             }
             None => {
                 max = split_target;
@@ -273,8 +274,8 @@ where
         };
 
         let imbalance = {
-            let ideal_weight_left = sum.to_f64().unwrap() / 2.0;
-            let weight_left = weight_left.to_f64().unwrap();
+            let ideal_weight_left = try_to_f64(&sum)? / 2.0;
+            let weight_left = try_to_f64(&weight_left)?;
             f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
         };
         if count_left == prev_count_left // there is no point between min and max
@@ -282,12 +283,12 @@ where
             || imbalance <= tolerance
         {
             let (left, right) = reorder_split(items, nearest_idx, coord);
-            return SplitResult {
+            return Ok(SplitResult {
                 left,
                 right,
                 weight_left,
                 split_pos: split_target,
-            };
+            });
         }
         prev_count_left = count_left;
 
@@ -308,11 +309,12 @@ fn rcb_recurse<const D: usize, W>(
     tolerance: f64,
     sum: W,
     bb: BoundingBox<D>,
-) where
+) -> Result<(), Error>
+where
     W: RcbWeight,
 {
     if items.parts.is_empty() {
-        return;
+        return Ok(());
     }
     if iter_count == 0 {
         let span = tracing::info_span!(
@@ -326,7 +328,7 @@ fn rcb_recurse<const D: usize, W>(
             .parts
             .into_par_iter()
             .for_each(|part| part.store(iter_id, Ordering::Relaxed));
-        return;
+        return Ok(());
     }
 
     let min = bb.p_min[coord] as f32;
@@ -336,14 +338,14 @@ fn rcb_recurse<const D: usize, W>(
         right,
         weight_left,
         split_pos,
-    } = par_rcb_split(items, coord, tolerance, min, max, sum);
+    } = par_rcb_split(items, coord, tolerance, min, max, sum)?;
 
     let mut bb_left = bb.clone();
     bb_left.p_max[coord] = split_pos as f64;
     let mut bb_right = bb;
     bb_right.p_min[coord] = split_pos as f64;
 
-    rayon::join(
+    let (left_res, right_res) = rayon::join(
         || {
             rcb_recurse(
                 left,
@@ -367,6 +369,7 @@ fn rcb_recurse<const D: usize, W>(
             )
         },
     );
+    Result::and(left_res, right_res)
 }
 
 fn rcb<const D: usize, P, W>(
@@ -429,7 +432,7 @@ where
         weights: &mut weights,
         parts: &mut atomic_partition,
     };
-    rcb_recurse(items, iter_count, 0, 0, tolerance, sum, bb);
+    rcb_recurse(items, iter_count, 0, 0, tolerance, sum, bb)?;
 
     // Part IDs must start from zero.
     let part_id_offset = *partition.par_iter().min().unwrap();
