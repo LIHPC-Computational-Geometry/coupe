@@ -31,13 +31,15 @@ impl<const D: usize> Aabb<D> {
         &self.p_max
     }
 
-    pub fn from_points(points: &[PointND<D>]) -> Self {
-        if points.len() < 2 {
-            panic!("Cannot create an Aabb from less than 2 points.");
-        }
+    pub fn from_points<P>(points: P) -> Self
+    where
+        P: IntoParallelIterator<Item = PointND<D>>,
+        P::Iter: IndexedParallelIterator,
+    {
+        let points = points.into_par_iter();
+        assert!(1 < points.len());
 
         let (min, max) = points
-            .par_iter()
             .fold_with(
                 (
                     PointND::<D>::from_element(std::f64::MAX),
@@ -219,11 +221,8 @@ impl<const D: usize> Mbr<D> {
         let vec = inertia_vector(mat);
         let base_change = householder_reflection(&vec);
         let mbr_to_aabb = base_change.try_inverse().unwrap();
-        let mapped = points
-            .par_iter()
-            .map(|p| mbr_to_aabb * p)
-            .collect::<Vec<_>>();
-        let aabb = Aabb::from_points(&mapped);
+        let mapped = points.par_iter().map(|p| mbr_to_aabb * p);
+        let aabb = Aabb::from_points(mapped);
 
         Self {
             aabb,
@@ -355,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_aabb_2d() {
-        let points = vec![
+        let points = [
             Point2D::from([1., 2.]),
             Point2D::from([0., 0.]),
             Point2D::from([3., 1.]),
@@ -363,7 +362,7 @@ mod tests {
             Point2D::from([4., 5.]),
         ];
 
-        let aabb = Aabb::from_points(&points);
+        let aabb = Aabb::from_points(points);
 
         assert_ulps_eq!(aabb.p_min, Point2D::from([0., 0.]));
         assert_ulps_eq!(aabb.p_max, Point2D::from([5., 5.]));
@@ -372,15 +371,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_aabb2d_invalid_input_1() {
-        let points: Vec<Point2D> = vec![];
-        let _aabb = Aabb::from_points(&points);
+        let _aabb = Aabb::<2>::from_points([]);
     }
 
     #[test]
     #[should_panic]
     fn test_aabb2d_invalid_input_2() {
-        let points = vec![Point2D::from([5., -9.2])];
-        let _aabb = Aabb::from_points(&points);
+        let points = [Point2D::from([5., -9.2])];
+        let _aabb = Aabb::from_points(points);
     }
 
     #[test]
@@ -515,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_aabb_3d() {
-        let points = vec![
+        let points = [
             Point3D::from([1., 2., 0.]),
             Point3D::from([0., 0., 5.]),
             Point3D::from([3., 1., 1.]),
@@ -523,7 +521,7 @@ mod tests {
             Point3D::from([4., 5., 3.]),
         ];
 
-        let aabb = Aabb::from_points(&points);
+        let aabb = Aabb::from_points(points);
 
         assert_ulps_eq!(aabb.p_min, Point3D::from([0., 0., -2.]));
         assert_ulps_eq!(aabb.p_max, Point3D::from([5., 5., 5.]));

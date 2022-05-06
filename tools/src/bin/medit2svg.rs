@@ -3,6 +3,8 @@ use anyhow::Result;
 use coupe::Point2D;
 use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
+use rayon::iter::IntoParallelRefIterator as _;
+use rayon::iter::ParallelIterator as _;
 use std::collections::HashSet;
 use std::env;
 use std::io;
@@ -225,7 +227,7 @@ where
             mesh.node_count(),
         )
     };
-    let aabb = coupe::Aabb::<2>::from_points(coordinates);
+    let aabb = coupe::Aabb::<2>::from_points(coordinates.par_iter().cloned());
     let [xmin, ymin] = <[f64; 2]>::from(*aabb.p_min());
     let [xmax, ymax] = <[f64; 2]>::from(*aabb.p_max());
     let width = xmax - xmin;
