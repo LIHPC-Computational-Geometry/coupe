@@ -1,6 +1,7 @@
 use super::try_from_f64;
 use super::try_to_f64;
 use super::Error;
+use crate::vec::VecExt as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
@@ -102,12 +103,12 @@ where
     // Maps (-max_possible_gain..=max_possible_gain) to nodes that have that gain.
     let mut gain_to_vertex = {
         let possible_gain_count = (2 * max_possible_gain + 1) as usize;
-        vec![HashSet::new(); possible_gain_count].into_boxed_slice()
+        Vec::try_filled(HashSet::new(), possible_gain_count)?.into_boxed_slice()
     };
     // Maps a gain value to its index in gain_to_vertex.
     let gain_table_idx = |gain: i64| (gain + max_possible_gain) as usize;
     // Either Some(gain) or None if the vertex is locked.
-    let mut vertex_to_gain = vec![None; partition.len()].into_boxed_slice();
+    let mut vertex_to_gain = Vec::try_filled(None, partition.len())?.into_boxed_slice();
 
     let mut moves_per_pass = Vec::new();
     let mut rewinded_moves_per_pass = Vec::new();
@@ -198,10 +199,10 @@ where
             partition[moved_vertex] = target_part;
             part_weights[initial_part] -= weights[moved_vertex];
             part_weights[target_part] += weights[moved_vertex];
-            move_history.push(Move {
+            move_history.try_push(Move {
                 vertex: moved_vertex,
                 initial_part,
-            });
+            })?;
             tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
             current_edge_cut -= move_gain;
@@ -235,8 +236,8 @@ where
             None => 0,
         };
 
-        moves_per_pass.push(move_history.len());
-        rewinded_moves_per_pass.push(move_history.len() - rewind_to);
+        moves_per_pass.try_push(move_history.len())?;
+        rewinded_moves_per_pass.try_push(move_history.len() - rewind_to)?;
 
         tracing::info!("rewinding {} moves", move_history.len() - rewind_to);
         for Move {
