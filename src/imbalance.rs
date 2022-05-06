@@ -18,6 +18,7 @@ where
     W::Item: Zero + Clone + AddAssign,
 {
     debug_assert!(*partition.par_iter().max().unwrap_or(&0) < num_parts);
+
     partition
         .par_iter()
         .zip(weights)
@@ -51,9 +52,11 @@ where
         + Sum,
 {
     debug_assert_eq!(partition.len(), weights.len());
+    debug_assert!(*partition.par_iter().max().unwrap_or(&0) < num_parts);
+
     let total_weight: T = weights.iter().cloned().sum();
-    if total_weight.is_zero() || weights.is_empty() {
-        T::zero().to_f64().unwrap()
+    if total_weight.is_zero() || weights.is_empty() || num_parts == 0 {
+        0.0
     } else {
         let ideal_part_weight = total_weight.to_f64().unwrap() / num_parts.to_f64().unwrap();
         (0..num_parts)
@@ -81,7 +84,6 @@ where
     W::Item: Zero + Sum + Copy + AddAssign + Sub<Output = W::Item> + PartialOrd,
 {
     let num_parts = targets.len();
-    debug_assert!(*partition.iter().max().unwrap_or(&0) < num_parts);
     compute_parts_load(partition, num_parts, weights)
         .iter()
         .zip(targets)
