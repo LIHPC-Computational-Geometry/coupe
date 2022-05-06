@@ -22,14 +22,15 @@ fn graph_growth(
     let indices = indices
         .as_slice()
         .choose_multiple(&mut rng, num_parts)
+        .cloned()
         .collect::<Vec<_>>();
 
     // tracks if each node has already been assigned to a partition or not
     let mut assigned = vec![false; weights.len()];
-    let unique_ids: Vec<_> = indices.iter().map(|_| crate::uid()).collect();
+    let unique_ids = indices.clone();
 
     // assign initial nodes
-    for (idx, id) in indices.iter().cloned().zip(unique_ids.iter()) {
+    for (idx, id) in indices.iter().zip(unique_ids.iter()) {
         initial_ids[*idx] = *id;
         assigned[*idx] = true;
     }

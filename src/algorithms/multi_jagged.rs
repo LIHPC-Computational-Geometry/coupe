@@ -10,7 +10,9 @@ use approx::Ulps;
 use crate::geometry::*;
 use rayon::prelude::*;
 
-use std::sync::atomic::{self, AtomicPtr};
+use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 // prime functions are currently unused but may be useful to compute a
 // partitioning scheme based on a prime factor decomposition
@@ -164,6 +166,7 @@ fn multi_jagged_with_scheme<const D: usize>(
 ) {
     let len = points.len();
     let mut permutation = (0..len).into_par_iter().collect::<Vec<_>>();
+    let part_id = AtomicUsize::new(0);
 
     multi_jagged_recurse(
         points,
@@ -172,6 +175,7 @@ fn multi_jagged_with_scheme<const D: usize>(
         &AtomicPtr::new(partition.as_mut_ptr()),
         0,
         partition_scheme,
+        &part_id,
     );
 }
 
@@ -182,6 +186,7 @@ fn multi_jagged_recurse<const D: usize>(
     partition: &AtomicPtr<usize>,
     current_coord: usize,
     partition_scheme: PartitionScheme,
+    part_id: &AtomicUsize,
 ) {
     if partition_scheme.num_splits != 0 {
         super::recursive_bisection::axis_sort(points, permutation, current_coord);
@@ -201,12 +206,13 @@ fn multi_jagged_recurse<const D: usize>(
                     partition,
                     (current_coord + 1) % D,
                     scheme,
+                    part_id,
                 )
             });
     } else {
-        let part_id = crate::uid();
+        let part_id = part_id.fetch_add(1, Ordering::Relaxed);
         permutation.par_iter().for_each(|idx| {
-            let ptr = partition.load(atomic::Ordering::Relaxed);
+            let ptr = partition.load(Ordering::Relaxed);
             unsafe { std::ptr::write(ptr.add(*idx), part_id) }
         });
     }
