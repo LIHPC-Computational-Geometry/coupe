@@ -13,6 +13,7 @@ mod recursive_bisection;
 mod vn;
 mod z_curve;
 
+pub use ckk::CkkWeight;
 pub use ckk::CompleteKarmarkarKarp;
 pub use fiduccia_mattheyses::FiducciaMattheyses;
 pub use fiduccia_mattheyses::FmWeight;
