@@ -4,6 +4,10 @@ use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::iter::Sum;
+use std::ops::AddAssign;
+use std::ops::Sub;
+use std::ops::SubAssign;
 
 fn partial_cmp<W>(a: &W, b: &W) -> Ordering
 where
@@ -49,9 +53,7 @@ fn fiduccia_mattheyses<W>(
     max_bad_moves_in_a_row: usize,
 ) -> Metadata
 where
-    W: std::fmt::Debug + Copy + PartialOrd + Send + Sync,
-    W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive + num::Zero,
-    W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
+    W: FmWeight,
 {
     debug_assert!(!partition.is_empty());
     debug_assert_eq!(partition.len(), weights.len());
@@ -251,6 +253,23 @@ where
     }
 }
 
+/// Trait alias for values accepted as weights by [FiducciaMattheyses].
+pub trait FmWeight
+where
+    Self: Copy + std::fmt::Debug + Send + Sync,
+    Self: Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive + num::Zero,
+    Self: Sub<Output = Self> + AddAssign + SubAssign,
+{
+}
+
+impl<T> FmWeight for T
+where
+    Self: Copy + std::fmt::Debug + Send + Sync,
+    Self: Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive + num::Zero,
+    Self: Sub<Output = Self> + AddAssign + SubAssign,
+{
+}
+
 /// FiducciaMattheyses
 ///
 /// An implementation of the Fiduccia Mattheyses topologic algorithm
@@ -348,9 +367,7 @@ pub struct FiducciaMattheyses {
 
 impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
 where
-    W: std::fmt::Debug + Copy + PartialOrd + Send + Sync + num::Zero,
-    W: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
-    W: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = W>,
+    W: FmWeight,
 {
     type Metadata = Metadata;
     type Error = Error;
