@@ -1,13 +1,15 @@
 use super::Error;
-use num::Zero;
 use std::ops::AddAssign;
 
 /// Implementation of the greedy algorithm.
-fn greedy<T: Ord + Zero + Clone + AddAssign>(
+fn greedy<T>(
     partition: &mut [usize],
     weights: impl IntoIterator<Item = T>,
     part_count: usize,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    T: GreedyWeight,
+{
     if part_count < 2 {
         partition.fill(0);
         return Ok(());
@@ -43,6 +45,15 @@ fn greedy<T: Ord + Zero + Clone + AddAssign>(
     Ok(())
 }
 
+/// Trait alias for values accepted as weights by [Greedy].
+pub trait GreedyWeight
+where
+    Self: Ord + num::Zero + Clone + AddAssign,
+{
+}
+
+impl<T> GreedyWeight for T where Self: Ord + num::Zero + Clone + AddAssign {}
+
 /// # Greedy number partitioning algorithm
 ///
 /// Greedily assign weights to each part.
@@ -73,7 +84,7 @@ pub struct Greedy {
 impl<W> crate::Partition<W> for Greedy
 where
     W: IntoIterator,
-    W::Item: Ord + Zero + Clone + AddAssign,
+    W::Item: GreedyWeight,
 {
     type Metadata = ();
     type Error = Error;
