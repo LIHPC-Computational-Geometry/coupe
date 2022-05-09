@@ -4,10 +4,10 @@ use std::ops::Add;
 use std::ops::Sub;
 
 /// Adds an element `e` to a vector `v` and maintain order.
-fn add<T: Ord>(v: &mut Vec<T>, e: T) -> usize {
-    match v.binary_search(&e) {
+fn add<T: PartialOrd>(v: &mut Vec<T>, e0: T) -> usize {
+    match v.binary_search_by(|e| crate::partial_cmp(e, &e0)) {
         Ok(index) | Err(index) => {
-            v.insert(index, e);
+            v.insert(index, e0);
             index
         }
     }
@@ -107,7 +107,7 @@ where
     if weights.is_empty() {
         return Ok(());
     }
-    weights.sort_unstable();
+    weights.sort_unstable_by(crate::partial_cmp);
 
     let sum: T = weights.iter().map(|(weight, _idx)| *weight).sum();
     let tolerance = T::from_f64(sum.to_f64().unwrap() * tolerance).unwrap();
@@ -156,14 +156,14 @@ pub struct CompleteKarmarkarKarp {
 /// Trait alias for values accepted as weights by [CompleteKarmarkarKarp].
 pub trait CkkWeight
 where
-    Self: Copy + Sum + Ord + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self>,
 {
 }
 
 impl<T> CkkWeight for T
 where
-    Self: Copy + Sum + Ord + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self>,
 {
 }
