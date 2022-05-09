@@ -16,9 +16,7 @@ fn vn_first_mono<T>(
     num_parts: usize,
 ) -> Result<usize, Error>
 where
-    T: AddAssign + Sub<Output = T> + Sum,
-    T: Zero + One + FromPrimitive,
-    T: Clone + PartialOrd + Send + Sync,
+    T: VnFirstWeight,
 {
     if weights.len() != partition.len() {
         return Err(Error::InputLenMismatch {
@@ -199,6 +197,23 @@ where
     algo_iterations
 }
 
+/// Trait alias for values accepted as weights by [VnFirst].
+pub trait VnFirstWeight
+where
+    Self: Clone + Send + Sync,
+    Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
+    Self: Sub<Output = Self> + AddAssign,
+{
+}
+
+impl<T> VnFirstWeight for T
+where
+    Self: Clone + Send + Sync,
+    Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
+    Self: Sub<Output = Self> + AddAssign,
+{
+}
+
 /// # Descent Vector-of-Numbers algorithm
 ///
 /// This algorithm moves weights from parts to parts whenever it decreases the
@@ -233,9 +248,7 @@ pub struct VnFirst {
 
 impl<'a, W> crate::Partition<&'a [W]> for VnFirst
 where
-    W: AddAssign + Sub<Output = W> + Sum,
-    W: Zero + One + FromPrimitive,
-    W: Clone + PartialOrd + Send + Sync,
+    W: VnFirstWeight,
 {
     type Metadata = usize;
     type Error = Error;
