@@ -115,7 +115,7 @@ impl<const D: usize> ToRunner<D> for coupe::VnBest {
                     self.partition(partition, weights)
                 }
                 Floats(fs) => {
-                    let weights = fs.iter().map(|weight| coupe::Real::from(weight[0]));
+                    let weights = fs.iter().map(|weight| weight[0]);
                     self.partition(partition, weights)
                 }
             }?;

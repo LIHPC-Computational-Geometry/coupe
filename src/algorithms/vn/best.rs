@@ -55,7 +55,7 @@ where
         nb_parts,
         criterion.par_iter().map(|(weight, _weight_id)| *weight),
     );
-    criterion.sort_unstable();
+    criterion.sort_unstable_by(crate::partial_cmp);
 
     let mut algo_iterations = 0;
 
@@ -73,7 +73,7 @@ where
             let target = imbalance / two;
             let mut above: Option<usize>;
             let mut below: Option<usize>;
-            match criterion.binary_search(&(target, 0)) {
+            match criterion.binary_search_by(|(w, _)| crate::partial_cmp(w, &target)) {
                 Ok(target_idx) => {
                     if partition[criterion[target_idx].1] == overweight_part {
                         return Some(target_idx);
@@ -134,7 +134,7 @@ where
 pub trait VnBestWeight
 where
     Self: Copy + Send + Sync,
-    Self: Ord + num::Zero + num::One,
+    Self: PartialOrd + num::Zero + num::One,
     Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
@@ -142,7 +142,7 @@ where
 impl<T> VnBestWeight for T
 where
     Self: Copy + Send + Sync,
-    Self: Ord + num::Zero + num::One,
+    Self: PartialOrd + num::Zero + num::One,
     Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
