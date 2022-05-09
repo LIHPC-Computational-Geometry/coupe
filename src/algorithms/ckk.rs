@@ -1,6 +1,4 @@
 use super::Error;
-use num::FromPrimitive;
-use num::ToPrimitive;
 use std::iter::Sum;
 use std::ops::Add;
 use std::ops::Sub;
@@ -46,7 +44,7 @@ fn ckk_bipart_rec<T>(
     steps: &mut Vec<Step>,
 ) -> bool
 where
-    T: Ord + Add<Output = T> + Sub<Output = T> + Copy,
+    T: CkkWeight,
 {
     debug_assert_ne!(weights.len(), 0);
 
@@ -97,9 +95,7 @@ where
 fn ckk_bipart<I, T>(partition: &mut [usize], weights: I, tolerance: f64) -> Result<(), Error>
 where
     I: IntoIterator<Item = T>,
-    T: Sum + Add<Output = T> + Sub<Output = T>,
-    T: FromPrimitive + ToPrimitive,
-    T: Ord + Default + Copy,
+    T: CkkWeight,
 {
     let mut weights: Vec<(T, usize)> = weights.into_iter().zip(0..).collect();
     if weights.len() != partition.len() {
@@ -157,12 +153,25 @@ pub struct CompleteKarmarkarKarp {
     pub tolerance: f64,
 }
 
+/// Trait alias for values accepted as weights by [CompleteKarmarkarKarp].
+pub trait CkkWeight
+where
+    Self: Copy + Sum + Ord + num::FromPrimitive + num::ToPrimitive,
+    Self: Add<Output = Self> + Sub<Output = Self>,
+{
+}
+
+impl<T> CkkWeight for T
+where
+    Self: Copy + Sum + Ord + num::FromPrimitive + num::ToPrimitive,
+    Self: Add<Output = Self> + Sub<Output = Self>,
+{
+}
+
 impl<W> crate::Partition<W> for CompleteKarmarkarKarp
 where
     W: IntoIterator,
-    W::Item: Sum + Add<Output = W::Item> + Sub<Output = W::Item>,
-    W::Item: FromPrimitive + ToPrimitive,
-    W::Item: Ord + Default + Copy,
+    W::Item: CkkWeight,
 {
     type Metadata = ();
     type Error = Error;
