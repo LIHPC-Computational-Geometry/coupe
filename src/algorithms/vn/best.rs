@@ -1,8 +1,6 @@
 use crate::imbalance::compute_parts_load;
 use crate::Error;
 use itertools::Itertools;
-use num::One;
-use num::Zero;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::ops::AddAssign;
@@ -17,9 +15,7 @@ fn vn_best_mono<W, T>(
 ) -> Result<usize, Error>
 where
     W: IntoIterator<Item = T>,
-    T: AddAssign + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
-    T: Zero + One,
-    T: Ord + Copy + Send + Sync,
+    T: VnBestWeight,
 {
     let two = {
         let mut two = T::one();
@@ -134,6 +130,23 @@ where
     Ok(algo_iterations)
 }
 
+/// Trait alias for values accepted as weights by [VnBest].
+pub trait VnBestWeight
+where
+    Self: Copy + Send + Sync,
+    Self: Ord + num::Zero + num::One,
+    Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
+{
+}
+
+impl<T> VnBestWeight for T
+where
+    Self: Copy + Send + Sync,
+    Self: Ord + num::Zero + num::One,
+    Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
+{
+}
+
 /// # Steepest descent Vector-of-Numbers algorithm
 ///
 /// This algorithm greedily moves weights from parts to parts in such a way that
@@ -170,9 +183,7 @@ pub struct VnBest {
 impl<W> crate::Partition<W> for VnBest
 where
     W: IntoIterator,
-    W::Item: AddAssign + Sub<Output = W::Item> + Div<Output = W::Item> + Mul<Output = W::Item>,
-    W::Item: Zero + One,
-    W::Item: Ord + Copy + Send + Sync,
+    W::Item: VnBestWeight,
 {
     type Metadata = usize;
     type Error = Error;
