@@ -45,6 +45,7 @@ pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
 pub use crate::uid::uid;
 use crate::work_share::work_share;
+use std::cmp::Ordering;
 
 /// The `Partition` trait allows for partitioning data.
 ///
@@ -70,4 +71,15 @@ pub trait Partition<M> {
     /// appear in the array, the part is assumed to be empty.
     fn partition(&mut self, part_ids: &mut [usize], data: M)
         -> Result<Self::Metadata, Self::Error>;
+}
+
+fn partial_cmp<W>(a: &W, b: &W) -> Ordering
+where
+    W: PartialOrd,
+{
+    if a < b {
+        Ordering::Less
+    } else {
+        Ordering::Greater
+    }
 }

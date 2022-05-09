@@ -2,23 +2,11 @@ use super::Error;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
-use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
-
-fn partial_cmp<W>(a: &W, b: &W) -> Ordering
-where
-    W: PartialOrd,
-{
-    if a < b {
-        Ordering::Less
-    } else {
-        Ordering::Greater
-    }
-}
 
 /// Diagnostic data for a Fiduccia-Mattheyses run.
 #[non_exhaustive]
@@ -73,7 +61,7 @@ where
             let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
             W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
         }
-        None => *part_weights.iter().max_by(partial_cmp).unwrap(),
+        None => *part_weights.iter().max_by(crate::partial_cmp).unwrap(),
     };
 
     let mut best_edge_cut = crate::topology::edge_cut(adjacency, partition);
@@ -162,7 +150,7 @@ where
                             Some((*vertex, target_part_weight))
                         })
                         .min_by(|(_, max_part_weight0), (_, max_part_weight1)| {
-                            partial_cmp(max_part_weight0, max_part_weight1)
+                            crate::partial_cmp(max_part_weight0, max_part_weight1)
                         })?;
                     Some((best_vertex, gain))
                 }) {
