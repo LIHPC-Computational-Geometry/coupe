@@ -28,7 +28,7 @@ where
         });
     }
 
-    weights.sort_unstable();
+    weights.sort_unstable_by(crate::partial_cmp);
     let mut part_weights = vec![T::zero(); part_count];
 
     // Put each weight in the lightweightest part.
@@ -36,7 +36,9 @@ where
         let (min_part_weight_idx, _min_part_weight) = part_weights
             .iter()
             .enumerate()
-            .min_by_key(|(_idx, part_weight)| *part_weight)
+            .min_by(|(_, part_weight0), (_, part_weight1)| {
+                crate::partial_cmp(part_weight0, part_weight1)
+            })
             .unwrap(); // Will not panic because !part_weights.is_empty()
         partition[weight_id] = min_part_weight_idx;
         part_weights[min_part_weight_idx] += weight;
@@ -48,11 +50,11 @@ where
 /// Trait alias for values accepted as weights by [Greedy].
 pub trait GreedyWeight
 where
-    Self: Ord + num::Zero + Clone + AddAssign,
+    Self: PartialOrd + num::Zero + Clone + AddAssign,
 {
 }
 
-impl<T> GreedyWeight for T where Self: Ord + num::Zero + Clone + AddAssign {}
+impl<T> GreedyWeight for T where Self: PartialOrd + num::Zero + Clone + AddAssign {}
 
 /// # Greedy number partitioning algorithm
 ///
