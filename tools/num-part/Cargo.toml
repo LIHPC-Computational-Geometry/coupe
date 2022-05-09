@@ -13,6 +13,10 @@ repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 [dependencies]
 
+# Algorithm parsing
+coupe-tools = { path = "..", version = "0.1", default-features = false }
+mesh-io = { path = "../mesh-io", version = "0.1" }
+
 # Random number generation
 rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_distr = { version = "0.4", default-features = false, features = ["std"] }

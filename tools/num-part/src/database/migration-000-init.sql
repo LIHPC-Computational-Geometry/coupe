@@ -1,19 +1,3 @@
-CREATE TABLE experiment
-    ( id INTEGER PRIMARY KEY
-    , seed INTEGER NOT NULL REFERENCES seed
-    , iteration INTEGER NOT NULL
-    , distribution INTEGER NOT NULL REFERENCES distribution
-    , sample_size INTEGER NOT NULL
-    , algorithm TEXT NOT NULL
-    , part_count INTEGER NOT NULL
-    , case_type INTEGER NOT NULL
-    , imbalance REAL NOT NULL
-    , algo_iterations INTEGER
-    , UNIQUE(seed, iteration, distribution, sample_size, algorithm, num_parts, case_type)
-    );
-
-CREATE INDEX experiment_distribution ON experiment (distribution);
-
 CREATE TABLE seed
     ( id INTEGER PRIMARY KEY
     , bytes BLOB NOT NULL
@@ -26,5 +10,20 @@ CREATE TABLE distribution
     , param1 REAL
     , param2 REAL
     , param3 REAL
-    , UNIQUE(name, param1, param2)
+    , UNIQUE(name, param1, param2, param3)
     );
+
+CREATE TABLE experiment
+    ( id INTEGER PRIMARY KEY
+    , algorithm TEXT NOT NULL
+    , seed INTEGER NOT NULL REFERENCES seed(id)
+    , distribution INTEGER NOT NULL REFERENCES distribution(id)
+    , sample_size INTEGER NOT NULL
+    , iteration INTEGER NOT NULL
+    , case_type INTEGER NOT NULL
+    , imbalance REAL NOT NULL
+    , algo_iterations INTEGER
+    , UNIQUE(seed, iteration, distribution, sample_size, algorithm, case_type)
+    );
+
+CREATE INDEX experiment_distribution ON experiment (distribution);
