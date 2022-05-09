@@ -3,8 +3,6 @@ use std::collections::BinaryHeap;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
-use num::Zero;
-
 /// Implementation of the Karmarkar-Karp algorithm (bi-partitioning case).
 ///
 /// # Differences with the k-partitioning implementation
@@ -50,7 +48,7 @@ where
 /// Implementation of the Karmarkar-Karp algorithm (general case).
 fn kk<T, I>(partition: &mut [usize], weights: I, num_parts: usize)
 where
-    T: Zero + Ord + Sub<Output = T> + SubAssign + Copy,
+    T: KkWeight,
     I: Iterator<Item = T> + ExactSizeIterator,
 {
     // Initialize "m", a "k*num_weights" matrix whose first column is "weights".
@@ -117,6 +115,15 @@ where
     partition.copy_from_slice(&parts);
 }
 
+/// Trait alias for values accepted as weights by [KarmarkarKarp].
+pub trait KkWeight
+where
+    Self: num::Zero + Ord + Sub<Output = Self> + SubAssign + Copy,
+{
+}
+
+impl<T> KkWeight for T where Self: num::Zero + Ord + Sub<Output = Self> + SubAssign + Copy {}
+
 /// # Karmarkar-Karp algorithm
 ///
 /// Also called the Largest Differencing Method.
@@ -150,7 +157,7 @@ impl<W> crate::Partition<W> for KarmarkarKarp
 where
     W: IntoIterator,
     W::IntoIter: ExactSizeIterator,
-    W::Item: Zero + Ord + Sub<Output = W::Item> + SubAssign + Copy,
+    W::Item: KkWeight,
 {
     type Metadata = ();
     type Error = Error;

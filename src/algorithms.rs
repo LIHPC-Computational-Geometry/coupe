@@ -25,6 +25,7 @@ pub use hilbert_curve::HilbertCurve;
 pub use k_means::KMeans;
 pub use kernighan_lin::KernighanLin;
 pub use kk::KarmarkarKarp;
+pub use kk::KkWeight;
 pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
