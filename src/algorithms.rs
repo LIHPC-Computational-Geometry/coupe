@@ -19,6 +19,7 @@ pub use fiduccia_mattheyses::FmWeight;
 pub use fiduccia_mattheyses::Metadata as FmMetadata;
 pub use graph_growth::GraphGrowth;
 pub use greedy::Greedy;
+pub use greedy::GreedyWeight;
 pub use hilbert_curve::Error as HilbertCurveError;
 pub use hilbert_curve::HilbertCurve;
 pub use k_means::KMeans;
