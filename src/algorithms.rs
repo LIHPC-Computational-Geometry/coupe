@@ -25,6 +25,7 @@ pub use kernighan_lin::KernighanLin;
 pub use kk::KarmarkarKarp;
 pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
+pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;
 pub use vn::VnBest;
 pub use vn::VnFirst;

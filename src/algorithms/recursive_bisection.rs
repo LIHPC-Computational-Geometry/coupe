@@ -267,8 +267,7 @@ async fn sync_item_split<'d, 'p, W>(
     thread_left_weight: W,
 ) -> (MutexGuard<'d, IterationData<W>>, Option<SyncItemResult<W>>)
 where
-    W: Copy + std::fmt::Debug,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + PartialOrd,
+    W: RcbWeight,
 {
     if max != data.max || min != data.min {
         // This thread is lagging behind: discard work, advance to the
@@ -330,9 +329,7 @@ async fn item_split_idx<'p, const D: usize, W>(
     tolerance: f64,
 ) -> usize
 where
-    W: Copy + std::fmt::Debug + Default,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
-    W: num::ToPrimitive,
+    W: RcbWeight,
 {
     let (mut min, mut max) = compute_min_max(ctx, items, coord).await;
 
@@ -450,9 +447,7 @@ fn rcb_iter<'p, const D: usize, W>(
     tolerance: f64,
 ) -> Pin<Box<dyn Future<Output = ()> + 'p>>
 where
-    W: Copy + std::fmt::Debug + Default,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
-    W: num::ToPrimitive,
+    W: RcbWeight,
 {
     use tracing::Instrument as _;
 
@@ -503,9 +498,7 @@ fn rcb_thread<const D: usize, W>(
     iter_count: usize,
     tolerance: f64,
 ) where
-    W: Copy + std::fmt::Debug + Default,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
-    W: num::ToPrimitive,
+    W: RcbWeight,
 {
     let copy_span = tracing::info_span!("copy items");
     let enter = copy_span.enter();
@@ -529,9 +522,7 @@ where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default,
-    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
-    W::Item: num::ToPrimitive,
+    W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let points = points.into_par_iter();
@@ -598,9 +589,7 @@ fn simple_rcb_split<const D: usize, W>(
     sum: W,
 ) -> usize
 where
-    W: Copy + std::fmt::Debug + Default + Send + Sync,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
-    W: num::ToPrimitive,
+    W: RcbWeight,
 {
     let mut prev_count_left = usize::MAX;
     loop {
@@ -643,9 +632,7 @@ fn simple_rcb_recurse<const D: usize, W>(
     coord: usize,
     tolerance: f64,
 ) where
-    W: Copy + std::fmt::Debug + Default + Send + Sync,
-    W: Add<Output = W> + AddAssign + Sub<Output = W> + Sum + PartialOrd,
-    W: num::ToPrimitive,
+    W: RcbWeight,
 {
     if items.is_empty() {
         // Would make min/max computation panic.
@@ -720,9 +707,7 @@ where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default + Send + Sync,
-    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
-    W::Item: num::ToPrimitive,
+    W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let points = points.into_par_iter();
@@ -763,6 +748,23 @@ where
         .for_each(|part_id| *part_id -= part_id_offset);
 
     Ok(())
+}
+
+/// Trait alias for values accepted as weights by [Rcb] and [Rib].
+pub trait RcbWeight
+where
+    Self: Copy + std::fmt::Debug + Default + Send + Sync,
+    Self: Sum + PartialOrd + num::ToPrimitive,
+    Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
+{
+}
+
+impl<T> RcbWeight for T
+where
+    Self: Copy + std::fmt::Debug + Default + Send + Sync,
+    Self: Sum + PartialOrd + num::ToPrimitive,
+    Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
+{
 }
 
 /// # Recursive Coordinate Bisection algorithm
@@ -837,9 +839,7 @@ where
     P: rayon::iter::IntoParallelIterator<Item = PointND<D>>,
     P::Iter: rayon::iter::IndexedParallelIterator,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default + Send + Sync,
-    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
-    W::Item: num::ToPrimitive,
+    W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
@@ -889,9 +889,7 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default + Sync,
-    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
-    W::Item: num::ToPrimitive,
+    W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let mbr = Mbr::from_points(points);
@@ -962,9 +960,7 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
-    W::Item: Copy + std::fmt::Debug + Default + Sync,
-    W::Item: Add<Output = W::Item> + AddAssign + Sub<Output = W::Item> + Sum + PartialOrd,
-    W::Item: num::ToPrimitive,
+    W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
