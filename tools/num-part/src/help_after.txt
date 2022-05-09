@@ -1,32 +1,3 @@
-ALGORITHMS
-
-    The option "-a, --algorithm" defines the algorithm chain to partition input
-    weights.  Its value must be a comma-separated list of one of the algorithm
-    names below.
-
-    Note that if a partition improving algorithm is in the begining of the
-    chain, it will be fed a default partition where all weights are in the same
-    part.
-
-    Miscellaneous partitioning algorithms:
-
-        random       Creates a random partition
-
-    Number partitioning algorithms:
-    These algorithms create partitions by only taking weights into account.
-
-        greedy       Greedy number partitioning algorithm
-        kk           Karmarkar-Karp, Least Difference Method
-        ckk          Complete Karmarkar-Karp
-
-    Number partition improving algorithms:
-    These algorithms improve a partition by only taking weights into account.
-
-        vn-first     VN First
-        vn-best      VN Best
-        vn-worst     VN Worst
-
-
 DISTRIBUTION
 
     The option "-d, --distribution" defines how input weights are generated.  It

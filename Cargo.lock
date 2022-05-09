@@ -697,8 +697,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "coupe",
+ "coupe-tools",
  "getopts",
  "itertools",
+ "mesh-io",
  "rand",
  "rand_distr",
  "rand_pcg",
