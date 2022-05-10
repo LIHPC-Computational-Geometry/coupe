@@ -12,6 +12,7 @@ name = "coupe"
 version = "0.1.0"
 authors = [
     "Armand Touminet <armand.touminet@protonmail.com>", 
+    "Hubert Hirtz <hubert@hirtz.pm>",
     "Cédric Chevalier", 
     "Sébastien Morais"
 ]
@@ -22,6 +23,9 @@ Coupe is a mesh partitioning library. It implements composable
 geometric and topologic algorithms.  
 """
 keywords = ["mesh", "partitioning"]
+categories = ["algorithms", "mathematics"]
+readme = "README.md"
+repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 autobenches = false
 
 [dependencies]
