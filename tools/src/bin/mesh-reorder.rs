@@ -4,6 +4,8 @@ use mesh_io::medit::Mesh;
 use std::env;
 use std::io;
 
+const USAGE: &str = "Usage: mesh-reorder [options] <in.mesh >out.mesh";
+
 fn shuffle_couple<R, T>(mut rng: R, data: &[T], refs: &[isize]) -> (Vec<T>, Vec<isize>, Vec<usize>)
 where
     R: rand::RngCore,
@@ -68,8 +70,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: mesh-refine [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let format: coupe_tools::MeshFormat = matches
