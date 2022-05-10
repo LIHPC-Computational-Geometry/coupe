@@ -11,6 +11,8 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::Registry;
 use tracing_tree::HierarchicalLayer;
 
+const USAGE: &str = "Usage: mesh-part [options] >out.part";
+
 fn main_d<const D: usize>(
     matches: getopts::Matches,
     edge_weights: coupe_tools::EdgeWeightDistribution,
@@ -86,8 +88,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: mesh-part [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let registry = Registry::default().with(EnvFilter::from_env("LOG")).with(

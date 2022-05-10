@@ -9,6 +9,8 @@ use std::collections::HashSet;
 use std::env;
 use std::io;
 
+const USAGE: &str = "Usage: medit2svg [options] <in.mesh >out.svg";
+
 /// Returns the list of elements that are interesting.
 fn elements(mesh: &Mesh) -> impl Iterator<Item = (ElementType, &[usize], isize)> {
     mesh.elements()
@@ -276,8 +278,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: medit2svg [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     eprintln!("Reading mesh from stdin...");

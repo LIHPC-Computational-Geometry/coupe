@@ -6,6 +6,8 @@ use std::cmp;
 use std::env;
 use std::io;
 
+const USAGE: &str = "Usage: weight-gen [options] <in.mesh >out.weights";
+
 fn partial_cmp(a: &f64, b: &f64) -> cmp::Ordering {
     if a < b {
         cmp::Ordering::Less
@@ -119,8 +121,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: weight-gen [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let distributions: Vec<_> = matches

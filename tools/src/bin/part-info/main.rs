@@ -8,6 +8,8 @@ use std::env;
 use std::fs;
 use std::io;
 
+const USAGE: &str = "Usage: part-info [options]";
+
 fn imbalance<T>(part_count: usize, part_ids: &[usize], weights: &[Vec<T>]) -> Vec<f64>
 where
     T: Copy + Send + Sync,
@@ -56,6 +58,9 @@ fn main() -> Result<()> {
     if matches.opt_present("h") {
         eprintln!("{}", options.usage("Usage: part-info [options]"));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let mesh_file = matches

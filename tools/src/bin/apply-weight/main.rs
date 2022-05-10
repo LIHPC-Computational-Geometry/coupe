@@ -5,6 +5,8 @@ use std::env;
 use std::fs;
 use std::io;
 
+const USAGE: &str = "Usage: apply-weight [options] >out.mesh";
+
 fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
     let mesh_dimension = mesh.dimension();
     mesh.elements_mut()
@@ -23,8 +25,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: apply-weights [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let format: coupe_tools::MeshFormat = matches

@@ -7,6 +7,8 @@ use std::env;
 use std::fs;
 use std::io;
 
+const USAGE: &str = "Usage: part-bench [options]";
+
 fn criterion_options(options: &mut getopts::Options) {
     // TODO use Criterion::configure_with_args when it respects POSIX's "--"
     // TODO more options if needed
@@ -162,8 +164,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: part-bench [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let edge_weights = matches

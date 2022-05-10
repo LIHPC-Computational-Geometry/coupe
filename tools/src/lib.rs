@@ -557,6 +557,7 @@ impl std::str::FromStr for MeshFormat {
     }
 }
 
+/// Write a mesh to stdout in the given format.
 pub fn write_mesh(mesh: &Mesh, format: MeshFormat) -> Result<()> {
     match format {
         MeshFormat::MeditAscii => println!("{mesh}"),

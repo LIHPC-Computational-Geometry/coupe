@@ -4,6 +4,8 @@ use mesh_io::medit::Mesh;
 use std::env;
 use std::io;
 
+const USAGE: &str = "Usage: mesh-refine [options] <in.mesh >out.mesh";
+
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
@@ -18,8 +20,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: mesh-refine [options]"));
+        eprintln!("{}", options.usage(USAGE));
         return Ok(());
+    }
+    if !matches.free.is_empty() {
+        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
     let format: coupe_tools::MeshFormat = matches
