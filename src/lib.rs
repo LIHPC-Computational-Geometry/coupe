@@ -97,9 +97,6 @@ pub use crate::algorithms::*;
 pub use crate::geometry::{BoundingBox, Point2D, Point3D, PointND};
 pub use crate::real::Real;
 
-// Internal use
-use crate::nextafter::nextafter;
-use crate::work_share::work_share;
 use std::cmp::Ordering;
 
 /// The `Partition` trait allows for partitioning data.
