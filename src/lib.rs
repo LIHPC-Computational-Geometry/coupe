@@ -100,8 +100,7 @@ pub mod topology;
 mod work_share;
 
 pub use crate::algorithms::*;
-pub use crate::geometry::BoundingBox;
-pub use crate::geometry::{Point2D, Point3D, PointND};
+pub use crate::geometry::{BoundingBox, Point2D, Point3D, PointND};
 pub use crate::real::Real;
 
 // Internal use
