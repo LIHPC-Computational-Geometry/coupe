@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     let stdin = io::stdin();
     let stdin = stdin.lock();
     let stdin = io::BufReader::new(stdin);
-    let mut mesh = Mesh::from_reader(stdin).unwrap();
+    let mut mesh = Mesh::from_reader(stdin).context("failed to read mesh")?;
     eprintln!(" -> Dimension: {}", mesh.dimension());
     eprintln!(" -> Nodes: {}", mesh.node_count());
     eprintln!(" -> Elements: {}", mesh.element_count());
