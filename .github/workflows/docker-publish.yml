@@ -57,7 +57,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: ${{ env.REGISTRY }}/LIHPC-Computational-Geometry/${{ matrix.config.name }}
+          images: ${{ env.REGISTRY }}/lihpc-computational-geometry/${{ matrix.config.name }}
           labels: |
             org.opencontainers.image.title=Coupe
             org.opencontainers.image.description=Coupe Image
