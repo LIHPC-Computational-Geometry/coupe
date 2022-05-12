@@ -69,7 +69,7 @@ For example, here is a quick walk-through:
 weight-gen --distribution linear,x,0,100 <heart.mesh >heart.linear.weights
 
 # Apply coupe's hilbert curve followed by the Fidducia-Mattheyses algorithm.
-mesh-part --algorithm hilbert,3 \
+mesh-part --algorithm hilbert,2 \
           --algorithm fm \
           --mesh heart.mesh \
           --weights heart.linear.weights \
