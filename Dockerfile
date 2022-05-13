@@ -1,4 +1,4 @@
-ARG BASEIMAGE=rust:latest
+ARG BASEIMAGE=rust:slim-bullseye
 
 # BUILDER PATTERN
 
@@ -8,29 +8,18 @@ WORKDIR /builder
 
 COPY . .
 
-RUN apt-get update
-RUN apt-get -y install libclang-dev libmetis-dev libscotch-dev
+RUN apt-get update -y && apt-get install -y libclang-dev libmetis-dev libscotch-dev
 
-ARG C_INCLUDE_PATH="/usr/include/x86_64-linux-musl"
-ARG CPLUS_INCLUDE_PATH="/usr/include/x86_64-linux-musl"
+ARG BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include/scotch"
 
-RUN rustup target add x86_64-unknown-linux-musl
-RUN cargo build --workspace --release --bins --target x86_64-unknown-linux-musl --no-default-features
+RUN cargo install --path tools --root /builder/install
 
 # FINAL IMAGE
 
-FROM alpine
+FROM debian:bullseye-slim
 
 WORKDIR /coupe
 
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/apply-part /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/apply-weight /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/medit2svg /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/mesh-part /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/mesh-refine /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/mesh-reorder /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/part-bench /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/part-info /bin
-COPY --from=builder /builder/target/x86_64-unknown-linux-musl/release/weight-gen /bin
+COPY --from=builder /builder/install/bin /bin
 
 COPY --from=builder /builder/examples/meshes meshes
