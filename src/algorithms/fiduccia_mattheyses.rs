@@ -48,17 +48,16 @@ where
     debug_assert_eq!(partition.len(), adjacency.rows());
     debug_assert_eq!(partition.len(), adjacency.cols());
 
-    let part_count = 1 + *partition.iter().max().unwrap();
-    debug_assert!(part_count <= 2);
+    debug_assert!(*partition.iter().max().unwrap() < 2);
 
     let mut part_weights =
-        crate::imbalance::compute_parts_load(partition, part_count, weights.par_iter().cloned());
+        crate::imbalance::compute_parts_load(partition, 2, weights.par_iter().cloned());
 
     // Enforce part weights to be below this value.
     let max_part_weight = match max_imbalance {
         Some(max_imbalance) => {
             let total_weight: W = part_weights.iter().cloned().sum();
-            let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+            let ideal_part_weight = total_weight.to_f64().unwrap() / 2.0;
             W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
         }
         None => *part_weights.iter().max_by(crate::partial_cmp).unwrap(),
