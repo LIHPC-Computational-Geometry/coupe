@@ -77,13 +77,8 @@ impl<const D: usize> BoundingBox<D> {
         Some(Self { p_min, p_max })
     }
 
-    fn center(&self) -> PointND<D> {
-        PointND::from_iterator(
-            self.p_min
-                .iter()
-                .zip(self.p_max.iter())
-                .map(|(min, max)| 0.5 * (min + max)),
-        )
+    pub fn center(&self) -> PointND<D> {
+        (self.p_min + self.p_max) / 2.0
     }
 
     // region = bdim...b2b1b0 where bi are bits (0 or 1)

@@ -43,6 +43,7 @@ impl std::str::FromStr for Axis {
 enum Distribution {
     Constant(f64),
     Linear(Axis, f64, f64),
+    Spike(f64),
 }
 
 fn parse_distribution(definition: &str) -> Result<Distribution> {
@@ -83,6 +84,13 @@ fn parse_distribution(definition: &str) -> Result<Distribution> {
             let to = required(f64_arg(args.next()))?;
             Distribution::Linear(axis, from, to)
         }
+        "spike" => {
+            let height = required(f64_arg(args.next()))?;
+            if height <= 0.0 {
+                anyhow::bail!("expected 'spike' argument to be strictly positive");
+            }
+            Distribution::Spike(height)
+        }
         _ => anyhow::bail!("unknown distribution {:?}", name),
     })
 }
@@ -103,6 +111,18 @@ fn apply_distribution<const D: usize>(
             let beta = -min * alpha;
             Box::new(move |coordinates| {
                 from + f64::mul_add(coordinates[axis as usize], alpha, beta)
+            })
+        }
+        Distribution::Spike(height) => {
+            let bb = match coupe::BoundingBox::from_points(points.par_iter().cloned()) {
+                Some(v) => v,
+                None => return Box::new(|_| 1.0),
+            };
+            let center = bb.center();
+            let height = f64::ln(height);
+            Box::new(move |point| {
+                let distance = (center - point).norm();
+                f64::exp(height - distance)
             })
         }
     }
