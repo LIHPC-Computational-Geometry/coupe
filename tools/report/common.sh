@@ -23,7 +23,7 @@ ALGORITHMS="
 WEIGHT_DISTRIBUTIONS="
 constant,1
 linear,x,0,100
-linear,y,0,100
+spike,1000
 "
 
 say() {
