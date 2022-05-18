@@ -182,8 +182,8 @@ coupe_data *coupe_data_constant(uintptr_t len, enum coupe_type type, const void 
  *
  * This function returns NULL on allocation failure.
  */
-coupe_data *coupe_data_fn(const void *context, uintptr_t len,
-		enum coupe_type type, void *(*i_th)(const void *, uintptr_t));
+coupe_data *coupe_data_fn(const void *context, uintptr_t len, enum coupe_type type,
+		const void *(*i_th)(const void *, uintptr_t));
 
 /**
  * Adjacency structure for use with topologic algorithms.
