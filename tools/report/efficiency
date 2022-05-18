@@ -91,7 +91,7 @@ done >>"$csv"
 max_thread_count=$(echo "$thread_counts" | tail -n1)
 plot_cmds=$(awk -v csv="$csv" "BEGIN{
 	for (i=1; i<ARGC; i++) {
-		gsub(/\_/, \"\\\\_\", ARGV[i])
+		gsub(/_/, \"\\\\_\", ARGV[i])
 		printf \",'%s' using 1:%d title '%s' with linespoints\",csv,i+1,ARGV[i]
 	}
 }" $@)
