@@ -69,7 +69,7 @@ For example, here is a quick walk-through:
 weight-gen --distribution linear,x,0,100 <heart.mesh >heart.linear.weights
 
 # Apply coupe's hilbert curve followed by the Fidducia-Mattheyses algorithm.
-mesh-part --algorithm hilbert,3 \
+mesh-part --algorithm hilbert,2 \
           --algorithm fm \
           --mesh heart.mesh \
           --weights heart.linear.weights \
@@ -87,6 +87,51 @@ part-info --mesh heart.mesh --weights heart.linear.weights \
 part-info --mesh heart.mesh --weights heart.linear.weights \
           --partition heart.linear.metis.part
 ```
+
+### Usage with Docker
+
+Here is a quick walk-through allowing you to launch a container with Coupe bins
+and to interact with it from your host.
+
+```shell
+# Pull docker image.
+docker pull ghcr.io/lihpc-computational-geometry/coupe-x86_64-unknown-linux-musl:main
+
+# Add "coupe" tag to the docker image.
+docker image tag ghcr.io/lihpc-computational-geometry/coupe-x86_64-unknown-linux-musl:main coupe
+
+# Run the container while binding the current directory and the container.
+# This will allow you to access inner generated data from your host.
+docker container run -dit \
+    --name coupe_c \
+    --mount type=bind,source="$(pwd)",target=/coupe/shared \
+    coupe
+
+# Generate a linear weight distribution from an embedded mesh file.
+docker exec coupe_c sh -c 'cat meshes/hole.mesh | weight-gen \
+    --distribution linear,x,0,100 \
+    >shared/hole.linear.weights'
+
+# Partition the previous mesh and the generated weight distribution into 2 parts.
+# using the Recursive Coordinate Bisection (RCB) algorithm coupled with the
+# Fidducia-Mattheyses algorithm.
+docker exec coupe_c sh -c 'mesh-part \
+    --algorithm rcb,1 \
+    --algorithm fm \
+    --mesh meshes/hole.mesh \
+    --weights shared/hole.linear.weights \
+    >shared/hole.linear.rcb-fm.part'
+
+# Merge partition file into MEDIT mesh file and converts it to .svg file.
+docker exec coupe_c sh -c 'apply-part \
+    --mesh meshes/hole.mesh \
+    --partition shared/hole.linear.rcb-fm.part \
+    | medit2svg >shared/hole.rcb-fm.svg'
+
+# Open the svg file in firefox.
+firefox hole.rcb-fm.svg &
+```
+
 
 [MeTiS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
 [SCOTCH]: https://github.com/LIHPC-Computational-Geometry/scotch-rs
