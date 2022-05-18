@@ -117,9 +117,19 @@ fn main_d<const D: usize>(
 
         let weight_file = matches.opt_str("w").unwrap();
         let weight_file = PathBuf::from(weight_file);
-        let weight_file = weight_file.file_stem().unwrap().to_str().unwrap();
+        let mut weight_file = weight_file.file_stem().unwrap().to_str().unwrap();
 
-        format!("{mesh_file}:{weight_file}:{}", algorithm_specs.join(":"))
+        if let Some(wf) = weight_file.strip_prefix(mesh_file) {
+            weight_file = wf;
+            if let Some(wf) = weight_file.strip_prefix('.') {
+                weight_file = wf;
+            }
+        };
+        if weight_file.is_empty() {
+            format!("{mesh_file};{}", algorithm_specs.join(";"))
+        } else {
+            format!("{mesh_file};{weight_file};{}", algorithm_specs.join(";"))
+        }
     };
     if matches.opt_present("e") {
         let max_threads = rayon::current_num_threads();
