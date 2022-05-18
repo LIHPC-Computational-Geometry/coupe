@@ -6,6 +6,7 @@ edition = "2021"
 
 [lib]
 name = "coupe"
+doc = false # name conflicts with the rust lib
 crate-type = [
     "cdylib",
     "staticlib",
