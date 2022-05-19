@@ -86,7 +86,6 @@ impl Metadata {
 
 fn arc_swap<W>(
     partition: &mut [usize],
-    part_count: usize,
     weights: &[W],
     adjacency: sprs::CsMatBase<i64, usize, &[usize], &[usize], &[i64]>,
     max_moves: usize,
@@ -102,17 +101,13 @@ where
     debug_assert_eq!(partition.len(), weights.len());
     debug_assert_eq!(partition.len(), adjacency.rows());
     debug_assert_eq!(partition.len(), adjacency.cols());
-    debug_assert!(part_count <= 2);
 
     let compute_part_weights = |thread_count: usize| {
         let span = tracing::info_span!("compute part_weights and max_part_weight");
         let _enter = span.enter();
 
-        let part_weights = crate::imbalance::compute_parts_load(
-            partition,
-            part_count,
-            weights.par_iter().cloned(),
-        );
+        let part_weights =
+            crate::imbalance::compute_parts_load(partition, 2, weights.par_iter().cloned());
 
         let total_weight: W = part_weights.iter().cloned().sum();
 
@@ -120,7 +115,7 @@ where
         let max_part_weight = match max_imbalance {
             Some(max_imbalance) => {
                 let max_imbalance = max_imbalance / thread_count as f64;
-                let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+                let ideal_part_weight = total_weight.to_f64().unwrap() / 2.0;
                 W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
             }
             None => {
@@ -353,7 +348,6 @@ where
         }
         Ok(arc_swap(
             part_ids,
-            part_count,
             weights,
             adjacency,
             self.max_moves.unwrap_or(usize::MAX),
