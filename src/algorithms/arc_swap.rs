@@ -395,17 +395,6 @@ where
                                 break 'thread_loop;
                             }
                         };
-                        let locked = locks[vertex]
-                            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                            .is_err();
-                        if locked {
-                            thread_metadata.locked_count += 1;
-                            continue;
-                        }
-                        let lock_guard = defer({
-                            let locks = &locks;
-                            move || locks[vertex].store(false, Ordering::Release)
-                        });
 
                         let initial_part = partition[vertex].load(Ordering::Relaxed);
                         let target_part = 1 - initial_part;
@@ -428,15 +417,6 @@ where
                             continue;
                         }
 
-                        let raced = neighbors.iter().any(|(neighbor, _edge_weight)| {
-                            locks[neighbor].load(Ordering::Acquire)
-                        });
-                        if raced {
-                            cut.push(vertex);
-                            thread_metadata.race_count += 1;
-                            continue;
-                        }
-
                         let weight = weights[vertex];
                         let target_part_weight = weight
                             + if target_part == 0 {
@@ -448,6 +428,26 @@ where
                             // TODO fix infinite loops
                             //cut.push(vertex).unwrap();
                             thread_metadata.bad_balance_count += 1;
+                            continue;
+                        }
+
+                        let locked = locks[vertex]
+                            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                            .is_err();
+                        if locked {
+                            thread_metadata.locked_count += 1;
+                            continue;
+                        }
+                        let lock_guard = defer({
+                            let locks = &locks;
+                            move || locks[vertex].store(false, Ordering::Release)
+                        });
+                        let raced = neighbors.iter().any(|(neighbor, _edge_weight)| {
+                            locks[neighbor].load(Ordering::Acquire)
+                        });
+                        if raced {
+                            cut.push(vertex);
+                            thread_metadata.race_count += 1;
                             continue;
                         }
 
