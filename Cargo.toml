@@ -37,9 +37,6 @@ ndarray = "0.15"
 num = "0.4"
 rayon = "1.3"
 tracing = "0.1"
-async-lock = "2"
-event-listener = "2"
-futures-lite = "1"
 rand = "0.8"
 sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
 
