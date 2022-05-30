@@ -215,6 +215,7 @@ dependencies = [
  "itertools",
  "mesh-io",
  "metis",
+ "nalgebra",
  "num",
  "rand",
  "rand_pcg",

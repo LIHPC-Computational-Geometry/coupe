@@ -2,6 +2,13 @@ use anyhow::Context as _;
 use anyhow::Result;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use nalgebra::allocator::Allocator;
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
+use nalgebra::ToTypenum;
 use std::env;
 use std::fs;
 use std::io;
@@ -18,7 +25,12 @@ fn main_d<const D: usize>(
     edge_weights: coupe_tools::EdgeWeightDistribution,
     mesh: Mesh,
     weights: weight::Array,
-) -> Result<Vec<usize>> {
+) -> Result<Vec<usize>>
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
     let algorithm_specs = matches.opt_strs("a");
     let algorithms: Vec<_> = algorithm_specs
         .iter()
