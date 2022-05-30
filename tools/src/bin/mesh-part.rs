@@ -1,5 +1,12 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::nalgebra::allocator::Allocator;
+use coupe::nalgebra::ArrayStorage;
+use coupe::nalgebra::Const;
+use coupe::nalgebra::DefaultAllocator;
+use coupe::nalgebra::DimDiff;
+use coupe::nalgebra::DimSub;
+use coupe::nalgebra::ToTypenum;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
 use std::env;
@@ -19,7 +26,12 @@ fn main_d<const D: usize>(
     edge_weights: coupe_tools::EdgeWeightDistribution,
     mesh: Mesh,
     weights: weight::Array,
-) -> Result<Vec<usize>> {
+) -> Result<Vec<usize>>
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
     let algorithm_specs = matches.opt_strs("a");
     let algorithms: Vec<_> = algorithm_specs
         .iter()

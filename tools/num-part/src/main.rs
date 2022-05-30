@@ -217,12 +217,12 @@ fn main() -> Result<()> {
                 .map(|chunk| chunk.map(|f| f as i64).collect())
                 .collect();
             let weights = weight::Array::Integers(weights);
-            coupe_tools::Problem::<0>::without_mesh(weights)
+            coupe_tools::Problem::<1>::without_mesh(weights)
         } else {
             let chunks = (&mut samples).take(weight_count).chunks(criterion_count);
             let weights = chunks.into_iter().map(|chunk| chunk.collect()).collect();
             let weights = weight::Array::Floats(weights);
-            coupe_tools::Problem::<0>::without_mesh(weights)
+            coupe_tools::Problem::<1>::without_mesh(weights)
         };
         let mut algo_iterations = None;
         let mut success = true;
