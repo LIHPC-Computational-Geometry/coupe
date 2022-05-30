@@ -123,6 +123,12 @@ These algorithms create partitions using cell coordinates.
 	*hilbert*,PART_COUNT,[ORDER=12]
 		Hilbert Curve
 
+Geometric partition improving algorithms:++
+These algorithms improve partitions using cell coordinates.
+
+	*kmeans*
+		Balanced k-means.
+
 Graph partition improving algorithms:++
 These algorithms improve partitions using the topology of the mesh.
 

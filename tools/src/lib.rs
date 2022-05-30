@@ -1,5 +1,12 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::nalgebra::allocator::Allocator;
+use coupe::nalgebra::ArrayStorage;
+use coupe::nalgebra::Const;
+use coupe::nalgebra::DefaultAllocator;
+use coupe::nalgebra::DimDiff;
+use coupe::nalgebra::DimSub;
+use coupe::nalgebra::ToTypenum;
 use coupe::sprs::CsMat;
 use coupe::sprs::CsMatView;
 use coupe::sprs::CSR;
@@ -239,6 +246,27 @@ impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
     }
 }
 
+impl<const D: usize> ToRunner<D> for coupe::KMeans
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(_) => runner_error("kmeans is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (problem.points(), &weights))?;
+                    Ok(None)
+                })
+            }
+        }
+    }
+}
+
 impl<const D: usize> ToRunner<D> for coupe::ArcSwap {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
@@ -312,7 +340,12 @@ impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
     }
 }
 
-pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>> {
+pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>>
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
     let mut args = spec.split(',');
     let name = args.next().context("it's empty")?;
 
@@ -369,6 +402,7 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
             part_count: require(parse(args.next()))?,
             order: optional(parse(args.next()), 12)?,
         }),
+        "kmeans" => Box::new(coupe::KMeans::default()),
         "arcswap" => {
             let max_imbalance = parse(args.next()).transpose()?;
             Box::new(coupe::ArcSwap { max_imbalance })
