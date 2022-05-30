@@ -1,5 +1,7 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::PointND;
+use mesh_io::medit::Mesh;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::cmp;
@@ -85,7 +87,10 @@ fn parse_distribution(definition: &str) -> Result<Distribution> {
     })
 }
 
-fn apply_distribution(d: Distribution, points: &[Vec<f64>]) -> Box<dyn Fn(&[f64]) -> f64> {
+fn apply_distribution<const D: usize>(
+    d: Distribution,
+    points: &[PointND<D>],
+) -> Box<dyn Fn(PointND<D>) -> f64> {
     match d {
         Distribution::Constant(value) => Box::new(move |_coordinates| value),
         Distribution::Linear(axis, from, to) => {
@@ -100,6 +105,37 @@ fn apply_distribution(d: Distribution, points: &[Vec<f64>]) -> Box<dyn Fn(&[f64]
                 from + f64::mul_add(coordinates[axis as usize], alpha, beta)
             })
         }
+    }
+}
+
+fn weight_gen<const D: usize>(
+    mesh: Mesh,
+    distributions: Vec<Distribution>,
+    gen_integers: bool,
+) -> Result<()> {
+    let points = coupe_tools::barycentres::<D>(&mesh);
+
+    let distributions: Vec<_> = distributions
+        .into_iter()
+        .map(|distribution| apply_distribution(distribution, &points))
+        .collect();
+
+    let weights = points.iter().map(|point| {
+        distributions
+            .iter()
+            .map(|distribution| distribution(*point))
+    });
+
+    eprintln!("Writing weight distributions to standard output...");
+
+    let output = io::stdout();
+    let output = output.lock();
+    let output = io::BufWriter::new(output);
+    if gen_integers {
+        let weights = weights.map(|weight| weight.map(|criterion| criterion as i64));
+        mesh_io::weight::write_integers(output, weights).context("failed to write weight array")
+    } else {
+        mesh_io::weight::write_floats(output, weights).context("failed to write weight array")
     }
 }
 
@@ -144,46 +180,9 @@ fn main() -> Result<()> {
     let input = io::BufReader::new(input);
     let mesh = mesh_io::medit::Mesh::from_reader(input).context("failed to read mesh")?;
 
-    let points: Vec<_> = mesh
-        .elements()
-        .filter_map(|(element_type, nodes, _element_ref)| {
-            if element_type.dimension() != mesh.dimension() {
-                return None;
-            }
-            let mut barycentre = vec![0.0; mesh.dimension()];
-            for node_idx in nodes {
-                let node_coordinates = mesh.node(*node_idx);
-                for (bc_coord, node_coord) in barycentre.iter_mut().zip(node_coordinates) {
-                    *bc_coord += node_coord;
-                }
-            }
-            for bc_coord in &mut barycentre {
-                *bc_coord /= nodes.len() as f64;
-            }
-            Some(barycentre)
-        })
-        .collect();
-
-    let distributions: Vec<_> = distributions
-        .into_iter()
-        .map(|distribution| apply_distribution(distribution, &points))
-        .collect();
-
-    let weights = points
-        .iter()
-        .map(|point| distributions.iter().map(|distribution| distribution(point)));
-
-    eprintln!("Writing weight distributions to standard output...");
-
-    let output = io::stdout();
-    let output = output.lock();
-    let output = io::BufWriter::new(output);
-    if matches.opt_present("i") {
-        let weights = weights.map(|weight| weight.map(|criterion| criterion as i64));
-        mesh_io::weight::write_integers(output, weights).context("failed to write weight array")?;
-    } else {
-        mesh_io::weight::write_floats(output, weights).context("failed to write weight array")?;
+    match mesh.dimension() {
+        2 => weight_gen::<2>(mesh, distributions, matches.opt_present("i")),
+        3 => weight_gen::<3>(mesh, distributions, matches.opt_present("i")),
+        n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     }
-
-    Ok(())
 }

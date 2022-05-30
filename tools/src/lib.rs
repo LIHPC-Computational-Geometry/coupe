@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use anyhow::Result;
 use coupe::Partition as _;
 use coupe::PointND;
+use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
 use rayon::iter::IndexedParallelIterator as _;
@@ -337,9 +338,18 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
 }
 
 pub fn barycentres<const D: usize>(mesh: &Mesh) -> Vec<PointND<D>> {
+    let element_dim = match mesh
+        .topology()
+        .iter()
+        .map(|(el_type, _, _)| el_type.dimension())
+        .max()
+    {
+        Some(v) => v,
+        None => return Vec::new(),
+    };
     mesh.elements()
         .filter_map(|(element_type, nodes, _element_ref)| {
-            if element_type.dimension() != mesh.dimension() {
+            if element_type.dimension() != element_dim || element_type == ElementType::Edge {
                 return None;
             }
             let mut barycentre = [0.0; D];
@@ -359,11 +369,22 @@ pub fn barycentres<const D: usize>(mesh: &Mesh) -> Vec<PointND<D>> {
 
 /// The adjacency matrix that models the dual graph of the given mesh.
 pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
-    let dimension = mesh.dimension();
+    let dimension = match mesh
+        .topology()
+        .iter()
+        .map(|(el_type, _, _)| el_type.dimension())
+        .max()
+    {
+        Some(v) => v,
+        None => return sprs::CsMat::empty(sprs::CSR, 0),
+    };
+    let ignored_element = |el_type: ElementType| -> bool {
+        el_type.dimension() != dimension || el_type == ElementType::Edge
+    };
 
     let elements = || {
         mesh.elements()
-            .filter(|(el_type, _nodes, _ref)| el_type.dimension() == dimension)
+            .filter(|(el_type, _nodes, _ref)| !ignored_element(*el_type))
             .map(|(_el_type, nodes, _ref)| nodes)
             .enumerate()
     };
@@ -379,7 +400,7 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
     let topology: Vec<ElementChunk> = mesh
         .topology()
         .iter()
-        .filter(|(el_type, _nodes, _refs)| el_type.dimension() == dimension)
+        .filter(|(el_type, _nodes, _refs)| !ignored_element(*el_type))
         .scan(0, |start_idx, (el_type, nodes, _refs)| {
             let item = ElementChunk {
                 start_idx: *start_idx,

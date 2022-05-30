@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
 use std::env;
 use std::fs;
@@ -8,11 +9,19 @@ use std::io;
 const USAGE: &str = "Usage: apply-weight [options] >out.mesh";
 
 fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
-    let mesh_dimension = mesh.dimension();
-    mesh.elements_mut()
-        .filter(|(element_type, _, _)| element_type.dimension() == mesh_dimension)
-        .zip(weights)
-        .for_each(|((_, _, element_ref), weight)| *element_ref = weight);
+    if let Some(element_dim) = mesh
+        .topology()
+        .iter()
+        .map(|(el_type, _, _)| el_type.dimension())
+        .max()
+    {
+        mesh.elements_mut()
+            .filter(|(element_type, _, _)| {
+                element_type.dimension() == element_dim && *element_type != ElementType::Edge
+            })
+            .zip(weights)
+            .for_each(|((_, _, element_ref), weight)| *element_ref = weight);
+    }
 }
 
 fn main() -> Result<()> {
