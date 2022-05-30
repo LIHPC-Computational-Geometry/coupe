@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use mesh_io::medit::ElementType;
 use std::env;
 use std::fs;
 use std::io;
@@ -42,11 +43,19 @@ fn main() -> Result<()> {
     let parts =
         mesh_io::partition::read(partition_file).context("failed to read partition file")?;
 
-    let mesh_dimension = mesh.dimension();
-    mesh.elements_mut()
-        .filter(|(element_type, _, _)| element_type.dimension() == mesh_dimension)
-        .zip(parts)
-        .for_each(|((_, _, element_ref), part)| *element_ref = part as isize);
+    if let Some(element_dim) = mesh
+        .topology()
+        .iter()
+        .map(|(el_type, _, _)| el_type.dimension())
+        .max()
+    {
+        mesh.elements_mut()
+            .filter(|(element_type, _, _)| {
+                element_type.dimension() == element_dim && *element_type != ElementType::Edge
+            })
+            .zip(parts)
+            .for_each(|((_, _, element_ref), part)| *element_ref = part as isize);
+    }
 
     coupe_tools::write_mesh(&mesh, format)?;
 
