@@ -2,8 +2,9 @@
 //! "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
 //! Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne)
 
-use crate::geometry::Mbr;
-use crate::geometry::{self, PointND};
+use crate::geometry;
+use crate::geometry::OrientedBoundingBox;
+use crate::PointND;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -315,7 +316,7 @@ fn assign_and_balance<const D: usize>(
     } = clusters;
     // compute the distances from each cluster center to the minimal
     // bounding rectangle of the set of points
-    let mbr = Mbr::from_points(points);
+    let mbr = OrientedBoundingBox::from_points(points);
     let distances_to_mbr = centers
         .par_iter()
         .zip(influences.par_iter())
