@@ -528,7 +528,7 @@ mod tests {
     fn test_reorder_split() {
         const SLICE: [usize; 6] = [6, 0, 3, 4, 5, 2];
         for index in SLICE {
-            let mut slice = SLICE.clone();
+            let mut slice = SLICE;
             let (left, right) = reorder_split(&mut slice, index, usize::cmp);
             assert_eq!(left.len(), index);
             assert_eq!(right.len(), SLICE.len() - index);
