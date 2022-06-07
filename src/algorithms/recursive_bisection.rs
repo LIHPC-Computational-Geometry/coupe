@@ -19,34 +19,94 @@ use std::ops::Sub;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
+const PARALLEL_SPLIT_THRESHOLD: usize = 4096;
+
 struct Item<'p, const D: usize, W> {
     point: PointND<D>,
     weight: W,
     part: &'p AtomicUsize,
 }
 
-/// Return value of [rcb_split].
-struct SplitResult<W> {
-    /// Index of the first item in the right part in the array of [Item]s.
-    split_idx: usize,
+/// Return value of [rcb_split] and [par_rcb_split].
+struct SplitResult<'a, 'p, const D: usize, W> {
+    left: &'a mut [Item<'p, D, W>],
+    right: &'a mut [Item<'p, D, W>],
     /// Weight of the left part, used to compute the sum for the next iteration.
     weight_left: W,
     /// Coordinate value of the split, used to compute the [BoundingBox]es.
     split_pos: f64,
 }
 
-fn rcb_split<const D: usize, W>(
-    items: &mut [Item<D, W>],
+/// Splits the given items into two sets of similar weights.
+fn rcb_split<'a, 'p, const D: usize, W>(
+    items: &'a mut [Item<'p, D, W>],
+    coord: usize,
+    max: f64,
+    sum: W,
+) -> SplitResult<'a, 'p, D, W>
+where
+    W: RcbWeight,
+{
+    let span = tracing::info_span!("rcb_split");
+    let _enter = span.enter();
+
+    items.sort_unstable_by(|item1, item2| {
+        crate::partial_cmp(&item1.point[coord], &item2.point[coord])
+    });
+
+    let mut count_left = items.len();
+    let mut split_pos = max;
+    let mut weight_left = W::default();
+    for (i, item) in items.iter().enumerate() {
+        if sum <= weight_left + weight_left {
+            count_left = i;
+            split_pos = item.point[coord];
+            break;
+        }
+        weight_left += item.weight;
+    }
+
+    let (left, right) = items.split_at_mut(count_left);
+
+    SplitResult {
+        left,
+        right,
+        weight_left,
+        split_pos,
+    }
+}
+
+/// Wrapper around [`slice::split_at_mut`] which makes it so elements of the
+/// left side are all lower than all elements of the right side.
+fn reorder_split<F, T>(s: &mut [T], index: usize, compare: F) -> (&mut [T], &mut [T])
+where
+    F: Fn(&T, &T) -> cmp::Ordering,
+{
+    if index == s.len() {
+        s.split_at_mut(s.len())
+    } else {
+        let span = tracing::info_span!("select_nth_unstable");
+        let _enter = span.enter();
+
+        let (left, _, _right_minus_one) = s.select_nth_unstable_by(index, compare);
+        let left_len = left.len();
+        s.split_at_mut(left_len)
+    }
+}
+
+/// Splits the given items into two sets of similar weights (parallel version).
+fn par_rcb_split<'a, 'p, const D: usize, W>(
+    items: &'a mut [Item<'p, D, W>],
     coord: usize,
     tolerance: f64,
     mut min: f64,
     mut max: f64,
     sum: W,
-) -> SplitResult<W>
+) -> SplitResult<'a, 'p, D, W>
 where
     W: RcbWeight,
 {
-    let span = tracing::info_span!("rcb_split");
+    let span = tracing::info_span!("par_rcb_split");
     let _enter = span.enter();
 
     let mut prev_count_left = usize::MAX;
@@ -70,8 +130,12 @@ where
             f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
         };
         if count_left == prev_count_left || imbalance < tolerance {
+            let (left, right) = reorder_split(items, count_left, |item1, item2| {
+                crate::partial_cmp(&item1.point[coord], &item2.point[coord])
+            });
             return SplitResult {
-                split_idx: count_left,
+                left,
+                right,
                 weight_left,
                 split_pos: split_target,
             };
@@ -116,36 +180,23 @@ fn rcb_recurse<const D: usize, W>(
         return;
     }
 
-    let span = tracing::info_span!("rcb_recurse");
-    let enter = span.enter();
-
     let min = bb.p_min[coord];
     let max = bb.p_max[coord];
     let SplitResult {
-        split_idx,
+        left,
+        right,
         weight_left,
         split_pos,
-    } = rcb_split(items, coord, tolerance, min, max, sum);
-    let (left, right) = if split_idx == items.len() {
-        items.split_at_mut(items.len())
+    } = if items.len() > PARALLEL_SPLIT_THRESHOLD {
+        par_rcb_split(items, coord, tolerance, min, max, sum)
     } else {
-        let span = tracing::info_span!("select_nth_unstable");
-        let _enter = span.enter();
-
-        let (left, _, _right_minus_one) = items
-            .select_nth_unstable_by(split_idx, |item1, item2| {
-                crate::partial_cmp(&item1.point[coord], &item2.point[coord])
-            });
-        let left_len = left.len();
-        items.split_at_mut(left_len)
+        rcb_split(items, coord, max, sum)
     };
 
     let mut bb_left = bb.clone();
     bb_left.p_max[coord] = split_pos;
     let mut bb_right = bb;
     bb_right.p_min[coord] = split_pos;
-
-    mem::drop(enter);
 
     rayon::join(
         || {
@@ -448,6 +499,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::geometry::Point2D;
 
@@ -461,6 +514,18 @@ mod tests {
             Point2D::from([-4., 3.]),
             Point2D::from([1., 2.]),
         ]
+    }
+
+    #[test]
+    fn test_reorder_split() {
+        const SLICE: [usize; 6] = [6, 0, 3, 4, 5, 2];
+        for index in SLICE {
+            let mut slice = SLICE.clone();
+            let (left, right) = reorder_split(&mut slice, index, usize::cmp);
+            assert_eq!(left.len(), index);
+            assert_eq!(right.len(), SLICE.len() - index);
+            assert!(right.iter().all(|r| left.iter().all(|l| l <= r)));
+        }
     }
 
     #[test]
@@ -482,6 +547,50 @@ mod tests {
 
         assert_eq!(permutation, vec![3, 6, 5, 1, 0, 2, 4]);
     }
+
+    proptest!(
+        #[test]
+        fn test_par_rcb_split(
+            (points, weights) in (1..200_usize)
+                .prop_flat_map(|point_count| {
+                    (
+                        prop::collection::vec(
+                            (0.0..1.0_f64, 0.0..1.0_f64).prop_map(|(a, b)| Point2D::new(a, b)),
+                            point_count,
+                        ),
+                        prop::collection::vec(1..1000_u32, point_count),
+                    )
+                })
+        ) {
+            let bb = BoundingBox::from_points(points.par_iter().cloned()).unwrap();
+            let min = bb.p_min[0];
+            let max = bb.p_max[0];
+            let sum: u32 = weights.iter().sum();
+
+            let part = &AtomicUsize::new(0);
+            let mut items: Vec<Item<2, u32>> = points
+                .into_iter()
+                .zip(weights)
+                .map(|(point, weight)| Item {
+                    point,
+                    weight,
+                    part,
+                })
+                .collect();
+
+            let SplitResult {
+                left,
+                right,
+                weight_left,
+                split_pos,
+            } = par_rcb_split(&mut items, 0, 0.05, min, max, sum);
+
+            prop_assert!(left.iter().all(|l| right
+                .iter()
+                .all(|r| l.point[0] <= split_pos && split_pos <= r.point[0])));
+            prop_assert_eq!(weight_left, left.iter().map(|l| l.weight).sum());
+        }
+    );
 
     #[test]
     fn test_rcb_basic() {
