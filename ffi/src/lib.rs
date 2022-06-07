@@ -280,7 +280,6 @@ pub unsafe extern "C" fn coupe_rcb(
     let algo = coupe::Rcb {
         iter_count,
         tolerance,
-        ..Default::default()
     };
 
     catch_unwind(|| {

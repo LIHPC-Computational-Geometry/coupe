@@ -120,10 +120,6 @@ These algorithms create partitions using cell coordinates.
 	*rcb*,PART_COUNT,[TOLERANCE=0.05]
 		Recursive Coordinate Biscection
 
-	*fastrcb*,PART_COUNT,[TOLERANCE=0.05]
-		Recursive Coordinate Biscection - experimental version
-		This version is faster and scales better but might give wrong results.
-
 	*hilbert*,PART_COUNT,[ORDER=12]
 		Hilbert Curve
 

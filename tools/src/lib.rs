@@ -289,12 +289,6 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
         "rcb" => Box::new(coupe::Rcb {
             iter_count: require(parse(args.next()))?,
             tolerance: optional(parse(args.next()), 0.05)?,
-            ..Default::default()
-        }),
-        "fastrcb" => Box::new(coupe::Rcb {
-            iter_count: require(parse(args.next()))?,
-            tolerance: optional(parse(args.next()), 0.05)?,
-            fast: true,
         }),
         "hilbert" => Box::new(coupe::HilbertCurve {
             part_count: require(parse(args.next()))?,
