@@ -892,8 +892,11 @@ where
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
-    let mbr = OrientedBoundingBox::from_points(points);
-    let points = points.par_iter().map(|p| mbr.obb_to_aabb(p));
+    let obb = match OrientedBoundingBox::from_points(points) {
+        Some(v) => v,
+        None => return Ok(()),
+    };
+    let points = points.par_iter().map(|p| obb.obb_to_aabb(p));
     // When the rotation is done, we just apply RCB
     simple_rcb(partition, points, weights, n_iter, tolerance)
 }

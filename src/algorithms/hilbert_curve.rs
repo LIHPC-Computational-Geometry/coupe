@@ -22,6 +22,9 @@ fn hilbert_curve_partition(
     part_count: usize,
     order: usize,
 ) {
+    debug_assert!(!partition.is_empty()); // to compute the bounding box
+    debug_assert_eq!(partition.len(), points.len());
+    debug_assert_eq!(partition.len(), weights.len());
     debug_assert!(order < 64);
 
     let compute_hilbert_index = hilbert_index_computer(points, order);
@@ -97,8 +100,9 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
     }
 }
 
+/// Panics if `points` is empty.
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
-    let mbr = OrientedBoundingBox::from_points(points);
+    let mbr = OrientedBoundingBox::from_points(points).unwrap();
     let aabb = mbr.aabb();
     let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
     let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
@@ -325,6 +329,9 @@ where
                 max: 63,
                 actual: self.order,
             });
+        }
+        if part_ids.is_empty() {
+            return Ok(());
         }
         hilbert_curve_partition(
             part_ids,

@@ -229,7 +229,10 @@ where
             mesh.node_count(),
         )
     };
-    let bb = coupe::BoundingBox::<2>::from_points(coordinates.par_iter().cloned());
+    let bb = match coupe::BoundingBox::<2>::from_points(coordinates.par_iter().cloned()) {
+        Some(v) => v,
+        None => return Ok(()),
+    };
     let xmin = bb.p_min[0];
     let xmax = bb.p_max[0];
     let ymin = bb.p_min[1];
