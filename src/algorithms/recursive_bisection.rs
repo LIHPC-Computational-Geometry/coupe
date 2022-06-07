@@ -12,7 +12,6 @@ use nalgebra::ToTypenum;
 use rayon::prelude::*;
 use std::cmp;
 use std::iter::Sum;
-use std::mem;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -254,9 +253,18 @@ where
         });
     }
 
+    let atomic_partition = unsafe {
+        // Rust does not seem to have a strict aliasing rule like C does, so the
+        // transmute here looks safe, but we still need to ensure partition is
+        // properly aligned for atomic types. While this should always be the
+        // case, better safe than sorry.
+        let (before, partition, after) = partition.align_to_mut::<AtomicUsize>();
+        assert!(before.is_empty() && after.is_empty());
+        &*partition
+    };
     let mut items: Vec<_> = points
         .zip(weights)
-        .zip(unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(&mut *partition) })
+        .zip(atomic_partition)
         .map(|((point, weight), part)| Item {
             point,
             weight,
