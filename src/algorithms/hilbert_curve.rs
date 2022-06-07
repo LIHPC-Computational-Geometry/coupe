@@ -10,7 +10,8 @@
 //!
 //! The complexity of encoding a point is O(order)
 
-use crate::geometry::{Mbr, Point2D};
+use crate::geometry::OrientedBoundingBox;
+use crate::Point2D;
 use rayon::prelude::*;
 use std::fmt;
 
@@ -97,14 +98,12 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
 }
 
 fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
-    let mbr = Mbr::from_points(points);
+    let mbr = OrientedBoundingBox::from_points(points);
     let aabb = mbr.aabb();
-    let p_min = aabb.p_min();
-    let p_max = aabb.p_max();
-    let x_mapping = segment_to_segment(p_min.x, p_max.x, order);
-    let y_mapping = segment_to_segment(p_min.y, p_max.y, order);
+    let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
+    let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
     move |p| {
-        let p = mbr.mbr_to_aabb(p);
+        let p = mbr.obb_to_aabb(p);
         encode(x_mapping(p.x), y_mapping(p.y), order)
     }
 }

@@ -17,7 +17,8 @@
 //! Finally, the points are reordered according to the order of their hash.
 
 use super::multi_jagged::split_at_mut_many;
-use crate::geometry::{Mbr, PointND};
+use crate::geometry::OrientedBoundingBox;
+use crate::PointND;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
@@ -54,8 +55,8 @@ fn z_curve_partition<const D: usize>(
         max_order,
     );
 
-    // Mbr used to construct Point hashes
-    let mbr = Mbr::from_points(points);
+    // Bounding box used to construct Point hashes
+    let mbr = OrientedBoundingBox::from_points(points);
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
@@ -90,7 +91,7 @@ fn z_curve_partition<const D: usize>(
 fn z_curve_partition_recurse<const D: usize>(
     points: &[PointND<D>],
     order: u32,
-    mbr: &Mbr<D>,
+    mbr: &OrientedBoundingBox<D>,
     permu: &mut [usize],
 ) {
     // we stop recursion if there is only 1 point left to avoid useless calls
@@ -164,7 +165,7 @@ pub(crate) fn z_curve_reorder_permu<const D: usize>(
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    let mbr = Mbr::from_points(points);
+    let mbr = OrientedBoundingBox::from_points(points);
     let hashes = permu
         .par_iter()
         .map(|idx| compute_hash(&points[*idx], order, &mbr))
@@ -173,7 +174,11 @@ pub(crate) fn z_curve_reorder_permu<const D: usize>(
     permu.par_sort_by_key(|idx| hashes[*idx]);
 }
 
-fn compute_hash<const D: usize>(point: &PointND<D>, order: u32, mbr: &Mbr<D>) -> HashType {
+fn compute_hash<const D: usize>(
+    point: &PointND<D>,
+    order: u32,
+    mbr: &OrientedBoundingBox<D>,
+) -> HashType {
     let current_hash = mbr
         .region(point)
         .expect("Cannot compute the z-hash of a point outside of the current Mbr.");

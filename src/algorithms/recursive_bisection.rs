@@ -1,5 +1,5 @@
 use super::Error;
-use crate::geometry::Mbr;
+use crate::geometry::OrientedBoundingBox;
 use crate::geometry::PointND;
 use async_lock::Mutex;
 use async_lock::MutexGuard;
@@ -892,8 +892,8 @@ where
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
-    let mbr = Mbr::from_points(points);
-    let points = points.par_iter().map(|p| mbr.mbr_to_aabb(p));
+    let mbr = OrientedBoundingBox::from_points(points);
+    let points = points.par_iter().map(|p| mbr.obb_to_aabb(p));
     // When the rotation is done, we just apply RCB
     simple_rcb(partition, points, weights, n_iter, tolerance)
 }

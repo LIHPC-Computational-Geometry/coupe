@@ -229,9 +229,11 @@ where
             mesh.node_count(),
         )
     };
-    let aabb = coupe::Aabb::<2>::from_points(coordinates.par_iter().cloned());
-    let [xmin, ymin] = <[f64; 2]>::from(*aabb.p_min());
-    let [xmax, ymax] = <[f64; 2]>::from(*aabb.p_max());
+    let bb = coupe::BoundingBox::<2>::from_points(coordinates.par_iter().cloned());
+    let xmin = bb.p_min[0];
+    let xmax = bb.p_max[0];
+    let ymin = bb.p_min[1];
+    let ymax = bb.p_max[1];
     let width = xmax - xmin;
     let height = ymax - ymin;
     writeln!(

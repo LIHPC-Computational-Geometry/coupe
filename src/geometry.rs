@@ -16,21 +16,18 @@ pub type Point3D = SVector<f64, 3>;
 pub type PointND<const D: usize> = SVector<f64, D>;
 pub type Matrix<const D: usize> = SMatrix<f64, D, D>;
 
+/// Axis-aligned bounding box.
 #[derive(Debug, Clone)]
-pub struct Aabb<const D: usize> {
-    p_min: PointND<D>,
-    p_max: PointND<D>,
+pub struct BoundingBox<const D: usize> {
+    pub p_min: PointND<D>,
+    pub p_max: PointND<D>,
 }
 
-impl<const D: usize> Aabb<D> {
-    pub fn p_min(&self) -> &PointND<D> {
-        &self.p_min
-    }
-
-    pub fn p_max(&self) -> &PointND<D> {
-        &self.p_max
-    }
-
+impl<const D: usize> BoundingBox<D> {
+    /// The axis-aligned *minimum* bounding box.
+    ///
+    /// This is the smallest rectangle (rectangular cuboid in 3D) that both
+    /// contains all given points and is aligned with the axises.
     pub fn from_points<P>(points: P) -> Self
     where
         P: IntoParallelIterator<Item = PointND<D>>,
@@ -189,27 +186,33 @@ impl<const D: usize> Aabb<D> {
     }
 }
 
-/// Minimum bounding rectangle.
+/// Oriented bounding box.
+///
+/// Similar to a [BoundingBox] except it is not necessarily parallel to the
+/// axises.
 #[derive(Debug, Clone)]
-pub(crate) struct Mbr<const D: usize> {
-    aabb: Aabb<D>,
-    aabb_to_mbr: Matrix<D>,
-    mbr_to_aabb: Matrix<D>,
+pub(crate) struct OrientedBoundingBox<const D: usize> {
+    aabb: BoundingBox<D>,
+    aabb_to_obb: Matrix<D>,
+    obb_to_aabb: Matrix<D>,
 }
 
-impl<const D: usize> Mbr<D> {
-    pub fn aabb(&self) -> &Aabb<D> {
+impl<const D: usize> OrientedBoundingBox<D> {
+    /// The underlying axis-aligned bounding box.
+    pub fn aabb(&self) -> &BoundingBox<D> {
         &self.aabb
     }
 
-    /// Transforms a point with the transformation which maps the Mbr to the underlying Aabb
-    pub fn mbr_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
-        self.mbr_to_aabb * point
+    /// Transforms a point with the transformation which maps the
+    /// arbitrarily-oriented bounding box to the underlying axis-aligned
+    /// bounding box.
+    pub fn obb_to_aabb(&self, point: &PointND<D>) -> PointND<D> {
+        self.obb_to_aabb * point
     }
 
-    /// Constructs a new `Mbr` from a slice of `PointND`.
+    /// The arbitrarily-oriented *minimum* bounding box.
     ///
-    /// The resulting `Mbr` is the smallest Aabb that contains every points of the slice.
+    /// The smallest box that contains all given points.
     pub fn from_points(points: &[PointND<D>]) -> Self
     where
         Const<D>: DimSub<Const<1>>,
@@ -220,14 +223,14 @@ impl<const D: usize> Mbr<D> {
         let mat = inertia_matrix(&weights, points);
         let vec = inertia_vector(mat);
         let base_change = householder_reflection(&vec);
-        let mbr_to_aabb = base_change.try_inverse().unwrap();
-        let mapped = points.par_iter().map(|p| mbr_to_aabb * p);
-        let aabb = Aabb::from_points(mapped);
+        let obb_to_aabb = base_change.try_inverse().unwrap();
+        let mapped = points.par_iter().map(|p| obb_to_aabb * p);
+        let aabb = BoundingBox::from_points(mapped);
 
         Self {
             aabb,
-            aabb_to_mbr: base_change,
-            mbr_to_aabb,
+            aabb_to_obb: base_change,
+            obb_to_aabb,
         }
     }
 
@@ -236,40 +239,40 @@ impl<const D: usize> Mbr<D> {
     pub fn sub_mbr(&self, region: u32) -> Self {
         Self {
             aabb: self.aabb.sub_aabb(region),
-            aabb_to_mbr: self.aabb_to_mbr,
-            mbr_to_aabb: self.mbr_to_aabb,
+            aabb_to_obb: self.aabb_to_obb,
+            obb_to_aabb: self.obb_to_aabb,
         }
     }
 
-    /// Computes the distance between a point and the current mbr.
+    /// Computes the distance between a point and the current bounding box.
     pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
-        self.aabb.distance_to_point(&(self.mbr_to_aabb * point))
+        self.aabb.distance_to_point(&(self.obb_to_aabb * point))
     }
 
     /// Computes the center of the Mbr
     #[allow(unused)]
     pub fn center(&self) -> PointND<D> {
-        self.aabb_to_mbr * self.aabb.center()
+        self.aabb_to_obb * self.aabb.center()
     }
 
     /// Returns wheter or not the specified point is contained in the Mbr
     #[allow(unused)]
     pub fn contains(&self, point: &PointND<D>) -> bool {
-        self.aabb.contains(&(self.mbr_to_aabb * point))
+        self.aabb.contains(&(self.obb_to_aabb * point))
     }
 
     /// Returns the quadrant of the Aabb in which the specified point is.
     /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
     /// Returns `None` if the specified point is not contained in the Aabb.
     pub fn region(&self, point: &PointND<D>) -> Option<u32> {
-        self.aabb.region(&(self.mbr_to_aabb * point))
+        self.aabb.region(&(self.obb_to_aabb * point))
     }
 
     /// Returns the rotated min and max points of the Aabb.
     #[allow(unused)]
     pub fn minmax(&self) -> (PointND<D>, PointND<D>) {
-        let min = self.aabb_to_mbr * self.aabb.p_min;
-        let max = self.aabb_to_mbr * self.aabb.p_max;
+        let min = self.aabb_to_obb * self.aabb.p_min;
+        let max = self.aabb_to_obb * self.aabb.p_max;
         (min, max)
     }
 }
@@ -362,7 +365,7 @@ mod tests {
             Point2D::from([4., 5.]),
         ];
 
-        let aabb = Aabb::from_points(points);
+        let aabb = BoundingBox::from_points(points);
 
         assert_ulps_eq!(aabb.p_min, Point2D::from([0., 0.]));
         assert_ulps_eq!(aabb.p_max, Point2D::from([5., 5.]));
@@ -371,14 +374,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_aabb2d_invalid_input_1() {
-        let _aabb = Aabb::<2>::from_points([]);
+        let _aabb = BoundingBox::<2>::from_points([]);
     }
 
     #[test]
     #[should_panic]
     fn test_aabb2d_invalid_input_2() {
         let points = [Point2D::from([5., -9.2])];
-        let _aabb = Aabb::from_points(points);
+        let _aabb = BoundingBox::from_points(points);
     }
 
     #[test]
@@ -418,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mbr_center() {
+    fn test_obb_center() {
         let points = vec![
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
@@ -426,14 +429,14 @@ mod tests {
             Point2D::from([6., 5.]),
         ];
 
-        let mbr = Mbr::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points);
 
-        let center = mbr.center();
+        let center = obb.center();
         assert_ulps_eq!(center, Point2D::from([3., 3.]))
     }
 
     #[test]
-    fn test_mbr_contains() {
+    fn test_obb_contains() {
         let points = vec![
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
@@ -441,20 +444,20 @@ mod tests {
             Point2D::from([6., 5.]),
         ];
 
-        let mbr = Mbr::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points);
 
-        assert!(!mbr.contains(&Point2D::from([0., 0.])));
-        assert!(mbr.contains(&mbr.center()));
-        assert!(mbr.contains(&Point2D::from([5., 4.])));
+        assert!(!obb.contains(&Point2D::from([0., 0.])));
+        assert!(obb.contains(&obb.center()));
+        assert!(obb.contains(&Point2D::from([5., 4.])));
 
-        let (min, max) = mbr.minmax();
+        let (min, max) = obb.minmax();
 
-        assert!(mbr.contains(&min));
-        assert!(mbr.contains(&max));
+        assert!(obb.contains(&min));
+        assert!(obb.contains(&max));
     }
 
     #[test]
-    fn test_mbr_quadrant() {
+    fn test_obb_quadrant() {
         let points = vec![
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
@@ -462,13 +465,13 @@ mod tests {
             Point2D::from([6., 5.]),
         ];
 
-        let mbr = Mbr::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points);
 
-        let none = mbr.region(&Point2D::from([0., 0.]));
-        let q1 = mbr.region(&Point2D::from([1.2, 1.2]));
-        let q2 = mbr.region(&Point2D::from([5.8, 4.9]));
-        let q3 = mbr.region(&Point2D::from([0.2, 1.1]));
-        let q4 = mbr.region(&Point2D::from([5.1, 5.8]));
+        let none = obb.region(&Point2D::from([0., 0.]));
+        let q1 = obb.region(&Point2D::from([1.2, 1.2]));
+        let q2 = obb.region(&Point2D::from([5.8, 4.9]));
+        let q3 = obb.region(&Point2D::from([0.2, 1.1]));
+        let q4 = obb.region(&Point2D::from([5.1, 5.8]));
 
         println!("q1 = {:?}", q1);
         println!("q2 = {:?}", q2);
@@ -521,7 +524,7 @@ mod tests {
             Point3D::from([4., 5., 3.]),
         ];
 
-        let aabb = Aabb::from_points(points);
+        let aabb = BoundingBox::from_points(points);
 
         assert_ulps_eq!(aabb.p_min, Point3D::from([0., 0., -2.]));
         assert_ulps_eq!(aabb.p_max, Point3D::from([5., 5., 5.]));
@@ -547,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mbr_octant() {
+    fn test_obb_octant() {
         let points = vec![
             Point3D::from([0., 1., 0.]),
             Point3D::from([1., 0., 0.]),
@@ -559,19 +562,19 @@ mod tests {
             Point3D::from([6., 5., 1.]),
         ];
 
-        let mbr = Mbr::from_points(&points);
-        eprintln!("mbr = {:#?}", mbr);
+        let obb = OrientedBoundingBox::from_points(&points);
+        eprintln!("obb = {:#?}", obb);
 
-        let none = mbr.region(&Point3D::from([0., 0., 0.]));
+        let none = obb.region(&Point3D::from([0., 0., 0.]));
         let octants = vec![
-            mbr.region(&Point3D::from([1.2, 1.2, 0.3])),
-            mbr.region(&Point3D::from([5.8, 4.9, 0.3])),
-            mbr.region(&Point3D::from([0.2, 1.1, 0.3])),
-            mbr.region(&Point3D::from([5.1, 5.8, 0.3])),
-            mbr.region(&Point3D::from([1.2, 1.2, 0.7])),
-            mbr.region(&Point3D::from([5.8, 4.9, 0.7])),
-            mbr.region(&Point3D::from([0.2, 1.1, 0.7])),
-            mbr.region(&Point3D::from([5.1, 5.8, 0.7])),
+            obb.region(&Point3D::from([1.2, 1.2, 0.3])),
+            obb.region(&Point3D::from([5.8, 4.9, 0.3])),
+            obb.region(&Point3D::from([0.2, 1.1, 0.3])),
+            obb.region(&Point3D::from([5.1, 5.8, 0.3])),
+            obb.region(&Point3D::from([1.2, 1.2, 0.7])),
+            obb.region(&Point3D::from([5.8, 4.9, 0.7])),
+            obb.region(&Point3D::from([0.2, 1.1, 0.7])),
+            obb.region(&Point3D::from([5.1, 5.8, 0.7])),
         ];
         assert_eq!(none, None);
         assert!(octants.iter().all(|o| o.is_some()));
