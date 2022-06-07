@@ -134,7 +134,7 @@ fn rcb_recurse<const D: usize, W>(
 
         let (left, _, _right_minus_one) = items
             .select_nth_unstable_by(split_idx, |item1, item2| {
-                f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
+                crate::partial_cmp(&item1.point[coord], &item2.point[coord])
             });
         let left_len = left.len();
         items.split_at_mut(left_len)
