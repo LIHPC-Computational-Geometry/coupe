@@ -218,17 +218,16 @@ impl<const D: usize> OrientedBoundingBox<D> {
         DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
             + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     {
-        let weights = points.par_iter().map(|_| 1.).collect::<Vec<_>>();
-        let mat = inertia_matrix(&weights, points);
+        let mat = inertia_matrix(points);
         let vec = inertia_vector(mat);
-        let base_change = householder_reflection(&vec);
-        let obb_to_aabb = base_change.try_inverse().unwrap();
+        let aabb_to_obb = householder_reflection(&vec);
+        let obb_to_aabb = aabb_to_obb.try_inverse().unwrap();
         let mapped = points.par_iter().map(|p| obb_to_aabb * p);
         let aabb = BoundingBox::from_points(mapped)?;
 
         Some(Self {
             aabb,
-            aabb_to_obb: base_change,
+            aabb_to_obb,
             obb_to_aabb,
         })
     }
@@ -276,27 +275,17 @@ impl<const D: usize> OrientedBoundingBox<D> {
     }
 }
 
-pub(crate) fn inertia_matrix<const D: usize>(weights: &[f64], points: &[PointND<D>]) -> Matrix<D> {
-    let total_weight = weights.par_iter().sum::<f64>();
+fn inertia_matrix<const D: usize>(points: &[PointND<D>]) -> Matrix<D> {
+    let centroid: PointND<D> = points.par_iter().sum();
+    let centroid: PointND<D> = centroid / points.len() as f64;
 
-    let centroid: PointND<D> = weights
+    points
         .par_iter()
-        .zip(points)
-        .fold_with(PointND::<D>::from_element(0.), |acc, (w, p)| {
-            acc + p.map(|e| e * w)
+        .map(|point| {
+            let offset = point - centroid;
+            offset * offset.transpose()
         })
-        .reduce_with(|a, b| a + b)
-        .unwrap()
-        / total_weight;
-
-    weights
-        .par_iter()
-        .zip(points)
-        .fold_with(Matrix::from_element(0.), |acc, (w, p)| {
-            acc + ((p - centroid) * (p - centroid).transpose()).map(|e| e * w)
-        })
-        .reduce_with(|a, b| a + b)
-        .unwrap()
+        .sum()
 }
 
 pub(crate) fn inertia_vector<const D: usize>(mat: Matrix<D>) -> PointND<D>
@@ -378,15 +367,13 @@ mod tests {
 
     #[test]
     fn test_inertia_matrix() {
-        let points = vec![
+        let points = [
             Point2D::from([3., 0.]),
             Point2D::from([0., 3.]),
             Point2D::from([6., -3.]),
         ];
 
-        let weights = vec![1.; 3];
-
-        let mat = inertia_matrix(&weights, &points);
+        let mat = inertia_matrix(&points);
         let expected = Matrix2::new(18., -18., -18., 18.);
 
         assert_ulps_eq!(mat, expected);
@@ -394,15 +381,13 @@ mod tests {
 
     #[test]
     fn test_inertia_vector_2d() {
-        let points = vec![
+        let points = [
             Point2D::from([3., 0.]),
             Point2D::from([0., 3.]),
             Point2D::from([6., -3.]),
         ];
 
-        let weights = vec![1.; 3];
-
-        let mat = inertia_matrix(&weights, &points);
+        let mat = inertia_matrix(&points);
         let vec = inertia_vector(mat);
         let vec = Point3D::from([vec.x, vec.y, 0.]);
         let expected = Point3D::from([1., -1., 0.]);
@@ -524,19 +509,15 @@ mod tests {
 
     #[test]
     fn test_inertia_vector_3d() {
-        let points = vec![
+        let points = [
             Point3D::from([3., 0., 0.]),
             Point3D::from([0., 3., 3.]),
             Point3D::from([6., -3., -3.]),
         ];
 
-        let weights = vec![1.; 3];
-
-        let mat = inertia_matrix(&weights, &points);
+        let mat = inertia_matrix(&points);
         let vec = inertia_vector(mat);
         let expected = Point3D::from([1., -1., -1.]);
-
-        eprintln!("{}", vec);
 
         assert_relative_eq!(expected.cross(&vec).norm(), 0., epsilon = 1e-15);
     }
