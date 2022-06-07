@@ -28,22 +28,25 @@ impl<const D: usize> BoundingBox<D> {
     ///
     /// This is the smallest rectangle (rectangular cuboid in 3D) that both
     /// contains all given points and is aligned with the axises.
-    pub fn from_points<P>(points: P) -> Self
+    ///
+    /// Returns `None` iff the given iterator is empty.
+    pub fn from_points<P>(points: P) -> Option<Self>
     where
         P: IntoParallelIterator<Item = PointND<D>>,
         P::Iter: IndexedParallelIterator,
     {
         let points = points.into_par_iter();
-        assert!(1 < points.len());
-
-        let (min, max) = points
+        if points.len() == 0 {
+            return None;
+        }
+        let (p_min, p_max) = points
             .fold_with(
                 (
                     PointND::<D>::from_element(std::f64::MAX),
                     PointND::<D>::from_element(std::f64::MIN),
                 ),
                 |(mut mins, mut maxs), vals| {
-                    for ((min, max), val) in mins.iter_mut().zip(maxs.iter_mut()).zip(vals.iter()) {
+                    for ((min, max), val) in mins.iter_mut().zip(maxs.iter_mut()).zip(&vals) {
                         if *val < *min {
                             *min = *val;
                         }
@@ -59,23 +62,19 @@ impl<const D: usize> BoundingBox<D> {
                     PointND::<D>::from_iterator(
                         mins_left
                             .into_iter()
-                            .zip(mins_right.into_iter())
+                            .zip(&mins_right)
                             .map(|(left, right)| left.min(*right)),
                     ),
                     PointND::<D>::from_iterator(
                         maxs_left
                             .into_iter()
-                            .zip(maxs_right.into_iter())
+                            .zip(&maxs_right)
                             .map(|(left, right)| left.max(*right)),
                     ),
                 )
             })
-            .unwrap();
-
-        Self {
-            p_min: min,
-            p_max: max,
-        }
+            .unwrap(); // fold_with yields at least one element.
+        Some(Self { p_min, p_max })
     }
 
     fn center(&self) -> PointND<D> {
@@ -213,7 +212,7 @@ impl<const D: usize> OrientedBoundingBox<D> {
     /// The arbitrarily-oriented *minimum* bounding box.
     ///
     /// The smallest box that contains all given points.
-    pub fn from_points(points: &[PointND<D>]) -> Self
+    pub fn from_points(points: &[PointND<D>]) -> Option<Self>
     where
         Const<D>: DimSub<Const<1>>,
         DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
@@ -225,13 +224,13 @@ impl<const D: usize> OrientedBoundingBox<D> {
         let base_change = householder_reflection(&vec);
         let obb_to_aabb = base_change.try_inverse().unwrap();
         let mapped = points.par_iter().map(|p| obb_to_aabb * p);
-        let aabb = BoundingBox::from_points(mapped);
+        let aabb = BoundingBox::from_points(mapped)?;
 
-        Self {
+        Some(Self {
             aabb,
             aabb_to_obb: base_change,
             obb_to_aabb,
-        }
+        })
     }
 
     /// Constructs a new Mbr that is a sub-Mbr of the current one.
@@ -365,7 +364,7 @@ mod tests {
             Point2D::from([4., 5.]),
         ];
 
-        let aabb = BoundingBox::from_points(points);
+        let aabb = BoundingBox::from_points(points).unwrap();
 
         assert_ulps_eq!(aabb.p_min, Point2D::from([0., 0.]));
         assert_ulps_eq!(aabb.p_max, Point2D::from([5., 5.]));
@@ -373,15 +372,8 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_aabb2d_invalid_input_1() {
-        let _aabb = BoundingBox::<2>::from_points([]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_aabb2d_invalid_input_2() {
-        let points = [Point2D::from([5., -9.2])];
-        let _aabb = BoundingBox::from_points(points);
+    fn test_aabb2d_invalid_input() {
+        BoundingBox::<2>::from_points([]).unwrap();
     }
 
     #[test]
@@ -422,14 +414,14 @@ mod tests {
 
     #[test]
     fn test_obb_center() {
-        let points = vec![
+        let points = [
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
             Point2D::from([5., 6.]),
             Point2D::from([6., 5.]),
         ];
 
-        let obb = OrientedBoundingBox::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points).unwrap();
 
         let center = obb.center();
         assert_ulps_eq!(center, Point2D::from([3., 3.]))
@@ -437,14 +429,14 @@ mod tests {
 
     #[test]
     fn test_obb_contains() {
-        let points = vec![
+        let points = [
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
             Point2D::from([5., 6.]),
             Point2D::from([6., 5.]),
         ];
 
-        let obb = OrientedBoundingBox::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points).unwrap();
 
         assert!(!obb.contains(&Point2D::from([0., 0.])));
         assert!(obb.contains(&obb.center()));
@@ -458,14 +450,14 @@ mod tests {
 
     #[test]
     fn test_obb_quadrant() {
-        let points = vec![
+        let points = [
             Point2D::from([0., 1.]),
             Point2D::from([1., 0.]),
             Point2D::from([5., 6.]),
             Point2D::from([6., 5.]),
         ];
 
-        let obb = OrientedBoundingBox::from_points(&points);
+        let obb = OrientedBoundingBox::from_points(&points).unwrap();
 
         let none = obb.region(&Point2D::from([0., 0.]));
         let q1 = obb.region(&Point2D::from([1.2, 1.2]));
@@ -524,7 +516,7 @@ mod tests {
             Point3D::from([4., 5., 3.]),
         ];
 
-        let aabb = BoundingBox::from_points(points);
+        let aabb = BoundingBox::from_points(points).unwrap();
 
         assert_ulps_eq!(aabb.p_min, Point3D::from([0., 0., -2.]));
         assert_ulps_eq!(aabb.p_max, Point3D::from([5., 5., 5.]));
@@ -551,7 +543,7 @@ mod tests {
 
     #[test]
     fn test_obb_octant() {
-        let points = vec![
+        let points = [
             Point3D::from([0., 1., 0.]),
             Point3D::from([1., 0., 0.]),
             Point3D::from([5., 6., 0.]),
@@ -562,8 +554,7 @@ mod tests {
             Point3D::from([6., 5., 1.]),
         ];
 
-        let obb = OrientedBoundingBox::from_points(&points);
-        eprintln!("obb = {:#?}", obb);
+        let obb = OrientedBoundingBox::from_points(&points).unwrap();
 
         let none = obb.region(&Point3D::from([0., 0., 0.]));
         let octants = vec![

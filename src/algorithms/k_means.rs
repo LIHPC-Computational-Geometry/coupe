@@ -286,12 +286,16 @@ fn balanced_k_means_iter<const D: usize>(
     }
 }
 
-// This is the main load balance routine. It handles:
-//   - reordering the clusters according to their distance to a bounding box of all the points
-//   - assigning each point to the closest cluster according to the effective distance
-//   - checking partitions imbalance
-//   - increasing of diminishing clusters influence based on their imbalance
-//   - relaxing upper and lower bounds
+/// This is the main load balance routine. It handles:
+///   - reordering the clusters according to their distance to a bounding box of all the points
+///   - assigning each point to the closest cluster according to the effective distance
+///   - checking partitions imbalance
+///   - increasing of diminishing clusters influence based on their imbalance
+///   - relaxing upper and lower bounds
+///
+/// # Panics
+///
+/// Panics if `points` is empty.
 fn assign_and_balance<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
@@ -316,11 +320,11 @@ fn assign_and_balance<const D: usize>(
     } = clusters;
     // compute the distances from each cluster center to the minimal
     // bounding rectangle of the set of points
-    let mbr = OrientedBoundingBox::from_points(points);
+    let obb = OrientedBoundingBox::from_points(points).unwrap();
     let distances_to_mbr = centers
         .par_iter()
         .zip(influences.par_iter())
-        .map(|(center, influence)| mbr.distance_to_point(center) * influence)
+        .map(|(center, influence)| obb.distance_to_point(center) * influence)
         .collect::<Vec<_>>();
 
     let mut zipped = centers

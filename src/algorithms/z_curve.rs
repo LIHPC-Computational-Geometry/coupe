@@ -48,7 +48,9 @@ fn z_curve_partition<const D: usize>(
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D as u32))) as u32;
+    debug_assert_eq!(partition.len(), points.len());
+
+    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(1 << D)) as u32;
     assert!(
         order <= max_order,
         "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
@@ -56,12 +58,15 @@ fn z_curve_partition<const D: usize>(
     );
 
     // Bounding box used to construct Point hashes
-    let mbr = OrientedBoundingBox::from_points(points);
+    let obb = match OrientedBoundingBox::from_points(points) {
+        Some(v) => v,
+        None => return,
+    };
 
     let mut permutation: Vec<_> = (0..points.len()).into_par_iter().collect();
 
     // reorder points
-    z_curve_partition_recurse(points, order, &mbr, &mut permutation);
+    z_curve_partition_recurse(points, order, &obb, &mut permutation);
 
     let points_per_partition = points.len() / part_count;
     let remainder = points.len() % part_count;
@@ -131,64 +136,6 @@ fn z_curve_partition_recurse<const D: usize>(
     slices.into_par_iter().enumerate().for_each(|(i, slice)| {
         z_curve_partition_recurse(points, order - 1, &mbr.sub_mbr(i as u32), slice);
     })
-}
-
-// reorders a slice of Point3D in increasing z-curve order
-#[allow(unused)]
-pub(crate) fn z_curve_reorder<const D: usize>(points: &[PointND<D>], order: u32) -> Vec<usize>
-where
-    Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
-{
-    let max_order = (HASH_TYPE_MAX as f64).log(f64::from(2u32.pow(D as u32))) as u32;
-    assert!(
-        order <= max_order,
-        "Cannot use the z-curve partition algorithm with an order > {} because it would currently overflow hashes capacity",
-        max_order,
-    );
-
-    let mut permu: Vec<_> = (0..points.len()).into_par_iter().collect();
-    z_curve_reorder_permu(points, permu.as_mut_slice(), order);
-    permu
-}
-
-// reorders a slice of indices such that the associated array of Point3D is sorted
-// by increasing z-order
-#[allow(unused)]
-pub(crate) fn z_curve_reorder_permu<const D: usize>(
-    points: &[PointND<D>],
-    permu: &mut [usize],
-    order: u32,
-) where
-    Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
-{
-    let mbr = OrientedBoundingBox::from_points(points);
-    let hashes = permu
-        .par_iter()
-        .map(|idx| compute_hash(&points[*idx], order, &mbr))
-        .collect::<Vec<_>>();
-
-    permu.par_sort_by_key(|idx| hashes[*idx]);
-}
-
-fn compute_hash<const D: usize>(
-    point: &PointND<D>,
-    order: u32,
-    mbr: &OrientedBoundingBox<D>,
-) -> HashType {
-    let current_hash = mbr
-        .region(point)
-        .expect("Cannot compute the z-hash of a point outside of the current Mbr.");
-
-    if order == 0 {
-        HashType::from(current_hash)
-    } else {
-        (2_u128.pow(D as u32)).pow(order) * HashType::from(current_hash)
-            + compute_hash(point, order - 1, &mbr.sub_mbr(current_hash))
-    }
 }
 
 /// # Z space-filling curve algorithm
