@@ -1,6 +1,7 @@
 use super::Error;
 use crate::geometry::OrientedBoundingBox;
 use crate::geometry::PointND;
+use crate::BoundingBox;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
@@ -24,6 +25,16 @@ struct Item<'p, const D: usize, W> {
     part: &'p AtomicUsize,
 }
 
+/// Return value of [rcb_split].
+struct SplitResult<W> {
+    /// Index of the first item in the right part in the array of [Item]s.
+    split_idx: usize,
+    /// Weight of the left part, used to compute the sum for the next iteration.
+    weight_left: W,
+    /// Coordinate value of the split, used to compute the [BoundingBox]es.
+    split_pos: f64,
+}
+
 fn rcb_split<const D: usize, W>(
     items: &mut [Item<D, W>],
     coord: usize,
@@ -31,10 +42,13 @@ fn rcb_split<const D: usize, W>(
     mut min: f64,
     mut max: f64,
     sum: W,
-) -> usize
+) -> SplitResult<W>
 where
     W: RcbWeight,
 {
+    let span = tracing::info_span!("rcb_split");
+    let _enter = span.enter();
+
     let mut prev_count_left = usize::MAX;
     loop {
         let split_target = (min + max) / 2.0;
@@ -56,7 +70,11 @@ where
             f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
         };
         if count_left == prev_count_left || imbalance < tolerance {
-            return count_left;
+            return SplitResult {
+                split_idx: count_left,
+                weight_left,
+                split_pos: split_target,
+            };
         }
         prev_count_left = count_left;
 
@@ -75,6 +93,8 @@ fn rcb_recurse<const D: usize, W>(
     iter_id: usize,
     coord: usize,
     tolerance: f64,
+    sum: W,
+    bb: BoundingBox<D>,
 ) where
     W: RcbWeight,
 {
@@ -83,33 +103,35 @@ fn rcb_recurse<const D: usize, W>(
         return;
     }
     if iter_count == 0 {
+        let span = tracing::info_span!(
+            "rcb_recurse: apply_part_id",
+            item_count = items.len(),
+            iter_id,
+        );
+        let _enter = span.enter();
+
         items
             .into_par_iter()
             .for_each(|item| item.part.store(iter_id, Ordering::Relaxed));
         return;
     }
 
-    let sum: W = items.par_iter().map(|item| item.weight).sum();
-    let (min, max) = items
-        .par_iter()
-        .fold(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min, max), item| {
-                (
-                    f64::min(min, item.point[coord]),
-                    f64::max(max, item.point[coord]),
-                )
-            },
-        )
-        .reduce(
-            || (f64::INFINITY, f64::NEG_INFINITY),
-            |(min0, max0), (min1, max1)| (f64::min(min0, min1), f64::max(max0, max1)),
-        );
+    let span = tracing::info_span!("rcb_recurse");
+    let enter = span.enter();
 
-    let split_idx = rcb_split(items, coord, tolerance, min, max, sum);
+    let min = bb.p_min[coord];
+    let max = bb.p_max[coord];
+    let SplitResult {
+        split_idx,
+        weight_left,
+        split_pos,
+    } = rcb_split(items, coord, tolerance, min, max, sum);
     let (left, right) = if split_idx == items.len() {
         items.split_at_mut(items.len())
     } else {
+        let span = tracing::info_span!("select_nth_unstable");
+        let _enter = span.enter();
+
         let (left, _, _right_minus_one) = items
             .select_nth_unstable_by(split_idx, |item1, item2| {
                 f64::partial_cmp(&item1.point[coord], &item2.point[coord]).unwrap()
@@ -117,6 +139,13 @@ fn rcb_recurse<const D: usize, W>(
         let left_len = left.len();
         items.split_at_mut(left_len)
     };
+
+    let mut bb_left = bb.clone();
+    bb_left.p_max[coord] = split_pos;
+    let mut bb_right = bb;
+    bb_right.p_min[coord] = split_pos;
+
+    mem::drop(enter);
 
     rayon::join(
         || {
@@ -126,6 +155,8 @@ fn rcb_recurse<const D: usize, W>(
                 2 * iter_id + 1,
                 (coord + 1) % D,
                 tolerance,
+                weight_left,
+                bb_left,
             )
         },
         || {
@@ -135,6 +166,8 @@ fn rcb_recurse<const D: usize, W>(
                 2 * iter_id + 2,
                 (coord + 1) % D,
                 tolerance,
+                sum - weight_left,
+                bb_right,
             )
         },
     );
@@ -169,10 +202,6 @@ where
             actual: points.len(),
         });
     }
-    if partition.is_empty() {
-        // Would make the partition.min() at the end panic.
-        return Ok(());
-    }
 
     let mut items: Vec<_> = points
         .zip(weights)
@@ -183,9 +212,15 @@ where
             part,
         })
         .collect();
+    let sum = items.par_iter().map(|item| item.weight).sum();
+    let bb = match BoundingBox::from_points(items.par_iter().map(|item| item.point)) {
+        Some(v) => v,
+        None => return Ok(()), // `items` is empty.
+    };
 
-    rcb_recurse(&mut items, iter_count, 0, 0, tolerance);
+    rcb_recurse(&mut items, iter_count, 0, 0, tolerance, sum, bb);
 
+    // Part IDs must start from zero.
     let part_id_offset = *partition.par_iter().min().unwrap();
     partition
         .par_iter_mut()
