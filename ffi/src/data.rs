@@ -47,7 +47,7 @@ impl Constant {
 
     pub unsafe fn par_iter<'a, T>(
         &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + 'a
+    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send + Sync,
     {
@@ -85,7 +85,7 @@ impl Array {
 
     pub unsafe fn par_iter<'a, T>(
         &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + 'a
+    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send + Sync,
     {
@@ -132,7 +132,7 @@ impl Fn {
 
     pub unsafe fn par_iter<'a, T>(
         &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + 'a
+    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send,
     {
