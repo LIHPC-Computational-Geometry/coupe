@@ -11,7 +11,7 @@ fn bytes_as_slice<T>(v: &[u8]) -> &[T] {
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const T, v.len() / mem::size_of::<T>()) }
 }
 
-async fn steps_many(numbers: &[u32]) -> Vec<u32> {
+async fn steps_many(numbers: &[u32]) -> u32 {
     let instance = wgpu::Instance::new(wgpu::Backends::all());
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -62,8 +62,8 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
     });
 
     const BLOCK_SIZE: u32 = 16;
-    let mut n = numbers.len() as u32 / BLOCK_SIZE;
-    while n > 0 {
+    let mut n = numbers.len() as u32;
+    while n >= BLOCK_SIZE {
         println!("Iter: {n}");
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -88,10 +88,10 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("my command encoder"),
     });
-    command_encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, number_buf_size);
+    command_encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, n as u64 * 4);
     queue.submit(Some(command_encoder.finish()));
 
-    let buffer_slice = staging_buffer.slice(..);
+    let buffer_slice = staging_buffer.slice(..n as u64 * 4);
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
     device.poll(wgpu::Maintain::Wait);
@@ -101,7 +101,7 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
     }
 
     let data = buffer_slice.get_mapped_range();
-    let result = bytes_as_slice(&data).to_vec();
+    let result: u32 = bytes_as_slice::<u32>(&data).iter().sum();
     mem::drop(data);
     staging_buffer.unmap();
 
@@ -109,14 +109,8 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
 }
 
 fn main() {
-    let numbers: Vec<u32> = (1..=256).collect();
-    let steps = futures_lite::future::block_on(steps_many(&numbers));
+    let numbers: Vec<u32> = (1..=128).collect();
+    let sum = futures_lite::future::block_on(steps_many(&numbers));
 
-    for step in steps.into_iter().take(32) {
-        if step == u32::MAX {
-            println!("overflow");
-        } else {
-            println!("{step}");
-        }
-    }
+    println!("{sum}");
 }
