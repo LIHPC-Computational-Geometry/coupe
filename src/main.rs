@@ -61,18 +61,33 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
         }],
     });
 
+    const BLOCK_SIZE: u32 = 16;
+    let mut n = numbers.len() as u32 / BLOCK_SIZE;
+    while n > 0 {
+        println!("Iter: {n}");
+
+        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("my command encoder"),
+        });
+        {
+            let mut compute_pass =
+                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("my compute pass"),
+                });
+            compute_pass.set_pipeline(&compute_pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            compute_pass.insert_debug_marker("compute this mn yeah");
+            compute_pass.dispatch(n, 1, 1);
+        }
+        queue.submit(Some(command_encoder.finish()));
+
+        device.poll(wgpu::Maintain::Wait);
+        n /= BLOCK_SIZE;
+    }
+
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("my command encoder"),
     });
-    {
-        let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("my compute pass"),
-        });
-        compute_pass.set_pipeline(&compute_pipeline);
-        compute_pass.set_bind_group(0, &bind_group, &[]);
-        compute_pass.insert_debug_marker("compute this mn yeah");
-        compute_pass.dispatch(numbers.len() as u32, 1, 1);
-    }
     command_encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, number_buf_size);
     queue.submit(Some(command_encoder.finish()));
 
@@ -94,10 +109,10 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
 }
 
 fn main() {
-    let numbers: Vec<u32> = (1..128).collect();
+    let numbers: Vec<u32> = (1..=256).collect();
     let steps = futures_lite::future::block_on(steps_many(&numbers));
 
-    for step in steps {
+    for step in steps.into_iter().take(32) {
         if step == u32::MAX {
             println!("overflow");
         } else {
