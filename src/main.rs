@@ -1,4 +1,3 @@
-use std::env;
 use std::mem;
 
 use wgpu::util::DeviceExt as _;
@@ -95,7 +94,7 @@ async fn steps_many(numbers: &[u32]) -> Vec<u32> {
 }
 
 fn main() {
-    let numbers: Vec<u32> = env::args().skip(1).map(|s| s.parse().unwrap()).collect();
+    let numbers: Vec<u32> = (1..128).collect();
     let steps = futures_lite::future::block_on(steps_many(&numbers));
 
     for step in steps {
