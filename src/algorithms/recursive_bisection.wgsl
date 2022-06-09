@@ -1,12 +1,12 @@
-struct PrimeIndices {
+struct Numbers {
     data: [[stride(4)]] array<u32>;
-}; // this is used as both input and output for convenience
+};
 
 [[group(0), binding(0)]]
-var<storage, read_write> v_indices: PrimeIndices;
+var<storage, read_write> numbers: Numbers;
 
-let blockSize = 16u;
-var<workgroup> sdata: array<u32, blockSize>;
+[[override]] let blockSize: u32;
+var<workgroup> workgroup_data: array<u32, blockSize>;
 
 [[stage(compute), workgroup_size(16)]]
 fn main(
@@ -14,24 +14,22 @@ fn main(
     [[builtin(local_invocation_id)]] local_id: vec3<u32>,
     [[builtin(workgroup_id)]] workgroup_id: vec3<u32>,
 ) {
-    var n: u32 = arrayLength(&v_indices.data);
+    var n: u32 = arrayLength(&numbers.data);
 
     if (global_id.x < n) {
-        sdata[local_id.x] = v_indices.data[global_id.x];
+        workgroup_data[local_id.x] = numbers.data[global_id.x];
     } else {
-        sdata[local_id.x] = 0u;
+        workgroup_data[local_id.x] = 0u;
     }
 
     workgroupBarrier();
 
     for (var stride: u32 = blockSize / 2u; stride > 0u; stride = stride >> 1u) {
-        if (local_id.x < stride) {
-            sdata[local_id.x] = sdata[local_id.x] + sdata[local_id.x + stride];
-        }
-        workgroupBarrier();
+        var flag: u32 = u32(local_id.x < stride);
+        workgroup_data[local_id.x] = workgroup_data[local_id.x] + flag * workgroup_data[local_id.x + flag * stride];
     }
 
     if (local_id.x == 0u) {
-        v_indices.data[workgroup_id.x] = sdata[0];
+        numbers.data[workgroup_id.x] = workgroup_data[0];
     }
 }
