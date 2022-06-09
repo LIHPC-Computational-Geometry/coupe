@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 
+#[derive(Debug, Copy, Clone)]
 pub enum InitError {
     NoAdapter,
     CannotRequestDevice,
@@ -37,6 +38,9 @@ async fn init_context() -> Result<Context, InitError> {
 static CONTEXT: Lazy<Result<Context, InitError>> =
     Lazy::new(|| futures_lite::future::block_on(init_context()));
 
-pub fn is_available() -> bool {
-    CONTEXT.is_ok()
+pub fn ensure_available() -> Result<(), InitError> {
+    match &*CONTEXT {
+        Ok(_) => Ok(()),
+        Err(err) => Err(*err),
+    }
 }

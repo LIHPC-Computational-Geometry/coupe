@@ -37,7 +37,7 @@
 
 mod algorithms;
 mod geometry;
-mod gpu;
+pub mod gpu;
 pub mod imbalance;
 mod nextafter;
 mod real;
