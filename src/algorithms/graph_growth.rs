@@ -4,7 +4,7 @@ use sprs::CsMatView;
 fn graph_growth(
     initial_ids: &mut [usize],
     weights: &[f64],
-    adjacency: CsMatView<f64>,
+    adjacency: CsMatView<'_, f64>,
     num_parts: usize,
 ) {
     let (shape_x, shape_y) = adjacency.shape();
@@ -126,7 +126,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<f64>, W),
+        (adjacency, weights): (CsMatView<'_, f64>, W),
     ) -> Result<Self::Metadata, Self::Error> {
         graph_growth(
             part_ids,

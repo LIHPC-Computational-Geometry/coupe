@@ -34,7 +34,7 @@ struct Move {
 fn fiduccia_mattheyses<W>(
     partition: &mut [usize],
     weights: &[W],
-    adjacency: CsMatView<i64>,
+    adjacency: CsMatView<'_, i64>,
     max_passes: usize,
     max_moves_per_pass: usize,
     max_imbalance: Option<f64>,
@@ -362,7 +362,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<i64>, &'a [W]),
+        (adjacency, weights): (CsMatView<'_, i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(Metadata::default());
