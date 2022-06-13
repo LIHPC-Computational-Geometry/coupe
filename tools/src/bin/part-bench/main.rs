@@ -6,6 +6,8 @@ use mesh_io::weight;
 use std::env;
 use std::fs;
 use std::io;
+use std::thread::sleep;
+use std::time::Duration;
 
 const USAGE: &str = "Usage: part-bench [options]";
 
@@ -135,11 +137,16 @@ fn main_d<const D: usize>(
         let max_threads = rayon::current_num_threads();
         let mut g = c.benchmark_group(benchmark_name);
         let mut thread_count = 1;
-        while thread_count <= max_threads {
+        loop {
             let pool = build_pool(thread_count);
             let benchmark_name = format!("threads={thread_count}");
             g.bench_function(&benchmark_name, |b| pool.install(|| b.iter(&mut benchmark)));
             thread_count *= 2;
+            if max_threads < thread_count {
+                break;
+            }
+            println!("Waiting 4s for CPUs to cool down...");
+            sleep(Duration::from_secs(4));
         }
     } else {
         c.bench_function(&benchmark_name, |b| b.iter(&mut benchmark));
