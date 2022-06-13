@@ -29,6 +29,13 @@ readme = "README.md"
 repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 autobenches = false
 
+[features]
+default = []
+
+# Enable the nightly `stdsimd` feature and AVX512-accelerated algorithms.
+# Requires rust nightly.
+avx512 = []
+
 [dependencies]
 approx = "0.5"
 itertools = "0.10"

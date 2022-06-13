@@ -118,9 +118,8 @@ struct SplitResult<'a, const D: usize, W> {
     split_pos: f32,
 }
 
-/// Split the arrays in `items` into the ones that have `points[i][coord]`
-/// strictly lower than `items.point[pivot][coord]` and the others.
-fn reorder_split<const D: usize, W>(
+/// Scalar version of [reorder_split].
+fn reorder_split_scalar<const D: usize, W>(
     mut items: Items<'_, D, W>,
     pivot: usize,
     coord: usize,
@@ -179,6 +178,279 @@ fn reorder_split<const D: usize, W>(
         parts: parts_right,
     };
     (left, right)
+}
+
+#[cfg(feature = "avx512")]
+const AVX2_REGISTER_BYTES: usize = 8;
+
+/// AVX512 (VL+F) version of [reorder_split].
+#[cfg(feature = "avx512")]
+fn reorder_split_avx512<const D: usize, W>(
+    items: Items<'_, D, W>,
+    pivot: usize,
+    coord: usize,
+) -> (Items<'_, D, W>, Items<'_, D, W>) {
+    use std::arch::x86_64::__m256;
+    use std::arch::x86_64::__m512i;
+    use std::arch::x86_64::__mmask8;
+    use std::arch::x86_64::_mm256_cmp_ps_mask;
+    use std::arch::x86_64::_mm256_loadu_ps;
+    use std::arch::x86_64::_mm256_mask_compressstoreu_ps;
+    use std::arch::x86_64::_mm256_set1_ps;
+    use std::arch::x86_64::_mm512_loadu_epi64;
+    use std::arch::x86_64::_mm512_mask_compressstoreu_epi64;
+    use std::arch::x86_64::_CMP_LT_OQ;
+
+    let pivot = items.points[coord][pivot];
+
+    unsafe {
+        let pivot_val: __m256 = _mm256_set1_ps(pivot);
+
+        let mut lw = 0;
+        let mut l = AVX2_REGISTER_BYTES;
+        let mut lv: [__m256; D] = array_init(|coord| _mm256_loadu_ps(items.points[coord].as_ptr()));
+        let mut lv_weights = _mm512_loadu_epi64(items.weights.as_ptr() as *const i64);
+        let mut lv_parts = _mm512_loadu_epi64(items.parts.as_ptr() as *const i64);
+
+        let mut rw = items.points[coord].len();
+        let mut r = items.points[coord].len() - AVX2_REGISTER_BYTES;
+        let mut rv: [__m256; D] =
+            array_init(|coord| _mm256_loadu_ps(items.points[coord].as_ptr().add(r)));
+        let mut rv_weights = _mm512_loadu_epi64(items.weights.as_ptr().add(r) as *const i64);
+        let mut rv_parts = _mm512_loadu_epi64(items.parts.as_ptr().add(r) as *const i64);
+
+        while l + AVX2_REGISTER_BYTES <= r {
+            let free_left = l - lw;
+            let free_right = rw - r;
+
+            let val: [__m256; D];
+            let val_weights: __m512i;
+            let val_parts: __m512i;
+            if free_left <= free_right {
+                val = lv;
+                val_weights = lv_weights;
+                val_parts = lv_parts;
+                lv = array_init(|coord| _mm256_loadu_ps(items.points[coord].as_ptr().add(l)));
+                lv_weights = _mm512_loadu_epi64(items.weights.as_ptr().add(l) as *const i64);
+                lv_parts = _mm512_loadu_epi64(items.parts.as_ptr().add(l) as *const i64);
+                l += AVX2_REGISTER_BYTES;
+            } else {
+                val = rv;
+                val_weights = rv_weights;
+                val_parts = rv_parts;
+                r -= AVX2_REGISTER_BYTES;
+                rv = array_init(|coord| _mm256_loadu_ps(items.points[coord].as_ptr().add(r)));
+                rv_weights = _mm512_loadu_epi64(items.weights.as_ptr().add(r) as *const i64);
+                rv_parts = _mm512_loadu_epi64(items.parts.as_ptr().add(r) as *const i64);
+            }
+
+            let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(val[coord], pivot_val);
+
+            let nb_low = mask.count_ones() as usize;
+            let nb_high = AVX2_REGISTER_BYTES - nb_low;
+
+            for coord in 0..D {
+                _mm256_mask_compressstoreu_ps(
+                    items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                    mask,
+                    val[coord],
+                );
+            }
+            _mm512_mask_compressstoreu_epi64(
+                items.weights.as_mut_ptr().add(lw) as *mut u8,
+                mask,
+                val_weights,
+            );
+            _mm512_mask_compressstoreu_epi64(
+                items.parts.as_mut_ptr().add(lw) as *mut u8,
+                mask,
+                val_parts,
+            );
+            lw += nb_low;
+
+            rw -= nb_high;
+            for coord in 0..D {
+                _mm256_mask_compressstoreu_ps(
+                    items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                    !mask,
+                    val[coord],
+                );
+            }
+            _mm512_mask_compressstoreu_epi64(
+                items.weights.as_mut_ptr().add(rw) as *mut u8,
+                !mask,
+                val_weights,
+            );
+            _mm512_mask_compressstoreu_epi64(
+                items.parts.as_mut_ptr().add(rw) as *mut u8,
+                !mask,
+                val_parts,
+            );
+        }
+
+        let remaining = r - l;
+        let val: [__m256; D] =
+            array_init(|coord| _mm256_loadu_ps(items.points[coord].as_ptr().add(l)));
+        let val_weights = _mm512_loadu_epi64(items.weights.as_ptr().add(l) as *const i64);
+        let val_parts = _mm512_loadu_epi64(items.parts.as_ptr().add(l) as *const i64);
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(val[coord], pivot_val);
+        let mask_low = mask & !(0xff << remaining);
+        let mask_high = !mask & !(0xff << remaining);
+        let nb_low = mask_low.count_ones() as usize;
+        let nb_high = mask_high.count_ones() as usize;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                mask_low,
+                val[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            mask_low,
+            val_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            mask_low,
+            val_parts,
+        );
+        lw += nb_low;
+        rw -= nb_high;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                mask_high,
+                val[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            mask_high,
+            val_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            mask_high,
+            val_parts,
+        );
+
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(lv[coord], pivot_val);
+        let nb_low = mask.count_ones() as usize;
+        let nb_high = AVX2_REGISTER_BYTES - nb_low;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                mask,
+                lv[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            mask,
+            lv_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            mask,
+            lv_parts,
+        );
+        lw += nb_low;
+        rw -= nb_high;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                !mask,
+                lv[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            !mask,
+            lv_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            !mask,
+            lv_parts,
+        );
+
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(rv[coord], pivot_val);
+        let nb_low = mask.count_ones() as usize;
+        let nb_high = AVX2_REGISTER_BYTES - nb_low;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                mask,
+                rv[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            mask,
+            rv_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            mask,
+            rv_parts,
+        );
+        lw += nb_low;
+        rw -= nb_high;
+        for coord in 0..D {
+            _mm256_mask_compressstoreu_ps(
+                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                !mask,
+                rv[coord],
+            );
+        }
+        _mm512_mask_compressstoreu_epi64(
+            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            !mask,
+            rv_weights,
+        );
+        _mm512_mask_compressstoreu_epi64(
+            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            !mask,
+            rv_parts,
+        );
+
+        let (points_left, points_right) = array_unzip(items.points, |p| p.split_at_mut(lw));
+        let (weights_left, weights_right) = items.weights.split_at_mut(lw);
+        let (parts_left, parts_right) = items.parts.split_at_mut(lw);
+        let left = Items {
+            points: points_left,
+            weights: weights_left,
+            parts: parts_left,
+        };
+        let right = Items {
+            points: points_right,
+            weights: weights_right,
+            parts: parts_right,
+        };
+        (left, right)
+    }
+}
+
+/// Split the arrays in `items` into the ones that have `points[i][coord]`
+/// strictly lower than `items.point[pivot][coord]` and the others.
+fn reorder_split<const D: usize, W>(
+    items: Items<'_, D, W>,
+    pivot: usize,
+    coord: usize,
+) -> (Items<'_, D, W>, Items<'_, D, W>) {
+    #[cfg(feature = "avx512")]
+    if is_x86_feature_detected!("avx512f")
+        && is_x86_feature_detected!("avx512vl")
+        && std::mem::size_of::<W>() == 8
+        && std::mem::size_of::<&AtomicUsize>() == 8
+        && items.parts.len() >= 2 * AVX2_REGISTER_BYTES
+    {
+        eprintln!("using avx512");
+        return reorder_split_avx512(items, pivot, coord);
+    }
+
+    reorder_split_scalar(items, pivot, coord)
 }
 
 /// Splits the given items into two sets of similar weights (parallel version).
@@ -504,11 +776,15 @@ where
 /// # }
 /// ```
 ///
-/// # Reference
+/// # References
 ///
 /// Berger, M. J. and Bokhari, S. H., 1987. A partitioning strategy for
 /// nonuniform problems on multiprocessors. *IEEE Transactions on Computers*,
 /// C-36(5):570–580. <doi:10.1109/TC.1987.1676942>.
+///
+/// Bramas, B., 2017. A Novel Hybrid Quicksort Algorithm Vectorized using
+/// AVX-512 on Intel Skylake. *International Journal of Advanced Computer
+/// Science and Applications*, 8(10). <doi:10.14569/IJACSA.2017.081044>.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Rcb {
     /// The number of iterations of the algorithm. This will yield a partition
@@ -684,7 +960,7 @@ mod tests {
 
     proptest!(
         #[test]
-        fn test_reorder_split(
+        fn test_reorder_split_scalar(
             points in (1..24_usize).prop_flat_map(|point_count| {
                 prop::collection::vec(prop::num::f32::POSITIVE, point_count)
             }),
@@ -700,7 +976,7 @@ mod tests {
                     parts: &mut parts,
                 };
                 let pivot = points[index];
-                let (left, right) = reorder_split(items, index, 0);
+                let (left, right) = reorder_split_scalar(items, index, 0);
                 prop_assert!(left.points[0].iter().all(|l| *l < pivot));
                 prop_assert!(right.points[0].iter().all(|r| pivot <= *r));
                 for e in &points {
@@ -714,6 +990,42 @@ mod tests {
             }
         }
     );
+
+    #[test]
+    #[cfg(feature = "avx512")]
+    fn test_reorder_split_simple() {
+        const N: usize = 19;
+        const SLICE: [f32; N] = [
+            18.0, 17.0, 16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0,
+            3.0, 2.0, 1.0, 0.0,
+        ];
+        //const SLICE: [f32; N] = [
+        //    6.0, 0.0, 3.0, 15.0, 4.0, 5.0, 2.0, 9.0, -1.0, -2.0, 8.0, 12.0, 13.0, -3.0, -4.0, -6.0,
+        //    16.0,
+        //];
+        for index in 0..N {
+            let mut p0 = SLICE;
+            let mut p1 = [1.0; N];
+            let mut weights = [1_i32; N];
+            let part = AtomicUsize::new(0);
+            let mut parts = [&part; N];
+            let items = Items {
+                points: [&mut p0, &mut p1],
+                weights: &mut weights,
+                parts: &mut parts,
+            };
+            let pivot = SLICE[index];
+            let (left, right) = reorder_split_avx512(items, index, 0);
+            assert!(left.points[0].iter().all(|l| *l < pivot));
+            assert!(right.points[0].iter().all(|r| pivot <= *r));
+            for e in SLICE {
+                assert!(
+                    left.points[0].contains(&e) != right.points[0].contains(&e),
+                    "{e} is either missing or in both sides",
+                );
+            }
+        }
+    }
 
     #[test]
     fn test_axis_sort_x() {
