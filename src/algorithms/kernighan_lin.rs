@@ -9,7 +9,7 @@ use sprs::CsMatView;
 fn kernighan_lin(
     part_ids: &mut [usize],
     weights: &[f64],
-    adjacency: CsMatView<f64>,
+    adjacency: CsMatView<'_, f64>,
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     max_imbalance_per_flip: Option<f64>,
@@ -34,7 +34,7 @@ fn kernighan_lin(
 fn kernighan_lin_2_impl(
     initial_partition: &mut [usize],
     weights: &[f64],
-    adjacency: CsMatView<f64>,
+    adjacency: CsMatView<'_, f64>,
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     _max_imbalance_per_flip: Option<f64>,
@@ -265,7 +265,7 @@ impl<'a> crate::Partition<(CsMatView<'a, f64>, &'a [f64])> for KernighanLin {
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<f64>, &'a [f64]),
+        (adjacency, weights): (CsMatView<'_, f64>, &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         kernighan_lin(
             part_ids,

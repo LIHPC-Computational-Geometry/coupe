@@ -29,6 +29,8 @@
 //! - [Fiduccia-Mattheyses][FiducciaMattheyses]
 //! - [Kernighan-Lin][KernighanLin]
 
+#![warn(rust_2018_idioms)]
+
 mod algorithms;
 mod geometry;
 pub mod imbalance;

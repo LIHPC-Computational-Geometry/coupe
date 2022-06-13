@@ -151,7 +151,7 @@ where
 }
 
 fn rcb_recurse<const D: usize, W>(
-    items: &mut [Item<D, W>],
+    items: &mut [Item<'_, D, W>],
     iter_count: usize,
     iter_id: usize,
     coord: usize,
@@ -576,7 +576,7 @@ mod tests {
             let sum: u32 = weights.iter().sum();
 
             let part = &AtomicUsize::new(0);
-            let mut items: Vec<Item<2, u32>> = points
+            let mut items: Vec<Item<'_, 2, u32>> = points
                 .into_iter()
                 .zip(weights)
                 .map(|(point, weight)| Item {

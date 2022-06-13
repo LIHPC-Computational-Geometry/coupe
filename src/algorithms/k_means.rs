@@ -174,10 +174,10 @@ struct AlgorithmState<'a> {
 //  - checking delta threshold
 //  - relaxing lower and upper bounds
 fn balanced_k_means_iter<const D: usize>(
-    inputs: Inputs<D>,
+    inputs: Inputs<'_, D>,
     clusters: Clusters<Vec<PointND<D>>, &[ClusterId]>,
     permutation: &mut [usize],
-    state: AlgorithmState,
+    state: AlgorithmState<'_>,
     settings: &BalancedKmeansSettings,
     current_iter: usize,
 ) where
@@ -300,7 +300,7 @@ fn assign_and_balance<const D: usize>(
     points: &[PointND<D>],
     weights: &[f64],
     permutation: &mut [usize],
-    state: AlgorithmState,
+    state: AlgorithmState<'_>,
     clusters: Clusters<&[PointND<D>], &[ClusterId]>,
     settings: &BalancedKmeansSettings,
 ) where

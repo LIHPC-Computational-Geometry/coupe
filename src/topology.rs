@@ -27,7 +27,7 @@ use std::iter::Sum;
 ///    1*  ┆╲ ╱            
 ///          * 0
 /// ```
-pub fn edge_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> T
+pub fn edge_cut<T>(adjacency: CsMatView<'_, T>, partition: &[usize]) -> T
 where
     T: Copy + Sum + Send + Sync + PartialEq,
 {
@@ -53,7 +53,7 @@ where
         .sum()
 }
 
-pub fn lambda_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> usize {
+pub fn lambda_cut<T>(adjacency: CsMatView<'_, T>, partition: &[usize]) -> usize {
     let indptr = adjacency.indptr().into_raw_storage();
     let indices = adjacency.indices();
     indptr
@@ -92,7 +92,7 @@ pub fn lambda_cut<T>(adjacency: CsMatView<T>, partition: &[usize]) -> usize {
 ///
 /// If the entry `(i, j)` is non-zero, then its value is the weight of the edge between `i`
 /// and `j` (default to `1.0`).
-pub fn adjacency_matrix(conn: CsMatView<u32>, num_common_nodes: u32) -> CsMat<f64> {
+pub fn adjacency_matrix(conn: CsMatView<'_, u32>, num_common_nodes: u32) -> CsMat<f64> {
     // currently this matmul operation is very slow
     let graph = &conn * &conn.transpose_view();
 
