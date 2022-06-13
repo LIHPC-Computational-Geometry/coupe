@@ -180,6 +180,122 @@ fn reorder_split<const D: usize, W>(
     (left, right)
 }
 
+/// SIMD (AVX512) version of [reorder_split].
+fn simd_reorder_split<const D: usize, W>(
+    items: Items<'_, D, W>,
+    pivot: usize,
+    coord: usize,
+) -> (Items<'_, D, W>, Items<'_, D, W>) {
+    use std::arch::x86_64::__m256;
+    use std::arch::x86_64::__mmask8;
+    use std::arch::x86_64::_mm256_cmp_ps_mask;
+    use std::arch::x86_64::_mm256_loadu_ps;
+    use std::arch::x86_64::_mm256_mask_compressstoreu_ps;
+    use std::arch::x86_64::_mm256_set1_ps;
+    use std::arch::x86_64::_CMP_LT_OQ;
+
+    const S: usize = 8; // 8 * f32 = 256 (size of AVX2 registers)
+
+    if !is_x86_feature_detected!("avx512f")
+        || !is_x86_feature_detected!("avx512vl")
+        || std::mem::size_of::<W>() != std::mem::size_of::<f32>() // TODO
+        || items.parts.len() < 2 * S
+    {
+        return reorder_split(items, pivot, coord);
+    }
+
+    let coords = &*items.points[coord];
+    let pivot = coords[pivot];
+
+    unsafe {
+        let pivot_val: __m256 = _mm256_set1_ps(pivot);
+
+        let mut lw = 0;
+        let mut l = S;
+        let mut lv = _mm256_loadu_ps(coords.as_ptr());
+
+        let mut rw = coords.len();
+        let mut r = coords.len() - S;
+        let mut rv = _mm256_loadu_ps(coords.as_ptr().add(r));
+
+        while l + S <= r {
+            let free_left = l - lw;
+            let free_right = rw - r;
+
+            let val: __m256;
+            if free_left <= free_right {
+                val = lv;
+                lv = _mm256_loadu_ps(coords.as_ptr().add(l));
+                l += S;
+            } else {
+                val = rv;
+                r -= S;
+                rv = _mm256_loadu_ps(coords.as_ptr().add(r));
+            }
+
+            let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(val, pivot_val);
+
+            let nb_low = mask.count_ones() as usize;
+            let nb_high = S - nb_low;
+
+            _mm256_mask_compressstoreu_ps(coords.as_ptr().add(lw) as *mut u8, mask, val);
+            // TODO other coords
+            //_mm256_mask_compressstoreu_ps(weights.as_ptr().add(lw) as *mut u8, mask, val);
+            //_mm256_mask_compressstoreu_ps(parts.as_ptr().add(lw) as *mut u8, mask, val);
+            lw += nb_low;
+
+            rw -= nb_high;
+            _mm256_mask_compressstoreu_ps(coords.as_ptr().add(rw) as *mut u8, !mask, val);
+            // TODO other coords
+            //_mm256_mask_compressstoreu_ps(weights.as_ptr().add(rw) as *mut u8, !mask, val);
+            //_mm256_mask_compressstoreu_ps(parts.as_ptr().add(rw) as *mut u8, !mask, val);
+        }
+
+        let remaining = r - l;
+        let val: __m256 = _mm256_loadu_ps(coords.as_ptr().add(l));
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(val, pivot_val);
+        let mask_low = mask & !(0xff << remaining);
+        let mask_high = !mask & !(0xff << remaining);
+        let nb_low = mask_low.count_ones() as usize;
+        let nb_high = mask_high.count_ones() as usize;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(lw) as *mut u8, mask_low, val);
+        lw += nb_low;
+        rw -= nb_high;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(rw) as *mut u8, mask_high, val);
+
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(lv, pivot_val);
+        let nb_low = mask.count_ones() as usize;
+        let nb_high = S - nb_low;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(lw) as *mut u8, mask, lv);
+        lw += nb_low;
+        rw -= nb_high;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(rw) as *mut u8, !mask, lv);
+
+        let mask: __mmask8 = _mm256_cmp_ps_mask::<_CMP_LT_OQ>(rv, pivot_val);
+        let nb_low = mask.count_ones() as usize;
+        let nb_high = S - nb_low;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(lw) as *mut u8, mask, rv);
+        lw += nb_low;
+        rw -= nb_high;
+        _mm256_mask_compressstoreu_ps(coords.as_ptr().add(rw) as *mut u8, !mask, rv);
+
+        let (points_left, points_right) = array_unzip(items.points, |p| p.split_at_mut(lw));
+        let (weights_left, weights_right) = items.weights.split_at_mut(lw);
+        let (parts_left, parts_right) = items.parts.split_at_mut(lw);
+        let left = Items {
+            points: points_left,
+            weights: weights_left,
+            parts: parts_left,
+        };
+        let right = Items {
+            points: points_right,
+            weights: weights_right,
+            parts: parts_right,
+        };
+        (left, right)
+    }
+}
+
 /// Splits the given items into two sets of similar weights (parallel version).
 fn par_rcb_split<const D: usize, W>(
     items: Items<'_, D, W>,
@@ -713,6 +829,41 @@ mod tests {
             }
         }
     );
+
+    #[test]
+    fn test_reorder_split_simple() {
+        const N: usize = 19;
+        const SLICE: [f32; N] = [
+            18.0, 17.0, 16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0,
+            3.0, 2.0, 1.0, 0.0,
+        ];
+        //const SLICE: [f32; N] = [
+        //    6.0, 0.0, 3.0, 15.0, 4.0, 5.0, 2.0, 9.0, -1.0, -2.0, 8.0, 12.0, 13.0, -3.0, -4.0, -6.0,
+        //    16.0,
+        //];
+        for index in 0..N {
+            let mut p0 = SLICE;
+            let mut p1 = [1.0; N];
+            let mut weights = [1_i32; N];
+            let part = AtomicUsize::new(0);
+            let mut parts = [&part; N];
+            let items = Items {
+                points: [&mut p0, &mut p1],
+                weights: &mut weights,
+                parts: &mut parts,
+            };
+            let pivot = SLICE[index];
+            let (left, right) = simd_reorder_split(items, index, 0);
+            assert!(left.points[0].iter().all(|l| *l < pivot));
+            assert!(right.points[0].iter().all(|r| pivot <= *r));
+            for e in SLICE {
+                assert!(
+                    left.points[0].contains(&e) != right.points[0].contains(&e),
+                    "{e} is either missing or in both sides",
+                );
+            }
+        }
+    }
 
     #[test]
     fn test_axis_sort_x() {
