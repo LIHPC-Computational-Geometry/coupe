@@ -2,7 +2,8 @@
 set -e
 
 . "$(dirname "$0")"/common.sh
-cargo build --all --bins --release
+cargo build -p coupe-tools --bins --release
+PATH="$TARGET_DIR/release:$PATH"
 
 OUTPUT_DIR="$TARGET_DIR/coupe-report"
 say mkdir "$OUTPUT_DIR"
