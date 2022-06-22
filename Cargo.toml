@@ -13,9 +13,9 @@ name = "coupe"
 version = "0.1.0"
 authors = [
     "Armand Touminet <armand.touminet@protonmail.com>", 
-    "Hubert Hirtz <hubert@hirtz.pm>",
-    "Cédric Chevalier", 
-    "Sébastien Morais"
+    "Cédric Chevalier <cedric.chevalier@cea.fr>",
+    "Hubert Hirtz <hubert.hirtz@cea.fr",
+    "Sébastien Morais <sebastien.morais@cea.fr>",
 ]
 edition = "2021"
 license = "MIT OR Apache-2.0"
