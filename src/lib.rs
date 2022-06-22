@@ -16,8 +16,9 @@
 //! use coupe::Partition as _;
 //! use coupe::Point2D;
 //!
-//! // define coordinates, weights and graph
-//! # let coordinates: [Point2D; 9] = [
+//! // define coordinates
+//! let coordinates: [Point2D; 9] = [
+//!   // define some points
 //! #        Point2D::new(0.0, 0.0),
 //! #        Point2D::new(0.0, 1.0),
 //! #        Point2D::new(0.0, 2.0),
@@ -27,9 +28,12 @@
 //! #        Point2D::new(2.0, 0.0),
 //! #        Point2D::new(2.0, 1.0),
 //! #        Point2D::new(2.0, 2.0),
-//! # ];
-//! # let weights: [f64; 9] = [1.0, 2.0, 3.0, 2.0, 3.0, 4.0, 3.0, 4.0, 5.0];
-//! # let graph: sprs::CsMat<i64> = {
+//! ];
+//! // Define weights
+//! let weights: [f64; 9] = [1.0, 2.0, 3.0, 2.0, 3.0, 4.0, 3.0, 4.0, 5.0];
+//! // define graph
+//! let graph: sprs::CsMat<i64> = {
+//!   // define topology
 //! # let mut g = sprs::CsMat::empty(sprs::CSR, 9);
 //! # g.insert(0, 1, 1);
 //! # g.insert(0, 3, 1);
@@ -56,7 +60,13 @@
 //! # g.insert(8, 5, 1);
 //! # g.insert(8, 7, 1);
 //! # g
-//! # };
+//! };
+//!
+//! let mut partition = [0; 8];
+//!
+//! // generate a partition of 4 parts
+//! coupe::Rcb { iter_count: 2, ..Default::default() }
+//!     .partition(&mut partition, (points, weights))?;
 //! ```
 //!
 //! ## Geometric Partitioning
