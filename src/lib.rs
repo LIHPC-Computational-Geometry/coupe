@@ -12,12 +12,14 @@
 //! # Library Use
 //!
 //! ```rust
+//! # fn main() -> Result<(), coupe::Error> {
 //! extern crate coupe;
 //! use coupe::Partition as _;
 //! use coupe::Point2D;
 //!
-//! // define coordinates, weights and graph
-//! # let coordinates: [Point2D; 9] = [
+//! // define coordinates
+//! let coordinates: [Point2D; 9] = [
+//!   // define some points
 //! #        Point2D::new(0.0, 0.0),
 //! #        Point2D::new(0.0, 1.0),
 //! #        Point2D::new(0.0, 2.0),
@@ -27,9 +29,12 @@
 //! #        Point2D::new(2.0, 0.0),
 //! #        Point2D::new(2.0, 1.0),
 //! #        Point2D::new(2.0, 2.0),
-//! # ];
-//! # let weights: [f64; 9] = [1.0, 2.0, 3.0, 2.0, 3.0, 4.0, 3.0, 4.0, 5.0];
-//! # let graph: sprs::CsMat<i64> = {
+//! ];
+//! // Define weights
+//! let weights: [f64; 9] = [1.0, 2.0, 3.0, 2.0, 3.0, 4.0, 3.0, 4.0, 5.0];
+//! // define graph
+//! let graph: sprs::CsMat<i64> = {
+//!   // define topology
 //! # let mut g = sprs::CsMat::empty(sprs::CSR, 9);
 //! # g.insert(0, 1, 1);
 //! # g.insert(0, 3, 1);
@@ -56,7 +61,15 @@
 //! # g.insert(8, 5, 1);
 //! # g.insert(8, 7, 1);
 //! # g
-//! # };
+//! };
+//!
+//! let mut partition = [0; 9];
+//!
+//! // generate a partition of 4 parts
+//! coupe::Rcb { iter_count: 2, ..Default::default() }
+//!     .partition(&mut partition, (coordinates, weights))?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Geometric Partitioning
@@ -102,10 +115,7 @@ mod work_share;
 pub use crate::algorithms::*;
 pub use crate::geometry::{BoundingBox, Point2D, Point3D, PointND};
 pub use crate::real::Real;
-
-// Internal use
-use crate::nextafter::nextafter;
-use crate::work_share::work_share;
+pub use crate::nextafter::nextafter;
 
 pub use nalgebra;
 pub use num_traits;
