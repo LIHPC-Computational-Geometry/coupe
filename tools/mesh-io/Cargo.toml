@@ -6,3 +6,4 @@ authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
 
 
 [dependencies]
+itertools = "0.10"

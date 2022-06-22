@@ -2,21 +2,16 @@ mesh-refine(1)
 
 # NAME
 
-mesh-refine - Refine a mesh
+mesh-dup - Duplicate the elements of a mesh
 
 # SYNOPSIS
 
-*mesh-refine* [--times <n>] <input.mesh >output.mesh
+*mesh-dup* [--times <n>] <input.mesh >output.mesh
 
 # DESCRIPTION
 
-mesh-refine splits the cell of a mesh from its standard input into smaller
-cells and prints the resulting mesh on its standard output, mainly for
-performance tests on algorithms.
-
-mesh-refine only works on 2D meshes composed exclusively of triangles and
-quadrilaterals.  It splits either of them into four equal parts at each
-iteration.
+mesh-dup copies the elements of a mesh a number of times so that the output mesh
+forms a (hyper)grid of input meshs, mainly for performance tests on algorithms.
 
 Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
 for details.
@@ -35,7 +30,7 @@ for details.
 
 # SEE ALSO
 
-*mesh-dup*(1) *mesh-part*(1)
+*mesh-refine*(1) *mesh-part*(1)
 
 # AUTHORS
 

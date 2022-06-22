@@ -551,6 +551,9 @@ dependencies = [
 [[package]]
 name = "mesh-io"
 version = "0.1.0"
+dependencies = [
+ "itertools",
+]
 
 [[package]]
 name = "mesh-io-ffi"

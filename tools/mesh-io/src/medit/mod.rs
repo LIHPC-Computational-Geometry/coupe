@@ -2,6 +2,8 @@
 //! described by Frey in
 //! [MEDIT : An interactive Mesh visualization Software](https://hal.inria.fr/inria-00069921).
 
+use itertools::Itertools as _;
+
 use std::collections::HashMap;
 
 pub use parser::Error as ParseError;
@@ -55,6 +57,10 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    pub fn new(dimension: usize) -> Self {
+        Self::from_raw_parts(dimension, Vec::new(), Vec::new(), Vec::new())
+    }
+
     pub fn from_raw_parts(
         dimension: usize,
         coordinates: Vec<f64>,
@@ -149,6 +155,74 @@ impl Mesh {
 }
 
 impl Mesh {
+    /// Place copies of self side by side in order to form a grid.
+    pub fn duplicate(mut self, n: usize) -> Mesh {
+        if n == 0 {
+            return Mesh::new(self.dimension);
+        }
+
+        let sidelen = f64::powf(n as f64, 1.0 / self.dimension as f64);
+        let sidelen = f64::ceil(sidelen) as usize;
+        let bounding_box: Vec<(f64, f64)> = (0..self.dimension)
+            .map(|dim| {
+                self.coordinates
+                    .iter()
+                    .cloned()
+                    .skip(dim)
+                    .step_by(self.dimension)
+                    .minmax()
+                    .into_option()
+                    .unwrap()
+            })
+            .collect();
+        let prev_node_count = self.node_count();
+
+        self.coordinates.resize(n * self.coordinates.len(), 0.0);
+        for i in 1..n {
+            let offsets: Vec<f64> = bounding_box
+                .iter()
+                .scan(i, |i, (min, max)| {
+                    let offset = (*i % sidelen) as f64 * (max - min);
+                    *i /= sidelen;
+                    Some(offset)
+                })
+                .collect();
+            for c in 0..prev_node_count {
+                for (dim, offset) in offsets.iter().enumerate() {
+                    self.coordinates[(i * prev_node_count + c) * self.dimension + dim] =
+                        self.coordinates[c * self.dimension + dim] + offset;
+                }
+            }
+        }
+
+        self.node_refs.resize(n * self.node_refs.len(), 0);
+        let (node_refs_orig, node_refs_new) = self.node_refs.split_at_mut(prev_node_count);
+        for i in 0..(n - 1) {
+            node_refs_new[i * prev_node_count..(i + 1) * prev_node_count]
+                .copy_from_slice(node_refs_orig);
+        }
+
+        for (_, nodes, refs) in &mut self.topology {
+            let prev_nodes_len = nodes.len();
+            nodes.resize(n * nodes.len(), 0);
+            for i in 1..n {
+                for e in 0..prev_nodes_len {
+                    nodes[prev_nodes_len * i + e] = nodes[e] + prev_node_count * i;
+                }
+            }
+
+            let prev_element_count = refs.len();
+            refs.resize(n * refs.len(), 0);
+            let (refs_orig, refs_new) = refs.split_at_mut(prev_element_count);
+            for i in 0..(n - 1) {
+                refs_new[i * prev_element_count..(i + 1) * prev_element_count]
+                    .copy_from_slice(refs_orig);
+            }
+        }
+
+        self
+    }
+
     /// Split each element in N smaller elements of the same type, where N is
     /// the number of nodes of the element.
     pub fn refine(&self) -> Mesh {
