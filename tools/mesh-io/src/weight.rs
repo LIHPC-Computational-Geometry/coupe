@@ -11,6 +11,7 @@ use std::io;
 const VERSION: u8 = 1;
 const FLAG_INTEGER: u8 = 1 << 0;
 
+#[derive(Debug)]
 pub enum Array {
     Integers(Vec<Vec<i64>>),
     Floats(Vec<Vec<f64>>),

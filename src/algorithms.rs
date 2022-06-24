@@ -84,6 +84,7 @@ impl std::error::Error for Error {}
 ///     .partition(&mut partition, ())
 ///     .unwrap();
 /// ```
+#[derive(Debug)]
 pub struct Random<R> {
     pub rng: R,
     pub part_count: usize,

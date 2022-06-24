@@ -25,7 +25,7 @@ pub struct Error {
 }
 
 impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ErrorKind::UnexpectedToken { expected, found } => {
                 write!(f, "expected token {:?}, found {}", expected, found)
@@ -38,7 +38,7 @@ impl fmt::Display for ErrorKind {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "at line {}: {}", self.lineno, self.kind)
     }
 }

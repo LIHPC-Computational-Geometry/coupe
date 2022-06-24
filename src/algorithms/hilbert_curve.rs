@@ -296,6 +296,7 @@ impl std::error::Error for Error {}
 ///
 /// Marot, Célestin. *Parallel tetrahedral mesh generation*. Prom.: Remacle,
 /// Jean-François <http://hdl.handle.net/2078.1/240626>.
+#[derive(Debug)]
 pub struct HilbertCurve {
     pub part_count: usize,
     pub order: u32,
