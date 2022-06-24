@@ -92,5 +92,6 @@ jobs:
           args: >
             --all --all-targets --
             -D warnings
+            -D clippy::cargo_common_metadata
             -D clippy::negative_feature_names
             -D clippy::redundant_feature_names
