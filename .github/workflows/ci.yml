@@ -89,4 +89,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all --all-targets -- -D warnings
+          args: >
+            --all --all-targets --
+            -D warnings
+            -D clippy::negative_feature_names
+            -D clippy::redundant_feature_names
