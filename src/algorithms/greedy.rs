@@ -79,7 +79,7 @@ impl<T> GreedyWeight for T where Self: PartialOrd + num::Zero + Clone + AddAssig
 /// Horowitz, Ellis and Sahni, Sartaj, 1974. Computing partitions with
 /// applications to the knapsack problem. *J. ACM*, 21(2):277–292.
 /// <doi:10.1145/321812.321823>.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Greedy {
     pub part_count: usize,
 }

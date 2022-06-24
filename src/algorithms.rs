@@ -38,7 +38,7 @@ pub use vn::VnFirstWeight;
 pub use z_curve::ZCurve;
 
 /// Common errors thrown by algorithms.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Error {
     /// No partition that matches the given criteria could been found.

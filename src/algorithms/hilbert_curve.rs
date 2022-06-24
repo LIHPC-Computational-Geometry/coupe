@@ -227,7 +227,7 @@ fn encode(x: u64, y: u64, order: usize) -> u64 {
     hilbert >> -shift
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Error {
     /// Invalid space filling curve order.
@@ -296,7 +296,7 @@ impl std::error::Error for Error {}
 ///
 /// Marot, Célestin. *Parallel tetrahedral mesh generation*. Prom.: Remacle,
 /// Jean-François <http://hdl.handle.net/2078.1/240626>.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct HilbertCurve {
     pub part_count: usize,
     pub order: u32,

@@ -148,7 +148,7 @@ where
 /// Korf, Richard E., 1998. A complete anytime algorithm for number
 /// partitioning. *Artificial Intelligence*, 106(2):181 – 203.
 /// <doi:10.1016/S0004-3702(98)00086-1>.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompleteKarmarkarKarp {
     /// Constraint on the normalized imbalance between the two parts.
     pub tolerance: f64,

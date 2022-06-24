@@ -149,7 +149,7 @@ impl<T> KkWeight for T where Self: num::Zero + Ord + Sub<Output = Self> + SubAss
 ///
 /// Karmarkar, Narenda and Karp, Richard M., 1983. The differencing method of
 /// set partitioning. Technical report, Berkeley, CA, USA.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct KarmarkarKarp {
     pub part_count: usize,
 }

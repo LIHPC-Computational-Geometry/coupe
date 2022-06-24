@@ -176,7 +176,7 @@ where
 /// Remi Barat. Load Balancing of Multi-physics Simulation by Multi-criteria
 /// Graph Partitioning. Other [cs.OH]. Université de Bordeaux, 2017. English.
 /// NNT : 2017BORD0961. tel-01713977
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct VnBest {
     pub part_count: usize,
 }
