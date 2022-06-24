@@ -64,9 +64,8 @@ impl<T> GreedyWeight for T where Self: PartialOrd + num::Zero + Clone + AddAssig
 ///
 /// ```rust
 /// use coupe::Partition as _;
-/// use coupe::Real;
 ///
-/// let weights = [3.2, 6.8, 10.0, 7.5].map(Real::from);
+/// let weights = [3.2, 6.8, 10.0, 7.5];
 /// let mut partition = [0; 4];
 ///
 /// coupe::Greedy { part_count: 2 }
