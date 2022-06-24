@@ -3,6 +3,12 @@ name = "coupe-tools"
 version = "0.1.0"
 edition = "2021"
 authors = ["Hubert Hirtz <hubert@hirtz.pm>"]
+description = "Tools to work with coupe from the command line"
+license = "MIT OR Apache-2.0"
+keywords = ["cli", "mesh", "partitioning"]
+categories = ["algorithms", "command-line-utilities", "mathematics"]
+readme = "README.md"
+repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 
 [features]

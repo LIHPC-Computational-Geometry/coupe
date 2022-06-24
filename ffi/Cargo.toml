@@ -2,6 +2,12 @@
 name = "coupe-ffi"
 version = "0.1.0"
 edition = "2021"
+description = "C bindings to coupe"
+license = "MIT OR Apache-2.0"
+keywords = ["mesh", "partitioning"]
+categories = ["algorithms", "mathematics"]
+readme = "README.md"
+repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 
 [lib]
