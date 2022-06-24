@@ -506,7 +506,7 @@ where
 /// Berger, M. J. and Bokhari, S. H., 1987. A partitioning strategy for
 /// nonuniform problems on multiprocessors. *IEEE Transactions on Computers*,
 /// C-36(5):570–580. <doi:10.1109/TC.1987.1676942>.
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Rcb {
     /// The number of iterations of the algorithm. This will yield a partition
     /// of at most `2^num_iter` parts.
@@ -626,7 +626,7 @@ where
 /// Williams, Roy D., 1991. Performance of dynamic load balancing algorithms for
 /// unstructured mesh calculations. *Concurrency: Practice and Experience*,
 /// 3(5):457–481. <doi:10.1002/cpe.4330030502>.
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Rib {
     /// The number of iterations of the algorithm. This will yield a partition
     /// of at most `2^num_iter` parts.
