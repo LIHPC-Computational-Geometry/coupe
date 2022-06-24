@@ -29,7 +29,7 @@
 //! - [Fiduccia-Mattheyses][FiducciaMattheyses]
 //! - [Kernighan-Lin][KernighanLin]
 
-#![warn(rust_2018_idioms)]
+#![warn(missing_debug_implementations, rust_2018_idioms)]
 
 mod algorithms;
 mod geometry;

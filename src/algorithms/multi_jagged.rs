@@ -362,6 +362,7 @@ pub(crate) fn split_at_mut_many<'a, T>(
 ///     }
 /// }
 /// ```
+#[derive(Debug)]
 pub struct MultiJagged {
     pub part_count: usize,
     pub max_iter: usize,

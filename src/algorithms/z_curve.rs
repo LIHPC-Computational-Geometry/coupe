@@ -171,6 +171,7 @@ fn z_curve_partition_recurse<const D: usize>(
 /// assert_eq!(partition[4], partition[5]);
 /// assert_eq!(partition[6], partition[7]);
 /// ```  
+#[derive(Debug)]
 pub struct ZCurve {
     pub part_count: usize,
     pub order: u32,
