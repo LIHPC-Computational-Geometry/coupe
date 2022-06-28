@@ -181,7 +181,6 @@ dependencies = [
  "gnuplot",
  "itertools",
  "nalgebra",
- "ndarray",
  "num",
  "proptest",
  "rand",
