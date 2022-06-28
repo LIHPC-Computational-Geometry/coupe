@@ -201,7 +201,7 @@ where
 pub trait VnFirstWeight
 where
     Self: Clone + Send + Sync,
-    Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
+    Self: Sum + PartialOrd + num::Zero,
     Self: Sub<Output = Self> + AddAssign,
 {
 }
@@ -209,7 +209,7 @@ where
 impl<T> VnFirstWeight for T
 where
     Self: Clone + Send + Sync,
-    Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
+    Self: Sum + PartialOrd + num::Zero,
     Self: Sub<Output = Self> + AddAssign,
 {
 }
