@@ -135,14 +135,16 @@ impl<T> KkWeight for T where Self: num::Zero + Ord + Sub<Output = Self> + SubAss
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
 /// use coupe::Partition as _;
 ///
 /// let weights = [3, 5, 3, 9];
 /// let mut partition = [0; 4];
 ///
 /// coupe::KarmarkarKarp { part_count: 3 }
-///     .partition(&mut partition, weights)
-///     .unwrap();
+///     .partition(&mut partition, weights)?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference

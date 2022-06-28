@@ -331,6 +331,7 @@ pub(crate) fn split_at_mut_many<'a, T>(
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -350,8 +351,7 @@ pub(crate) fn split_at_mut_many<'a, T>(
 ///
 /// // generate a partition of 4 parts
 /// coupe::MultiJagged { part_count: 9, max_iter: 4 }
-///     .partition(&mut partition, (&points, &weights))
-///     .unwrap();
+///     .partition(&mut partition, (&points, &weights))?;
 ///
 /// for i in 0..9 {
 ///     for j in 0..9 {
@@ -361,6 +361,8 @@ pub(crate) fn split_at_mut_many<'a, T>(
 ///         assert_ne!(partition[i], partition[j])
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct MultiJagged {

@@ -188,6 +188,7 @@ fn kernighan_lin_2_impl(
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 /// use sprs::CsMat;
@@ -244,11 +245,12 @@ fn kernighan_lin_2_impl(
 ///     max_imbalance_per_flip: None,
 ///     max_bad_move_in_a_row: 1,
 /// }
-/// .partition(&mut partition, (adjacency.view(), &weights))
-/// .unwrap();
+/// .partition(&mut partition, (adjacency.view(), &weights))?;
 ///
 /// assert_eq!(partition[5], 0);
 /// assert_eq!(partition[6], 1);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct KernighanLin {

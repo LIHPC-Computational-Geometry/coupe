@@ -70,6 +70,7 @@ fn graph_growth(
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 /// use sprs::CsMat;
@@ -108,8 +109,9 @@ fn graph_growth(
 ///  adjacency.insert(7, 3, 1.);
 ///
 /// coupe::GraphGrowth { part_count: 2 }
-///     .partition(&mut partition, (adjacency.view(), &weights))
-///     .unwrap();
+///     .partition(&mut partition, (adjacency.view(), &weights))?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct GraphGrowth {

@@ -272,6 +272,7 @@ where
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -321,10 +322,11 @@ where
 /// // Set the imbalance tolerance to 25% to provide enough room for FM to do
 /// // the swap.
 /// coupe::FiducciaMattheyses { max_imbalance: Some(0.25), ..Default::default() }
-///     .partition(&mut partition, (adjacency.view(), &weights))
-///     .unwrap();
+///     .partition(&mut partition, (adjacency.view(), &weights))?;
 ///
 /// assert_eq!(partition, [0, 0, 1, 1, 0, 0, 1, 1]);
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference
