@@ -33,7 +33,6 @@ autobenches = false
 approx = "0.5"
 itertools = "0.10"
 nalgebra = { version = "0.29", default-features = false, features = ["rand", "std"] }
-ndarray = "0.15"
 num = "0.4"
 rayon = "1.3"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
