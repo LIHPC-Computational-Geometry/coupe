@@ -5,6 +5,13 @@ use coupe::PointND;
 use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use nalgebra::allocator::Allocator;
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
+use nalgebra::ToTypenum;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
@@ -189,6 +196,27 @@ impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
     }
 }
 
+impl<const D: usize> ToRunner<D> for coupe::KMeans
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        match &problem.weights {
+            Integers(_) => runner_error("kmeans is only implemented for floats"),
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    self.partition(partition, (&problem.points, &weights))?;
+                    Ok(None)
+                })
+            }
+        }
+    }
+}
+
 impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
@@ -234,7 +262,12 @@ impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
     }
 }
 
-pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>> {
+pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>>
+where
+    Const<D>: DimSub<Const<1>> + ToTypenum,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
     let mut args = spec.split(',');
     let name = args.next().context("it's empty")?;
 
@@ -294,6 +327,10 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
         "hilbert" => Box::new(coupe::HilbertCurve {
             part_count: require(parse(args.next()))?,
             order: optional(parse(args.next()), 12)?,
+        }),
+        "kmeans" => Box::new(coupe::KMeans {
+            part_count: require(parse(args.next()))?,
+            ..Default::default()
         }),
         "fm" => {
             let max_imbalance = parse(args.next()).transpose()?;
