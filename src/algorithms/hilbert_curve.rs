@@ -265,6 +265,7 @@ impl std::error::Error for Error {}
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::HilbertCurveError> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -283,13 +284,14 @@ impl std::error::Error for Error {}
 ///
 /// // generate a partition of 4 parts
 /// coupe::HilbertCurve { part_count: 4, order: 5 }
-///     .partition(&mut partition, (points, weights))
-///     .unwrap();
+///     .partition(&mut partition, (points, weights))?;
 ///
 /// assert_eq!(partition[0], partition[1]);
 /// assert_eq!(partition[2], partition[3]);
 /// assert_eq!(partition[4], partition[5]);
 /// assert_eq!(partition[6], partition[7]);
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference

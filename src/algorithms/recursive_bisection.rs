@@ -473,6 +473,7 @@ where
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -487,8 +488,7 @@ where
 ///
 /// // Generate a partition of 4 parts (2 splits).
 /// coupe::Rcb { iter_count: 2, ..Default::default() }
-///     .partition(&mut partition, (points, weights))
-///     .unwrap();
+///     .partition(&mut partition, (points, weights))?;
 ///
 /// // All points are in different parts.
 /// for i in 0..4 {
@@ -499,6 +499,8 @@ where
 ///         assert_ne!(partition[i], partition[j])
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference
@@ -592,6 +594,7 @@ where
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -608,8 +611,7 @@ where
 ///
 /// // Generate a partition of 2 parts (1 split).
 /// coupe::Rib { iter_count: 1, ..Default::default() }
-///     .partition(&mut partition, (&points, weights))
-///     .unwrap();
+///     .partition(&mut partition, (&points, weights))?;
 ///
 /// // The two points at the top are in the same part.
 /// assert_eq!(partition[0], partition[1]);
@@ -619,6 +621,8 @@ where
 ///
 /// // There are two different parts.
 /// assert_ne!(partition[1], partition[2]);
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference

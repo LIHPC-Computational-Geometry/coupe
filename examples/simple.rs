@@ -1,7 +1,9 @@
+use std::error::Error;
+
 use coupe::Partition as _;
 use coupe::Point2D;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Let's define a graph:
     //
     //     Node IDs:       Weights:
@@ -82,16 +84,15 @@ fn main() {
         part_count: 2,
         ..Default::default()
     }
-    .partition(&mut partition, (coordinates, weights))
-    .unwrap();
+    .partition(&mut partition, (coordinates, weights))?;
 
     println!("Initial partitioning with a Hilbert curve:");
     print_partition(&partition);
 
-    coupe::FiducciaMattheyses::default()
-        .partition(&mut partition, (graph.view(), &weights))
-        .unwrap();
+    coupe::FiducciaMattheyses::default().partition(&mut partition, (graph.view(), &weights))?;
 
     println!("Partition improving with Fiduccia-Mattheyses:");
     print_partition(&partition);
+
+    Ok(())
 }

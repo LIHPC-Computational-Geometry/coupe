@@ -222,6 +222,7 @@ where
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use coupe::Partition as _;
 /// use rand;
 ///
@@ -230,11 +231,11 @@ where
 /// let weights = [4, 6, 2, 9];
 ///
 /// coupe::Random { rng: rand::thread_rng(), part_count }
-///     .partition(&mut partition, ())
-///     .unwrap();
+///     .partition(&mut partition, ())?;
 /// coupe::VnFirst { part_count }
-///     .partition(&mut partition, &weights)
-///     .unwrap();
+///     .partition(&mut partition, &weights)?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference

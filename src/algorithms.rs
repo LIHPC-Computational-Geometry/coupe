@@ -75,14 +75,16 @@ impl std::error::Error for Error {}
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
 /// use coupe::Partition as _;
 /// use rand;
 ///
 /// let mut partition = [0; 12];
 ///
 /// coupe::Random { rng: rand::thread_rng(), part_count: 3 }
-///     .partition(&mut partition, ())
-///     .unwrap();
+///     .partition(&mut partition, ())?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Random<R> {

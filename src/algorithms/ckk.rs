@@ -133,14 +133,16 @@ where
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
 /// use coupe::Partition as _;
 ///
 /// let weights: [i32; 4] = [3, 5, 3, 9];
 /// let mut partition = [0; 4];
 ///
 /// coupe::CompleteKarmarkarKarp { tolerance: 0.1 }
-///     .partition(&mut partition, weights)
-///     .unwrap();
+///     .partition(&mut partition, weights)?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Reference

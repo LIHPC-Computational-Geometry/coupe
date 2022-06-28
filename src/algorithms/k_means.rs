@@ -534,6 +534,7 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
 /// # Example
 ///
 /// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
@@ -557,8 +558,7 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
 /// let mut partition = [1, 2, 2, 2, 2, 2, 2, 2, 3];
 ///
 /// coupe::KMeans { part_count: 3, delta_threshold: 0.0, ..Default::default() }
-///     .partition(&mut partition, (&points, &weights))
-///     .unwrap();
+///     .partition(&mut partition, (&points, &weights))?;
 ///
 /// assert_eq!(partition[0], partition[1]);
 /// assert_eq!(partition[0], partition[2]);
@@ -568,6 +568,8 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
 ///
 /// assert_eq!(partition[6], partition[7]);
 /// assert_eq!(partition[6], partition[8]);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KMeans {
