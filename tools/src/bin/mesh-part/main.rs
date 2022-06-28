@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe_tools::EdgeWeightDistribution;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
 use std::env;
@@ -13,44 +14,35 @@ use tracing_tree::HierarchicalLayer;
 
 const USAGE: &str = "Usage: mesh-part [options] >out.part";
 
-fn main_d<const D: usize>(
-    matches: getopts::Matches,
-    edge_weights: coupe_tools::EdgeWeightDistribution,
-    mesh: Mesh,
-    weights: weight::Array,
-) -> Result<Vec<usize>> {
-    let algorithm_specs = matches.opt_strs("a");
-    let algorithms: Vec<_> = algorithm_specs
-        .iter()
-        .map(|algorithm_spec| {
-            coupe_tools::parse_algorithm(algorithm_spec)
-                .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
-        })
-        .collect::<Result<_>>()?;
+fn write_partition_stdout(partition: &[usize]) -> Result<()> {
+    let partition = partition.iter().cloned();
+    let stdout = io::stdout();
+    let stdout = stdout.lock();
+    let stdout = io::BufWriter::new(stdout);
+    mesh_io::partition::write(stdout, partition).context("failed to print partition")?;
+    Ok(())
+}
 
-    let (adjacency, points) = rayon::join(
-        || {
-            let mut adjacency = coupe_tools::dual(&mesh);
-            if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
-                coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
-            }
-            adjacency
-        },
-        || coupe_tools::barycentres::<D>(&mesh),
-    );
+fn make_and_fill_dual(
+    mesh: &Mesh,
+    weights: &weight::Array,
+    edge_weights: EdgeWeightDistribution,
+) -> sprs::CsMat<f64> {
+    let mut adjacency = coupe_tools::dual(&mesh);
+    if edge_weights != EdgeWeightDistribution::Uniform {
+        coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
+    }
+    adjacency
+}
 
-    let problem = coupe_tools::Problem {
-        points,
-        weights,
-        adjacency,
-    };
-    let mut partition = vec![0; problem.points.len()];
-
-    let show_metadata = matches.opt_present("v");
-
-    for (algorithm_spec, mut algorithm) in algorithm_specs.iter().zip(algorithms) {
-        let mut algorithm = algorithm.to_runner(&problem);
-        let metadata = algorithm(&mut partition)
+fn run_once(
+    partition: &mut [usize],
+    algorithm_specs: &[String],
+    algorithms: &mut [coupe_tools::Runner<'_>],
+    show_metadata: bool,
+) -> Result<()> {
+    for (algorithm_spec, algorithm) in algorithm_specs.iter().zip(algorithms) {
+        let metadata = algorithm(partition)
             .with_context(|| format!("failed to apply algorithm {:?}", algorithm_spec))?;
         if !show_metadata {
             continue;
@@ -61,8 +53,77 @@ fn main_d<const D: usize>(
             eprintln!("{algorithm_spec}:");
         }
     }
+    Ok(())
+}
 
-    Ok(partition)
+fn main_d<const D: usize>(
+    matches: getopts::Matches,
+    edge_weights: coupe_tools::EdgeWeightDistribution,
+    mesh: Mesh,
+    weights: weight::Array,
+) -> Result<()> {
+    let run_count = matches
+        .opt_get("n")
+        .context("invalid value for option 'times'")?
+        .unwrap_or(1);
+
+    let algorithm_specs = matches.opt_strs("a");
+    let mut algorithms: Vec<_> = algorithm_specs
+        .iter()
+        .map(|algorithm_spec| {
+            coupe_tools::parse_algorithm(algorithm_spec)
+                .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
+        })
+        .collect::<Result<_>>()?;
+    if algorithms.is_empty() {
+        anyhow::bail!("missing required option 'algorithm'");
+    }
+
+    let (adjacency, points) = rayon::join(
+        || make_and_fill_dual(&mesh, &weights, edge_weights),
+        || coupe_tools::barycentres::<D>(&mesh),
+    );
+
+    let problem = coupe_tools::Problem {
+        points,
+        weights,
+        adjacency,
+    };
+    let mut algorithms: Vec<_> = algorithms
+        .iter_mut()
+        .map(|algorithm| algorithm.to_runner(&problem))
+        .collect();
+    let mut partition = vec![0; problem.points.len()];
+
+    let show_metadata = matches.opt_present("v");
+
+    if run_count == 1 {
+        run_once(
+            &mut partition,
+            &algorithm_specs,
+            &mut algorithms,
+            show_metadata,
+        )?;
+        write_partition_stdout(&partition)?;
+    } else {
+        fs::create_dir_all("mesh-part.out").context("failed to make batch directory")?;
+        for i in 0..run_count {
+            partition.fill(0);
+            run_once(
+                &mut partition,
+                &algorithm_specs,
+                &mut algorithms,
+                show_metadata,
+            )?;
+            let file = fs::File::create(format!("mesh-part.out/{i:03}.part"))
+                .context("failed to create partition file")?;
+            let file = io::BufWriter::new(file);
+            mesh_io::partition::write(file, partition.iter().cloned())
+                .context("failed to write partition")?;
+        }
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -81,6 +142,7 @@ fn main() -> Result<()> {
         "VARIANT",
     );
     options.optopt("m", "mesh", "mesh file", "FILE");
+    options.optopt("n", "times", "run an algorithm N times", "NUMBER");
     options.optopt("t", "trace", "emit a chrome trace", "FILE");
     options.optflag("v", "verbose", "print diagnostic data");
     options.optopt("w", "weights", "weight file", "FILE");
@@ -118,7 +180,7 @@ fn main() -> Result<()> {
     let edge_weights = matches
         .opt_get("E")
         .context("invalid value for -E, --edge-weights")?
-        .unwrap_or(coupe_tools::EdgeWeightDistribution::Uniform);
+        .unwrap_or(EdgeWeightDistribution::Uniform);
 
     let mesh_file = matches
         .opt_str("m")
@@ -139,16 +201,11 @@ fn main() -> Result<()> {
     let mesh = mesh?;
     let weights = weights?;
 
-    let partition = match mesh.dimension() {
+    match mesh.dimension() {
         2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
         3 => main_d::<3>(matches, edge_weights, mesh, weights)?,
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
-
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let stdout = io::BufWriter::new(stdout);
-    mesh_io::partition::write(stdout, partition).context("failed to print partition")?;
 
     Ok(())
 }
