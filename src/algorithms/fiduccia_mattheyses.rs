@@ -1,4 +1,7 @@
+use super::try_from_f64;
+use super::try_to_f64;
 use super::Error;
+use crate::vec::VecExt as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
@@ -39,16 +42,36 @@ fn fiduccia_mattheyses<W>(
     max_moves_per_pass: usize,
     max_imbalance: Option<f64>,
     max_bad_moves_in_a_row: usize,
-) -> Metadata
+) -> Result<Metadata, Error>
 where
     W: FmWeight,
 {
-    debug_assert!(!partition.is_empty());
-    debug_assert_eq!(partition.len(), weights.len());
-    debug_assert_eq!(partition.len(), adjacency.rows());
-    debug_assert_eq!(partition.len(), adjacency.cols());
+    if partition.is_empty() {
+        return Ok(Metadata::default());
+    }
+    if partition.len() != weights.len() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: weights.len(),
+        });
+    }
+    if partition.len() != adjacency.rows() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: adjacency.rows(),
+        });
+    }
+    if partition.len() != adjacency.cols() {
+        return Err(Error::InputLenMismatch {
+            expected: partition.len(),
+            actual: adjacency.cols(),
+        });
+    }
 
-    debug_assert!(*partition.iter().max().unwrap() < 2);
+    let part_count = 1 + *partition.iter().max().unwrap();
+    if 2 < part_count {
+        return Err(Error::BiPartitioningOnly);
+    }
 
     let mut part_weights =
         crate::imbalance::compute_parts_load(partition, 2, weights.par_iter().cloned());
@@ -57,8 +80,8 @@ where
     let max_part_weight = match max_imbalance {
         Some(max_imbalance) => {
             let total_weight: W = part_weights.iter().cloned().sum();
-            let ideal_part_weight = total_weight.to_f64().unwrap() / 2.0;
-            W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
+            let ideal_part_weight = try_to_f64(&total_weight)? / 2.0;
+            try_from_f64(ideal_part_weight + max_imbalance * ideal_part_weight)?
         }
         None => *part_weights.iter().max_by(crate::partial_cmp).unwrap(),
     };
@@ -80,12 +103,12 @@ where
     // Maps (-max_possible_gain..=max_possible_gain) to nodes that have that gain.
     let mut gain_to_vertex = {
         let possible_gain_count = (2 * max_possible_gain + 1) as usize;
-        vec![HashSet::new(); possible_gain_count].into_boxed_slice()
+        Vec::try_filled(HashSet::new(), possible_gain_count)?.into_boxed_slice()
     };
     // Maps a gain value to its index in gain_to_vertex.
     let gain_table_idx = |gain: i64| (gain + max_possible_gain) as usize;
     // Either Some(gain) or None if the vertex is locked.
-    let mut vertex_to_gain = vec![None; adjacency.outer_dims()].into_boxed_slice();
+    let mut vertex_to_gain = Vec::try_filled(None, partition.len())?.into_boxed_slice();
 
     let mut moves_per_pass = Vec::new();
     let mut rewinded_moves_per_pass = Vec::new();
@@ -176,10 +199,10 @@ where
             partition[moved_vertex] = target_part;
             part_weights[initial_part] -= weights[moved_vertex];
             part_weights[target_part] += weights[moved_vertex];
-            move_history.push(Move {
+            move_history.try_push(Move {
                 vertex: moved_vertex,
                 initial_part,
-            });
+            })?;
             tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
             current_edge_cut -= move_gain;
@@ -213,8 +236,8 @@ where
             None => 0,
         };
 
-        moves_per_pass.push(move_history.len());
-        rewinded_moves_per_pass.push(move_history.len() - rewind_to);
+        moves_per_pass.try_push(move_history.len())?;
+        rewinded_moves_per_pass.try_push(move_history.len() - rewind_to)?;
 
         tracing::info!("rewinding {} moves", move_history.len() - rewind_to);
         for Move {
@@ -234,10 +257,10 @@ where
 
     tracing::info!("final edge cut: {}", best_edge_cut);
 
-    Metadata {
+    Ok(Metadata {
         moves_per_pass,
         rewinded_moves_per_pass,
-    }
+    })
 }
 
 /// Trait alias for values accepted as weights by [FiducciaMattheyses].
@@ -366,31 +389,7 @@ where
         part_ids: &mut [usize],
         (adjacency, weights): (CsMatView<'_, i64>, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
-        if part_ids.is_empty() {
-            return Ok(Metadata::default());
-        }
-        if part_ids.len() != weights.len() {
-            return Err(Error::InputLenMismatch {
-                expected: part_ids.len(),
-                actual: weights.len(),
-            });
-        }
-        if part_ids.len() != adjacency.rows() {
-            return Err(Error::InputLenMismatch {
-                expected: part_ids.len(),
-                actual: adjacency.rows(),
-            });
-        }
-        if part_ids.len() != adjacency.cols() {
-            return Err(Error::InputLenMismatch {
-                expected: part_ids.len(),
-                actual: adjacency.cols(),
-            });
-        }
-        if 1 < *part_ids.iter().max().unwrap_or(&0) {
-            return Err(Error::BiPartitioningOnly);
-        }
-        let metadata = fiduccia_mattheyses(
+        fiduccia_mattheyses(
             part_ids,
             weights,
             adjacency,
@@ -398,7 +397,6 @@ where
             self.max_moves_per_pass.unwrap_or(usize::MAX),
             self.max_imbalance,
             self.max_bad_move_in_a_row,
-        );
-        Ok(metadata)
+        )
     }
 }
