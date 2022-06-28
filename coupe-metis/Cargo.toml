@@ -1,0 +1,15 @@
+[package]
+name = "coupe-metis"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+name = "coupemetis"
+crate-type = ["cdylib", "staticlib"]
+
+
+[dependencies]
+coupe = { version = "0.1", path = ".." }
+libc = "0.2"
+sprs = { version = "0.11", default-features = false }

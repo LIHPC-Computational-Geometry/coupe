@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "coupe-metis",
     "ffi",
     "tools",
     "tools/mesh-io",
