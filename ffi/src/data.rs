@@ -196,15 +196,15 @@ impl Data {
 macro_rules! with_iter {
     ( $iter:ident, $t:ty, $do:block ) => {
         match $iter {
-            crate::data::Data::Array($iter) => {
+            $crate::data::Data::Array($iter) => {
                 let $iter = $iter.iter::<$t>();
                 $do
             }
-            crate::data::Data::Constant($iter) => {
+            $crate::data::Data::Constant($iter) => {
                 let $iter = $iter.iter::<$t>();
                 $do
             }
-            crate::data::Data::Fn($iter) => {
+            $crate::data::Data::Fn($iter) => {
                 let $iter = $iter.iter::<$t>();
                 $do
             }
@@ -212,9 +212,9 @@ macro_rules! with_iter {
     };
     ( $iter:ident, $do:block ) => {
         match $iter.type_() {
-            crate::data::Type::Int => with_iter!($iter, std::os::raw::c_int, $do),
-            crate::data::Type::Int64 => with_iter!($iter, i64, $do),
-            crate::data::Type::Double => with_iter!($iter, f64, $do),
+            $crate::data::Type::Int => with_iter!($iter, std::os::raw::c_int, $do),
+            $crate::data::Type::Int64 => with_iter!($iter, i64, $do),
+            $crate::data::Type::Double => with_iter!($iter, f64, $do),
         }
     };
 }
@@ -237,15 +237,15 @@ macro_rules! with_iter {
 macro_rules! with_par_iter {
     ( $iter:ident, $t:ty, $do:block ) => {
         match $iter {
-            crate::data::Data::Array($iter) => {
+            $crate::data::Data::Array($iter) => {
                 let $iter = $iter.par_iter::<$t>();
                 $do
             }
-            crate::data::Data::Constant($iter) => {
+            $crate::data::Data::Constant($iter) => {
                 let $iter = $iter.par_iter::<$t>();
                 $do
             }
-            crate::data::Data::Fn($iter) => {
+            $crate::data::Data::Fn($iter) => {
                 let $iter = $iter.par_iter::<$t>();
                 $do
             }
@@ -253,9 +253,9 @@ macro_rules! with_par_iter {
     };
     ( $iter:ident, $do:block ) => {
         match $iter.type_() {
-            crate::data::Type::Int => with_par_iter!($iter, std::os::raw::c_int, $do),
-            crate::data::Type::Int64 => with_par_iter!($iter, i64, $do),
-            crate::data::Type::Double => with_par_iter!($iter, f64, $do),
+            $crate::data::Type::Int => with_par_iter!($iter, std::os::raw::c_int, $do),
+            $crate::data::Type::Int64 => with_par_iter!($iter, i64, $do),
+            $crate::data::Type::Double => with_par_iter!($iter, f64, $do),
         }
     };
 }
@@ -264,21 +264,21 @@ macro_rules! with_par_iter {
 macro_rules! with_slice {
     ( $iter:ident, $do:block ) => {
         match $iter.type_() {
-            crate::data::Type::Int => {
+            $crate::data::Type::Int => {
                 let $iter = match $iter.to_slice::<std::os::raw::c_int>() {
                     Ok(v) => v,
                     Err(_) => return Error::Alloc,
                 };
                 $do
             }
-            crate::data::Type::Int64 => {
+            $crate::data::Type::Int64 => {
                 let $iter = match $iter.to_slice::<i64>() {
                     Ok(v) => v,
                     Err(_) => return Error::Alloc,
                 };
                 $do
             }
-            crate::data::Type::Double => {
+            $crate::data::Type::Double => {
                 let $iter = match $iter.to_slice::<f64>() {
                     Ok(v) => v,
                     Err(_) => return Error::Alloc,
