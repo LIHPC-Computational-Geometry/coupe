@@ -114,7 +114,8 @@ void coupe_data_free(coupe_data *data);
  * The data set returned by this function retrieves values from the contiguous
  * array `data`, which must uphold the following constraints:
  *
- * - `data` must be at least of length `len`,
+ * - `data` must be at least of length `len*sizeof(type)`,
+ * - `data` must be aligned for the type and cannot be NULL,
  * - `data` must be available during the lifetime of the data set, and
  * - it must be possible to access `data` from several threads at the same time.
  *
@@ -135,7 +136,8 @@ coupe_data *coupe_data_array(uintptr_t len, enum coupe_type type, const void *da
  * The data set returned by this function copies the value beind the given
  * pointer, which must uphold the following constraints:
  *
- * - `value` must be available during the lifetime of the data set, and
+ * - `value` must be available during the lifetime of the data set,
+ * - `value` cannot be NULL and must be aligned,
  * - it must be possible to access `value` from several threads at the same time.
  *
  * This data set can be used several times and so concurrently.  When unused, it
