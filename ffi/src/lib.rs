@@ -81,11 +81,11 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
             MSG.as_ptr() as *const c_char
         }
         Error::BadDimension => {
-            static MSG: &[u8] = b"this algorithm does not support the given mesh dimension";
+            static MSG: &[u8] = b"this algorithm does not support the given mesh dimension\0";
             MSG.as_ptr() as *const c_char
         }
         Error::BadType => {
-            static MSG: &[u8] = b"this algorithm does not support the given type";
+            static MSG: &[u8] = b"this algorithm does not support the given type\0";
             MSG.as_ptr() as *const c_char
         }
         Error::BipartOnly => {
@@ -93,7 +93,8 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
             MSG.as_ptr() as *const c_char
         }
         Error::LenMismatch => {
-            static MSG: &[u8] = b"input iters (e.g. weights and points) don't have the same length";
+            static MSG: &[u8] =
+                b"input iters (e.g. weights and points) don't have the same length\0";
             MSG.as_ptr() as *const c_char
         }
         Error::NotFound => {
