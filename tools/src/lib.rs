@@ -541,7 +541,7 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
     sprs::CsMat::new((size, size), indptr, indices, data)
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum EdgeWeightDistribution {
     Uniform,
     Linear,
