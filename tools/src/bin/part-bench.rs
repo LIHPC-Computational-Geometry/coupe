@@ -83,11 +83,21 @@ fn main_d<const D: usize>(
     let mut partition = vec![0; coupe_tools::used_element_count(&mesh)];
     let problem = coupe_tools::Problem::new(mesh, weights, edge_weights);
 
+    let intel_domain = coupe_tools::ittapi::domain("algorithm-chain");
+
     let mut runners: Vec<_> = algorithms
         .iter_mut()
-        .map(|algorithm| algorithm.to_runner(&problem))
+        .zip(&algorithm_specs)
+        .map(|(algorithm, algorithm_spec)| {
+            let name = format!("{algorithm_spec}.to_runner");
+            let _task = coupe_tools::ittapi::begin(&intel_domain, &name);
+
+            algorithm.to_runner(&problem)
+        })
         .collect();
     let mut benchmark = || {
+        let _task = coupe_tools::ittapi::begin(&intel_domain, "benchmark-iteration");
+
         for runner in &mut runners {
             runner(&mut partition).unwrap();
         }

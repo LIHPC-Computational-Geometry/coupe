@@ -20,6 +20,9 @@ mod metis;
 #[cfg(feature = "scotch")]
 mod scotch;
 
+#[cfg_attr(not(feature = "ittapi"), path = "ittapi_stub.rs")]
+pub mod ittapi;
+
 pub struct Problem<const D: usize> {
     mesh: Mesh,
     weights: weight::Array,
@@ -40,19 +43,19 @@ impl<const D: usize> Problem<D> {
     }
 
     pub fn points(&self) -> &[PointND<D>] {
-        let points = self.points.get_or_init(|| barycentres(&self.mesh));
-        &*points
+        self.points.get_or_init(|| barycentres(&self.mesh))
     }
 
     pub fn adjacency(&self) -> sprs::CsMatView<f64> {
-        let adjacency = self.adjacency.get_or_init(|| {
-            let mut adj = dual(&self.mesh);
-            if self.edge_weights != EdgeWeightDistribution::Uniform {
-                set_edge_weights(&mut adj, &self.weights, self.edge_weights);
-            }
-            adj
-        });
-        adjacency.view()
+        self.adjacency
+            .get_or_init(|| {
+                let mut adjacency = dual(&self.mesh);
+                if self.edge_weights != EdgeWeightDistribution::Uniform {
+                    set_edge_weights(&mut adjacency, &self.weights, self.edge_weights);
+                }
+                adjacency
+            })
+            .view()
     }
 }
 

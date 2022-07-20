@@ -40,6 +40,14 @@ Otherwise, these tools can be built with cargo:
 cargo build --bins
 ```
 
+C bindings to mesh-io can be built with the following command:
+
+```
+cargo build -p mesh-io-ffi
+```
+
+### Integration with other partitioners
+
 The `mesh-part` and `part-bench` tools have optional support for [MeTiS] and
 [SCOTCH] that is enabled by default.  To disable these features, use the
 `--no-default-features` command-line flag.
@@ -52,11 +60,19 @@ cargo build --bins --no-default-features
 cargo build --bins --no-default-features --features metis
 ```
 
-C bindings to mesh-io can be built with the following command:
+### Integration with Intel performance tools
+
+The `mesh-part` and `part-bench` tools can better integrate with Intel VTune and
+Advisor through the use of *Instrumentation and Tracing Technology APIs*.
+
+To enable this integration, do so through the `ittapi` cargo feature:
 
 ```
-cargo build -p mesh-io-ffi
+cargo build --bins --feature ittapi
 ```
+
+When enabled, `mesh-part` and `part-bench` will wrap algorithm calls into
+*tasks*. See [Intel's documentation][intel] on how to analyze them.
 
 ## Usage
 
@@ -88,6 +104,7 @@ part-info --mesh heart.mesh --weights heart.linear.weights \
           --partition heart.linear.metis.part
 ```
 
+[intel]: https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/analyze-performance/code-profiling-scenarios/task-analysis.html#task-analysis_TOP_TASKS
 [MeTiS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
 [SCOTCH]: https://github.com/LIHPC-Computational-Geometry/scotch-rs
 [scdoc]: https://sr.ht/~sircmpwn/scdoc/
