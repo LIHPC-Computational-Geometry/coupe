@@ -22,7 +22,7 @@ impl<const D: usize> ToRunner<D> for Standard {
         }
         let weights: Vec<_> = weights.iter().map(|i| i[0] as Num).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency.view().into_raw_storage();
+        let (xadj, adjncy, _) = problem.adjacency().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
         let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
 
