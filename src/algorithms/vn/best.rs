@@ -82,7 +82,7 @@ where
                     below = target_idx.checked_sub(1);
                 }
                 Err(above_idx) => {
-                    above = (above_idx < criterion.len()).then(|| above_idx);
+                    above = (above_idx < criterion.len()).then_some(above_idx);
                     below = above_idx.checked_sub(1);
                 }
             }
