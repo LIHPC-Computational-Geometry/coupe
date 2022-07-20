@@ -5,6 +5,7 @@ use coupe::PointND;
 use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use once_cell::sync::OnceCell;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
@@ -20,9 +21,39 @@ mod metis;
 mod scotch;
 
 pub struct Problem<const D: usize> {
-    pub points: Vec<PointND<D>>,
-    pub weights: weight::Array,
-    pub adjacency: sprs::CsMat<f64>,
+    mesh: Mesh,
+    weights: weight::Array,
+    edge_weights: EdgeWeightDistribution,
+    points: OnceCell<Vec<PointND<D>>>,
+    adjacency: OnceCell<sprs::CsMat<f64>>,
+}
+
+impl<const D: usize> Problem<D> {
+    pub fn new(mesh: Mesh, weights: weight::Array, edge_weights: EdgeWeightDistribution) -> Self {
+        Self {
+            mesh,
+            weights,
+            edge_weights,
+            points: OnceCell::new(),
+            adjacency: OnceCell::new(),
+        }
+    }
+
+    pub fn points(&self) -> &[PointND<D>] {
+        let points = self.points.get_or_init(|| barycentres(&self.mesh));
+        &*points
+    }
+
+    pub fn adjacency(&self) -> sprs::CsMatView<f64> {
+        let adjacency = self.adjacency.get_or_init(|| {
+            let mut adj = dual(&self.mesh);
+            if self.edge_weights != EdgeWeightDistribution::Uniform {
+                set_edge_weights(&mut adj, &self.weights, self.edge_weights);
+            }
+            adj
+        });
+        adjacency.view()
+    }
 }
 
 pub type Metadata = Option<Box<dyn std::fmt::Debug>>;
@@ -151,7 +182,7 @@ impl<const D: usize> ToRunner<D> for coupe::Rcb {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         Box::new(move |partition| {
-            let points = problem.points.par_iter().cloned();
+            let points = problem.points().par_iter().cloned();
             match &problem.weights {
                 Integers(is) => {
                     let weights = is.par_iter().map(|weight| weight[0]);
@@ -174,8 +205,7 @@ impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
             return runner_error("hilbert is only implemented for 2D meshes");
         }
         // SAFETY: is a noop since D == 2
-        let points =
-            unsafe { mem::transmute::<&Vec<PointND<D>>, &Vec<PointND<2>>>(&problem.points) };
+        let points = unsafe { mem::transmute::<&[PointND<D>], &[PointND<2>]>(problem.points()) };
         match &problem.weights {
             Integers(_) => runner_error("hilbert is only implemented for floats"),
             Floats(fs) => {
@@ -193,8 +223,8 @@ impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         let adjacency = {
-            let shape = problem.adjacency.shape();
-            let (indptr, indices, f64_data) = problem.adjacency.view().into_raw_storage();
+            let shape = problem.adjacency().shape();
+            let (indptr, indices, f64_data) = problem.adjacency().into_raw_storage();
             let i64_data = f64_data.iter().map(|f| *f as i64).collect();
             sprs::CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
         };
@@ -220,7 +250,7 @@ impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
 impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
-        let adjacency = problem.adjacency.view();
+        let adjacency = problem.adjacency();
         match &problem.weights {
             Integers(_) => runner_error("kl is only implemented for floats"),
             Floats(fs) => {
@@ -335,6 +365,24 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
 
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
+}
+
+/// The number of elements that are taken into account for partitioning.
+pub fn used_element_count(mesh: &Mesh) -> usize {
+    let element_dim = match mesh
+        .topology()
+        .iter()
+        .map(|(el_type, _, _)| el_type.dimension())
+        .max()
+    {
+        Some(v) => v,
+        None => return 0,
+    };
+    mesh.topology()
+        .iter()
+        .filter(|(element_type, _nodes, _node_refs)| element_type.dimension() == element_dim)
+        .map(|(element_type, nodes, _node_refs)| nodes.len() / element_type.node_count())
+        .sum()
 }
 
 pub fn barycentres<const D: usize>(mesh: &Mesh) -> Vec<PointND<D>> {

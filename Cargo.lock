@@ -216,6 +216,7 @@ dependencies = [
  "mesh-io",
  "metis",
  "num",
+ "once_cell",
  "rand",
  "rand_pcg",
  "rayon",

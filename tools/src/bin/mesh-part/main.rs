@@ -23,28 +23,13 @@ fn main_d<const D: usize>(
     let algorithms: Vec<_> = algorithm_specs
         .iter()
         .map(|algorithm_spec| {
-            coupe_tools::parse_algorithm(algorithm_spec)
+            coupe_tools::parse_algorithm::<D>(algorithm_spec)
                 .with_context(|| format!("invalid algorithm {:?}", algorithm_spec))
         })
         .collect::<Result<_>>()?;
 
-    let (adjacency, points) = rayon::join(
-        || {
-            let mut adjacency = coupe_tools::dual(&mesh);
-            if edge_weights != coupe_tools::EdgeWeightDistribution::Uniform {
-                coupe_tools::set_edge_weights(&mut adjacency, &weights, edge_weights);
-            }
-            adjacency
-        },
-        || coupe_tools::barycentres::<D>(&mesh),
-    );
-
-    let problem = coupe_tools::Problem {
-        points,
-        weights,
-        adjacency,
-    };
-    let mut partition = vec![0; problem.points.len()];
+    let mut partition = vec![0; coupe_tools::used_element_count(&mesh)];
+    let problem = coupe_tools::Problem::new(mesh, weights, edge_weights);
 
     let show_metadata = matches.opt_present("v");
 
