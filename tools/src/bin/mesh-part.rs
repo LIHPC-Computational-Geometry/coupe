@@ -5,6 +5,7 @@ use mesh_io::weight;
 use std::env;
 use std::fs;
 use std::io;
+use std::mem::drop;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
@@ -33,10 +34,22 @@ fn main_d<const D: usize>(
 
     let show_metadata = matches.opt_present("v");
 
+    let intel_domain = coupe_tools::ittapi::domain("algorithm-chain");
+
     for (algorithm_spec, mut algorithm) in algorithm_specs.iter().zip(algorithms) {
+        let name = format!("{algorithm_spec}.to_runner");
+        let task = coupe_tools::ittapi::begin(&intel_domain, &name);
+
         let mut algorithm = algorithm.to_runner(&problem);
+
+        drop(task);
+        let task = coupe_tools::ittapi::begin(&intel_domain, algorithm_spec);
+
         let metadata = algorithm(&mut partition)
             .with_context(|| format!("failed to apply algorithm {:?}", algorithm_spec))?;
+
+        drop(task);
+
         if !show_metadata {
             continue;
         }

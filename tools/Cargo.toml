@@ -14,6 +14,9 @@ repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 [features]
 default = ["scotch", "metis"]
 
+# Implicit features
+# - ittapi: enable integration with Intel performance tools
+
 
 [dependencies]
 
@@ -21,6 +24,9 @@ default = ["scotch", "metis"]
 coupe = { version = "0.1", path = ".." }
 scotch = { version = "0.1", optional = true }
 metis = { version = "0.1", optional = true }
+
+# Better tracing and profiling in Intel tools
+ittapi = { version = "0.3", optional = true }
 
 # Random number generation
 rand = { version = "0.8", default-features = false, features = ["std"] }
