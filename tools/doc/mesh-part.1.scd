@@ -136,14 +136,14 @@ These algorithms improve partitions using the topology of the mesh.
 	*kl*,[MAX_BAD_MOVES_IN_A_ROW=1]
 		Kernighan-Lin algorithm
 
-MeTiS partitioning algorithms:++
-These algorithms require *mesh-part* to be built with MeTiS support.
+METIS partitioning algorithms:++
+These algorithms require *mesh-part* to be built with METIS support.
 
 	*metis:recursive*,PART_COUNT
-		MeTiS's recursive graph partitioning.
+		METIS's recursive graph partitioning.
 
 	*metis:kway*,PART_COUNT
-		MeTiS's kway graph partitioning.
+		METIS's kway graph partitioning.
 
 SCOTCH partitioning algorithms:++
 These algorithms require *mesh-part* to be built with SCOTCH support.

@@ -56,15 +56,15 @@ cargo build -p mesh-io-ffi
 
 ### Integration with other partitioners
 
-The `mesh-part` and `part-bench` tools have optional support for [MeTiS] and
+The `mesh-part` and `part-bench` tools have optional support for [METIS] and
 [SCOTCH] that is enabled by default.  To disable these features, use the
 `--no-default-features` command-line flag.
 
 ```
-# Disable SCOTCH and MeTiS support
+# Disable SCOTCH and METIS support
 cargo build --bins --no-default-features
 
-# Enable MeTiS support only
+# Enable METIS support only
 cargo build --bins --no-default-features --features metis
 ```
 
@@ -99,7 +99,7 @@ mesh-part --algorithm hilbert,3 \
           --weights heart.linear.weights \
           >heart.linear.hilbert-fm.part
 
-# Apply MeTiS' recursive bisection on the same mesh and weights.
+# Apply METIS' recursive bisection on the same mesh and weights.
 mesh-part --algorithm metis:recursive,3
           --mesh heart.mesh \
           --weights heart.linear.weights \
@@ -113,6 +113,6 @@ part-info --mesh heart.mesh --weights heart.linear.weights \
 ```
 
 [intel]: https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/analyze-performance/code-profiling-scenarios/task-analysis.html#task-analysis_TOP_TASKS
-[MeTiS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
+[METIS]: https://github.com/LIHPC-Computational-Geometry/metis-rs
 [SCOTCH]: https://github.com/LIHPC-Computational-Geometry/scotch-rs
 [scdoc]: https://sr.ht/~sircmpwn/scdoc/

@@ -14,7 +14,7 @@ impl<const D: usize> ToRunner<D> for Recursive {
         let weights = match &problem.weights {
             weight::Array::Integers(is) => is,
             weight::Array::Floats(_) => {
-                return runner_error("MeTiS does not support float weights")
+                return runner_error("METIS does not support float weights")
             }
         };
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
@@ -46,7 +46,7 @@ impl<const D: usize> ToRunner<D> for KWay {
         let weights = match &problem.weights {
             weight::Array::Integers(is) => is,
             weight::Array::Floats(_) => {
-                return runner_error("MeTiS does not support float weights")
+                return runner_error("METIS does not support float weights")
             }
         };
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
