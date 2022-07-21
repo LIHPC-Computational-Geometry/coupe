@@ -65,7 +65,6 @@ fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
     options.optopt("f", "format", "output format", "EXT");
-    options.optopt("s", "seed", "RNG seed (default: 0)", "STRING");
 
     let matches = options.parse(env::args().skip(1))?;
 
