@@ -5,23 +5,31 @@ includes the following tools:
 
 - mesh-io, a library used to encode and decode meshes in different formats,
 - num-part, a framework to evaluate the quality of number partitioning
-  algorithms specifically, and
+  algorithms specifically,
 - in the `src/bin` directory, a collection of tools to partition meshes and
   evaluate mesh partitions:
     - weight-gen generates a distribution of cell weights for a mesh,
-    - mesh-part runs a partitioner on a given mesh and weight distribution,
+    - mesh-part runs a partitioner on a given mesh and weight distribution, then
+      outputs a partition file,
     - part-bench runs criterion on given partitioners, meshes and weights,
     - part-info displays information about a partition, for a given mesh and
       weight distribution,
     - apply-part encodes a partition in a mesh file for visualization.
     - apply-weight encodes a weight distribution in a mesh file for
-      visualization.
+      visualization,
+    - medit2svg outputs an SVG given a MEDIT mesh file, for use with the two
+      above tools,
+    - mesh-dup and mesh-refine increase the size of a mesh by either duplicating
+      the vertices or splitting its elements into smaller ones, respectively,
+    - mesh-reorder changes the order of mesh elements.
 - in the `report` directory, a collection of shell scripts that aggregate
   results into visual reports:
     - `quality` generates an HTML report of partitioning results for a given
       mesh directory,
     - `efficiency` generates a CSV file and a SVG graph showing the efficiency
-      (strong scaling) of algorithms.
+      (strong scaling) of algorithms,
+    - `efficiency-weak` is the weak-scaling equivalent of the above tool. It
+      will also run the algorithm itself to overcome a limitation in part-bench.
 
 ## Building
 
