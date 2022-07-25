@@ -45,6 +45,16 @@ impl<const D: usize> Problem<D> {
         }
     }
 
+    pub fn without_mesh(weights: weight::Array) -> Self {
+        Self {
+            mesh: Mesh::default(),
+            weights,
+            edge_weights: EdgeWeightDistribution::Uniform,
+            points: OnceCell::new(),
+            adjacency: OnceCell::new(),
+        }
+    }
+
     pub fn points(&self) -> &[PointND<D>] {
         self.points.get_or_init(|| barycentres(&self.mesh))
     }
