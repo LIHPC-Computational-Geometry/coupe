@@ -153,9 +153,12 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use coupe::sprs::CsMat;
+    use coupe::sprs::CSR;
+
     #[test]
     fn test_adjacency_convert() {
-        let mut adjacency = sprs::CsMat::empty(sprs::CSR, 15);
+        let mut adjacency = CsMat::empty(CSR, 15);
         adjacency.reserve_outer_dim(15);
         adjacency.insert(0, 1, 1.0);
         adjacency.insert(0, 5, 1.0);

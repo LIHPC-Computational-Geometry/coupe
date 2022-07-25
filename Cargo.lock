@@ -197,10 +197,6 @@ name = "coupe-ffi"
 version = "0.1.0"
 dependencies = [
  "coupe",
- "nalgebra",
- "num",
- "rayon",
- "sprs",
 ]
 
 [[package]]
@@ -216,13 +212,11 @@ dependencies = [
  "ittapi",
  "mesh-io",
  "metis",
- "num",
  "once_cell",
  "rand",
  "rand_pcg",
  "rayon",
  "scotch",
- "sprs",
  "tracing-chrome",
  "tracing-subscriber",
  "tracing-tree",

@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::sprs::CsMatView;
 use coupe::Point2D;
 use mesh_io::medit::ElementType;
 use mesh_io::medit::Mesh;
@@ -60,7 +61,7 @@ fn add_element_and_neighbors_to_path<'a>(
     path_ref: isize,
     el: usize,
     element_fn: impl Fn(usize) -> (ElementType, &'a [usize], isize) + Copy,
-    adjacency: sprs::CsMatView<f64>,
+    adjacency: CsMatView<f64>,
 ) {
     let mut queue = Vec::new();
     queue.push(el);
@@ -130,7 +131,7 @@ fn frontier<'a>(
     el_set: &HashSet<usize>,
     mesh: &Mesh,
     element_fn: impl Fn(usize) -> (ElementType, &'a [usize], isize),
-    adjacency: sprs::CsMatView<f64>,
+    adjacency: CsMatView<f64>,
 ) -> Vec<Vec<Point2D>> {
     let path_set = el_set
         .iter()

@@ -21,7 +21,3 @@ crate-type = [
 
 [dependencies]
 coupe = { version = "0.1", path = ".." }
-nalgebra = { version = "0.29", default-features = false, features = ["std"] }
-num = "0.4"
-rayon = "1.3"
-sprs = { version = "0.11", default-features = false }

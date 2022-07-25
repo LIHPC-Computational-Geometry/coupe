@@ -2,17 +2,19 @@
 
 use crate::data::Data;
 use crate::data::Type;
+use coupe::nalgebra::allocator::Allocator;
+use coupe::nalgebra::ArrayStorage;
+use coupe::nalgebra::Const;
+use coupe::nalgebra::DefaultAllocator;
+use coupe::nalgebra::DimDiff;
+use coupe::nalgebra::DimSub;
+use coupe::nalgebra::ToTypenum;
+use coupe::sprs::CsMatView;
+use coupe::sprs::CSR;
 use coupe::Partition as _;
 use coupe::Point2D;
 use coupe::PointND;
 use coupe::Real;
-use nalgebra::allocator::Allocator;
-use nalgebra::ArrayStorage;
-use nalgebra::Const;
-use nalgebra::DefaultAllocator;
-use nalgebra::DimDiff;
-use nalgebra::DimSub;
-use nalgebra::ToTypenum;
 use std::ffi::c_void;
 use std::mem;
 use std::os::raw::c_char;
@@ -154,9 +156,9 @@ pub extern "C" fn coupe_data_fn(
 }
 
 pub enum Adjncy<'a> {
-    Int(sprs::CsMatView<'a, c_int>),
-    Int64(sprs::CsMatView<'a, i64>),
-    Double(sprs::CsMatView<'a, f64>),
+    Int(CsMatView<'a, c_int>),
+    Int64(CsMatView<'a, i64>),
+    Double(CsMatView<'a, f64>),
 }
 
 #[no_mangle]
@@ -179,20 +181,17 @@ unsafe fn adjncy_csr_unchecked(
     match data_type {
         Type::Int => {
             let data = slice::from_raw_parts(data as *const c_int, adjncy.len());
-            let matrix =
-                sprs::CsMatView::new_unchecked(sprs::CSR, (size, size), xadj, adjncy, data);
+            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
             Adjncy::Int(matrix)
         }
         Type::Int64 => {
             let data = slice::from_raw_parts(data as *const i64, adjncy.len());
-            let matrix =
-                sprs::CsMatView::new_unchecked(sprs::CSR, (size, size), xadj, adjncy, data);
+            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
             Adjncy::Int64(matrix)
         }
         Type::Double => {
             let data = slice::from_raw_parts(data as *const f64, adjncy.len());
-            let matrix =
-                sprs::CsMatView::new_unchecked(sprs::CSR, (size, size), xadj, adjncy, data);
+            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
             Adjncy::Double(matrix)
         }
     }

@@ -1,7 +1,8 @@
-use rayon::iter::IntoParallelIterator as _;
-use rayon::iter::IntoParallelRefIterator as _;
-use rayon::iter::ParallelExtend as _;
-use rayon::iter::ParallelIterator as _;
+use coupe::rayon::iter::IndexedParallelIterator;
+use coupe::rayon::iter::IntoParallelIterator as _;
+use coupe::rayon::iter::IntoParallelRefIterator as _;
+use coupe::rayon::iter::ParallelExtend as _;
+use coupe::rayon::iter::ParallelIterator as _;
 use std::borrow::Cow;
 use std::collections::TryReserveError;
 use std::ffi::c_void;
@@ -45,14 +46,12 @@ impl Constant {
         (0..self.len).map(move |_| value)
     }
 
-    pub unsafe fn par_iter<'a, T>(
-        &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
+    pub unsafe fn par_iter<'a, T>(&'a self) -> impl IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send + Sync,
     {
         let value = *(self.value as *const T);
-        rayon::iter::repeatn(value, self.len)
+        coupe::rayon::iter::repeatn(value, self.len)
     }
 }
 
@@ -83,9 +82,7 @@ impl Array {
             .cloned()
     }
 
-    pub unsafe fn par_iter<'a, T>(
-        &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
+    pub unsafe fn par_iter<'a, T>(&'a self) -> impl IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send + Sync,
     {
@@ -130,9 +127,7 @@ impl Fn {
         })
     }
 
-    pub unsafe fn par_iter<'a, T>(
-        &'a self,
-    ) -> impl rayon::iter::IndexedParallelIterator<Item = T> + Clone + 'a
+    pub unsafe fn par_iter<'a, T>(&'a self) -> impl IndexedParallelIterator<Item = T> + Clone + 'a
     where
         T: 'a + Copy + Send,
     {
