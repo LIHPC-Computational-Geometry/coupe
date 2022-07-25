@@ -70,6 +70,10 @@ impl<const D: usize> Problem<D> {
             })
             .view()
     }
+
+    pub fn weights(&self) -> &weight::Array {
+        &self.weights
+    }
 }
 
 pub type Metadata = Option<Box<dyn std::fmt::Debug>>;
