@@ -213,9 +213,9 @@ mod tests {
     fn small() {
         let w = [1, 2, 3, 4, 5, 6];
         let mut part = vec![0; w.len()];
-        let imb_ini = imbalance::imbalance(2, &part, &w);
+        let imb_ini = imbalance::imbalance(2, &part, w);
         vn_best_mono(&mut part, w, 2).unwrap();
-        let imb_end = imbalance::imbalance(2, &part, &w);
+        let imb_end = imbalance::imbalance(2, &part, w);
         assert!(imb_end < imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
     }

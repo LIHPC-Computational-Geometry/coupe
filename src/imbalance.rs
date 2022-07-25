@@ -39,42 +39,30 @@ where
 }
 
 /// Compute the imbalance of the given partition.
-pub fn imbalance<T>(num_parts: usize, partition: &[usize], weights: &[T]) -> f64
+pub fn imbalance<W>(num_parts: usize, partition: &[usize], weights: W) -> f64
 where
-    T: Clone
-        + FromPrimitive
-        + ToPrimitive
-        + PartialOrd
-        + Zero
-        + PartialEq
-        + Div<Output = T>
-        + Sub<Output = T>
-        + Sum,
+    W: IntoParallelIterator,
+    W::Iter: IndexedParallelIterator,
+    W::Item: Clone + PartialOrd + PartialEq,
+    W::Item: Zero + FromPrimitive + ToPrimitive,
+    W::Item: AddAssign + Div<Output = W::Item> + Sub<Output = W::Item> + Sum,
 {
+    let weights = weights.into_par_iter();
     debug_assert_eq!(partition.len(), weights.len());
-    debug_assert!(*partition.par_iter().max().unwrap_or(&0) < num_parts);
 
-    let total_weight: T = weights.iter().cloned().sum();
-    if total_weight.is_zero() || weights.is_empty() || num_parts == 0 {
-        0.0
-    } else {
-        let ideal_part_weight = total_weight.to_f64().unwrap() / num_parts.to_f64().unwrap();
-        (0..num_parts)
-            .map(|part| {
-                let part_weight: T = partition
-                    .iter()
-                    .zip(weights)
-                    .filter(|(weight_part, _weight)| **weight_part == part)
-                    .map(|(_weight_part, weight)| weight.clone())
-                    .sum();
-                let part_weight: f64 = part_weight.to_f64().unwrap();
-                (part_weight - ideal_part_weight) / ideal_part_weight
-            })
-            .minmax()
-            .into_option()
-            .unwrap()
-            .1
-    }
+    let part_loads = compute_parts_load(partition, num_parts, weights);
+    let total_weight: W::Item = part_loads.iter().cloned().sum();
+    let ideal_part_weight = total_weight.to_f64().unwrap() / num_parts.to_f64().unwrap();
+    part_loads
+        .into_iter()
+        .map(|part_weight| {
+            let part_weight: f64 = part_weight.to_f64().unwrap();
+            (part_weight - ideal_part_weight) / ideal_part_weight
+        })
+        .minmax()
+        .into_option()
+        .unwrap_or((0.0, 0.0))
+        .1
 }
 
 pub fn imbalance_target<W>(targets: &[W::Item], partition: &[usize], weights: W) -> W::Item
