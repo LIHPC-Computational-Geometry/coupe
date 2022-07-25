@@ -1,5 +1,8 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::sprs::CsMat;
+use coupe::sprs::CsMatView;
+use coupe::sprs::CSR;
 use coupe::Partition as _;
 use coupe::PointND;
 use mesh_io::medit::ElementType;
@@ -28,7 +31,7 @@ pub struct Problem<const D: usize> {
     weights: weight::Array,
     edge_weights: EdgeWeightDistribution,
     points: OnceCell<Vec<PointND<D>>>,
-    adjacency: OnceCell<sprs::CsMat<f64>>,
+    adjacency: OnceCell<CsMat<f64>>,
 }
 
 impl<const D: usize> Problem<D> {
@@ -46,7 +49,7 @@ impl<const D: usize> Problem<D> {
         self.points.get_or_init(|| barycentres(&self.mesh))
     }
 
-    pub fn adjacency(&self) -> sprs::CsMatView<f64> {
+    pub fn adjacency(&self) -> CsMatView<f64> {
         self.adjacency
             .get_or_init(|| {
                 let mut adjacency = dual(&self.mesh);
@@ -229,7 +232,7 @@ impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
             let shape = problem.adjacency().shape();
             let (indptr, indices, f64_data) = problem.adjacency().into_raw_storage();
             let i64_data = f64_data.iter().map(|f| *f as i64).collect();
-            sprs::CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
+            CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
         };
         match &problem.weights {
             Integers(is) => {
@@ -419,7 +422,7 @@ pub fn barycentres<const D: usize>(mesh: &Mesh) -> Vec<PointND<D>> {
 }
 
 /// The adjacency matrix that models the dual graph of the given mesh.
-pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
+pub fn dual(mesh: &Mesh) -> CsMat<f64> {
     let dimension = match mesh
         .topology()
         .iter()
@@ -427,7 +430,7 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
         .max()
     {
         Some(v) => v,
-        None => return sprs::CsMat::empty(sprs::CSR, 0),
+        None => return CsMat::empty(CSR, 0),
     };
     let ignored_element = |el_type: ElementType| -> bool {
         el_type.dimension() != dimension || el_type == ElementType::Edge
@@ -541,7 +544,7 @@ pub fn dual(mesh: &Mesh) -> sprs::CsMat<f64> {
 
     let data = vec![1.0; indices.len()];
 
-    sprs::CsMat::new((size, size), indptr, indices, data)
+    CsMat::new((size, size), indptr, indices, data)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -575,7 +578,7 @@ impl std::str::FromStr for EdgeWeightDistribution {
 }
 
 pub fn set_edge_weights(
-    adjacency: &mut sprs::CsMat<f64>,
+    adjacency: &mut CsMat<f64>,
     vertex_weights: &weight::Array,
     distribution: EdgeWeightDistribution,
 ) {

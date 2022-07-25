@@ -1,5 +1,8 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::num_traits::FromPrimitive;
+use coupe::num_traits::ToPrimitive;
+use coupe::num_traits::Zero;
 use mesh_io::medit::Mesh;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
@@ -13,7 +16,7 @@ const USAGE: &str = "Usage: part-info [options]";
 fn imbalance<T>(part_count: usize, part_ids: &[usize], weights: &[Vec<T>]) -> Vec<f64>
 where
     T: Copy + Send + Sync,
-    T: num::FromPrimitive + num::ToPrimitive + num::Zero,
+    T: FromPrimitive + ToPrimitive + Zero,
     T: std::ops::Div<Output = T> + std::ops::Sub<Output = T> + std::iter::Sum,
 {
     let criterion_count = match weights.first() {

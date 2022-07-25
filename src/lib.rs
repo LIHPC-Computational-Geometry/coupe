@@ -47,6 +47,12 @@ pub use crate::geometry::BoundingBox;
 pub use crate::geometry::{Point2D, Point3D, PointND};
 use crate::nextafter::nextafter;
 pub use crate::real::Real;
+
+pub use nalgebra;
+pub use num::traits as num_traits;
+pub use rayon;
+pub use sprs;
+
 use std::cmp::Ordering;
 
 /// The `Partition` trait allows for partitioning data.
