@@ -277,9 +277,9 @@ mod tests {
         let mut part = [0; W.len()];
 
         vn_first_mono(&mut part, &W, 1).unwrap();
-        let imb_ini = imbalance::imbalance(2, &part, &W);
+        let imb_ini = imbalance::imbalance(2, &part, W);
         vn_first_mono(&mut part, &W, 2).unwrap();
-        let imb_end = imbalance::imbalance(2, &part, &W);
+        let imb_end = imbalance::imbalance(2, &part, W);
         assert!(imb_end <= imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
     }
