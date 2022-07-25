@@ -24,6 +24,7 @@
 perf.data
 perf.data.old
 *.svg
+*.png
 *.csv
 
 # coverage
@@ -36,3 +37,6 @@ tools/doc/*.1
 # generated documentation
 /build
 /ffi/build
+
+# num-part's SQLite databases
+*.db
