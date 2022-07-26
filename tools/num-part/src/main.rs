@@ -225,6 +225,7 @@ fn main() -> Result<()> {
             coupe_tools::Problem::<0>::without_mesh(weights)
         };
         let mut algo_iterations = None;
+        let mut success = true;
         for (algorithm_spec, algorithm) in algorithm_specs.iter().zip(&mut algorithms) {
             let mut algorithm = algorithm.to_runner(&problem);
             match algorithm(&mut partition) {
@@ -237,30 +238,33 @@ fn main() -> Result<()> {
                 Ok(None) => {}
                 Err(err) => {
                     eprintln!("Warning: algorithm {algorithm_spec} failed to run: {err}");
+                    success = false;
                     break;
                 }
             }
         }
-        let part_count = *partition.iter().max().unwrap() + 1;
-        let imbalance = match problem.weights() {
-            weight::Array::Integers(is) => {
-                coupe::imbalance::imbalance(part_count, &partition, is.par_iter().map(|i| i[0]))
-            }
-            weight::Array::Floats(fs) => {
-                coupe::imbalance::imbalance(part_count, &partition, fs.par_iter().map(|i| i[0]))
-            }
-        };
-        db.insert_experiment(database::Experiment {
-            algorithm: &algorithm_specs.join(";"),
-            seed_id,
-            distribution_id,
-            weight_count,
-            iteration: iter_no,
-            case_type: use_integers,
-            imbalance,
-            algo_iterations,
-        })
-        .context("failed to save experiment")?;
+        if success {
+            let part_count = *partition.iter().max().unwrap() + 1;
+            let imbalance = match problem.weights() {
+                weight::Array::Integers(is) => {
+                    coupe::imbalance::imbalance(part_count, &partition, is.par_iter().map(|i| i[0]))
+                }
+                weight::Array::Floats(fs) => {
+                    coupe::imbalance::imbalance(part_count, &partition, fs.par_iter().map(|i| i[0]))
+                }
+            };
+            db.insert_experiment(database::Experiment {
+                algorithm: &algorithm_specs.join(";"),
+                seed_id,
+                distribution_id,
+                weight_count,
+                iteration: iter_no,
+                case_type: use_integers,
+                imbalance,
+                algo_iterations,
+            })
+            .context("failed to save experiment")?;
+        }
         if iter_no < iteration_count {
             partition.fill(0);
         }
