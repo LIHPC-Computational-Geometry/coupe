@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["medit","This module allows to load Medit mesh files, as described by Frey in MEDIT : An interactive Mesh visualization Software."],["partition","Partition file format encoder/decoder."],["weight","Weight file format encoder/decoder."]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["MIGRATIONS","List of database migrations, to seamlessly update the database without losing data."]],"fn":[["default_path",""],["open",""],["upgrade_schema","Initialize, or update the database’s schema to the latest version."]],"struct":[["Database",""],["Experiment",""]]});

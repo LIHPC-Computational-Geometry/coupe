@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["adjacency_matrix","Build an adjacency matrix from a mesh connectivity."],["edge_cut","The edge cut of a partition."],["lambda_cut",""]]});

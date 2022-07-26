@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["coupe"] = [{"text":"impl <a class=\"trait\" href=\"coupe/num_traits/trait.FromPrimitive.html\" title=\"trait coupe::num_traits::FromPrimitive\">FromPrimitive</a> for <a class=\"struct\" href=\"coupe/struct.Real.html\" title=\"struct coupe::Real\">Real</a>","synthetic":false,"types":["coupe::real::Real"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

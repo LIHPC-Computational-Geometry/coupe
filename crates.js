@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["apply_part","apply_weight","coupe","coupe_tools","medit2svg","mesh_dup","mesh_io","mesh_part","mesh_refine","mesh_reorder","meshio","num_part","part_bench","part_info","weight_gen"];

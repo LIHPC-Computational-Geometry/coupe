@@ -1,0 +1,17 @@
+var sourcesIndex = {};
+sourcesIndex["apply_part"] = {"name":"","files":["apply-part.rs"]};
+sourcesIndex["apply_weight"] = {"name":"","files":["apply-weight.rs"]};
+sourcesIndex["coupe"] = {"name":"","dirs":[{"name":"algorithms","dirs":[{"name":"vn","files":["best.rs","first.rs","mod.rs"]}],"files":["ckk.rs","fiduccia_mattheyses.rs","graph_growth.rs","greedy.rs","hilbert_curve.rs","k_means.rs","kernighan_lin.rs","kk.rs","multi_jagged.rs","recursive_bisection.rs","z_curve.rs"]}],"files":["algorithms.rs","geometry.rs","imbalance.rs","lib.rs","nextafter.rs","real.rs","topology.rs"]};
+sourcesIndex["coupe_tools"] = {"name":"","files":["ittapi_stub.rs","lib.rs","metis.rs","scotch.rs"]};
+sourcesIndex["medit2svg"] = {"name":"","files":["medit2svg.rs"]};
+sourcesIndex["mesh_dup"] = {"name":"","files":["mesh-dup.rs"]};
+sourcesIndex["mesh_io"] = {"name":"","dirs":[{"name":"medit","files":["mod.rs","parser.rs","serializer.rs"]}],"files":["lib.rs","partition.rs","weight.rs"]};
+sourcesIndex["mesh_part"] = {"name":"","files":["mesh-part.rs"]};
+sourcesIndex["mesh_refine"] = {"name":"","files":["mesh-refine.rs"]};
+sourcesIndex["mesh_reorder"] = {"name":"","files":["mesh-reorder.rs"]};
+sourcesIndex["meshio"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["num_part"] = {"name":"","dirs":[{"name":"database","files":["mod.rs"]}],"files":["main.rs"]};
+sourcesIndex["part_bench"] = {"name":"","files":["part-bench.rs"]};
+sourcesIndex["part_info"] = {"name":"","files":["part-info.rs"]};
+sourcesIndex["weight_gen"] = {"name":"","files":["weight-gen.rs"]};
+createSourceSidebar();

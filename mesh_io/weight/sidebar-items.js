@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Array",""],["Error",""]],"fn":[["read","Wrapping `r` in a [`std::io::BufReader`] is recommended."],["write_floats","Wrapping `w` in a [`std::io::BufWriter`] is recommended."],["write_integers","Wrapping `r` in a [`std::io::BufWriter`] is recommended."]],"type":[["Result",""]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ElementType",""]],"struct":[["Mesh","MeditMesh data structure."],["ParseError",""]]});
