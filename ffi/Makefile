@@ -14,7 +14,7 @@ coupe:
 
 doc:
 	$(DOXYGEN) Doxyfile
-	@echo "HTML docs generated at \e]8;;file://$(PWD)/build/html/index.html\e\\\\build/html\e]8;;\e\\"
+	@printf "HTML docs generated at \e]8;;file://$(PWD)/build/html/index.html\e\\\\build/html\e]8;;\e\\\\\n"
 
 clean:
 	$(CARGO) clean
