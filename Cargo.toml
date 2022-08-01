@@ -41,7 +41,6 @@ sprs = { version = "0.11", default-features = false, features = ["multi_thread"]
 
 [dev-dependencies]
 criterion = "0.3"
-gnuplot = "0.0.35"
 proptest = { version = "1.0.0", default-features = false, features = ["std", "timeout"] }
 tracing-subscriber = "0.3"
 tracing-chrome = "0.4"
