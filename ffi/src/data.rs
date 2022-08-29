@@ -8,7 +8,7 @@ use std::collections::TryReserveError;
 use std::ffi::c_void;
 use std::slice;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub enum Type {
     Int,
