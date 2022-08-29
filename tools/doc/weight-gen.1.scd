@@ -69,6 +69,11 @@ The following distributions are supported:
 	lowest coordinate on that axis are assigned the value FROM, and the one
 	at the highest coordinate are assigned the value TO.
 
+*spike*,HEIGHT
+	Weights form a spike of the given height at the center of the mesh.  The
+	spike has an exponential shape: weights are of the order of _exp(-d)_ where
+	_d_ is the distance between the element and the center of the mesh.
+
 # WEIGHT FILE
 
 A weight file is a binary file that consists of a header followed by a list of
