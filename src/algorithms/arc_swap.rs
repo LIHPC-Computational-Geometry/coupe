@@ -54,6 +54,7 @@ fn arc_swap<W>(
     partition: &mut [usize],
     weights: &[W],
     adjacency: CsMatView<'_, i64>,
+    part_count: usize,
     max_imbalance: Option<f64>,
 ) -> Metadata
 where
@@ -68,8 +69,11 @@ where
         let span = tracing::info_span!("compute part_weights and max_part_weight");
         let _enter = span.enter();
 
-        let part_weights =
-            crate::imbalance::compute_parts_load(partition, 2, weights.par_iter().cloned());
+        let part_weights = crate::imbalance::compute_parts_load(
+            partition,
+            part_count,
+            weights.par_iter().cloned(),
+        );
 
         let total_weight: W = part_weights.iter().cloned().sum();
 
@@ -77,7 +81,7 @@ where
         let max_part_weight = match max_imbalance {
             Some(max_imbalance) => {
                 let max_imbalance = max_imbalance / thread_count as f64;
-                let ideal_part_weight = total_weight.to_f64().unwrap() / 2.0;
+                let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
                 W::from_f64(ideal_part_weight + max_imbalance * ideal_part_weight).unwrap()
             }
             None => {
@@ -129,7 +133,7 @@ where
     let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
 
     let make_move = |cut: &mut Vec<usize>, part0_weight: &mut W, metadata: &mut Metadata| -> bool {
-        let (moved_vertex, move_gain, initial_part, _lock) = loop {
+        let (moved_vertex, move_gain, target_part, _lock) = loop {
             let vertex = match cut.pop() {
                 Some(v) => {
                     metadata.move_attempts += 1;
@@ -141,19 +145,28 @@ where
             };
 
             let initial_part = partition[vertex].load(Ordering::Relaxed);
-            let target_part = 1 - initial_part;
             let neighbors = adjacency.outer_view(vertex).unwrap();
 
-            let gain: i64 = neighbors
-                .iter()
-                .map(|(neighbor, edge_weight)| {
-                    if partition[neighbor].load(Ordering::Relaxed) == initial_part {
-                        -*edge_weight
-                    } else {
-                        *edge_weight
-                    }
+            let (target_part, gain) = (0..part_count)
+                .filter(|target_part| *target_part != initial_part)
+                .map(|target_part| {
+                    let gain: i64 = neighbors
+                        .iter()
+                        .map(|(neighbor, edge_weight)| {
+                            let part = partition[neighbor].load(Ordering::Relaxed);
+                            if part == initial_part {
+                                -*edge_weight
+                            } else if part == target_part {
+                                *edge_weight
+                            } else {
+                                0
+                            }
+                        })
+                        .sum();
+                    (target_part, gain)
                 })
-                .sum();
+                .max_by(|(_, g1), (_, g2)| i64::cmp(g1, g2))
+                .unwrap();
             if gain <= 0 {
                 // Don't push it back now, it will when its gain is updated
                 // positively (due to a neighbor moving).
@@ -198,29 +211,37 @@ where
                 *part0_weight + weight
             };
 
-            break (vertex, gain, initial_part, lock_guard);
+            break (vertex, gain, target_part, lock_guard);
         };
 
         metadata.move_count += 1;
         metadata.edge_cut_gain += move_gain;
 
-        let target_part = 1 - initial_part;
         partition[moved_vertex].store(target_part, Ordering::Relaxed);
 
         for (neighbor, _edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
             let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
-            let neighbor_gain: i64 = adjacency
-                .outer_view(neighbor)
-                .unwrap()
-                .iter()
-                .map(|(neighbor2, edge_weight)| {
-                    if partition[neighbor2].load(Ordering::Relaxed) == neighbor_part {
-                        -*edge_weight
-                    } else {
-                        *edge_weight
-                    }
+            let neighbor_gain: i64 = (0..part_count)
+                .filter(|target_part| *target_part != neighbor_part)
+                .map(|target_part| {
+                    adjacency
+                        .outer_view(neighbor)
+                        .unwrap()
+                        .iter()
+                        .map(|(neighbor2, edge_weight)| {
+                            let part = partition[neighbor2].load(Ordering::Relaxed);
+                            if part == neighbor_part {
+                                -*edge_weight
+                            } else if part == target_part {
+                                *edge_weight
+                            } else {
+                                0
+                            }
+                        })
+                        .sum()
                 })
-                .sum();
+                .max()
+                .unwrap();
             if 0 < neighbor_gain {
                 cut.push(neighbor);
             }
@@ -329,9 +350,13 @@ where
             });
         }
         let part_count = 1 + *part_ids.par_iter().max().unwrap_or(&0);
-        if 2 < part_count {
-            return Err(Error::BiPartitioningOnly);
-        }
-        Ok(arc_swap(part_ids, weights, adjacency, self.max_imbalance))
+        let part_count = usize::max(2, part_count);
+        Ok(arc_swap(
+            part_ids,
+            weights,
+            adjacency,
+            part_count,
+            self.max_imbalance,
+        ))
     }
 }
