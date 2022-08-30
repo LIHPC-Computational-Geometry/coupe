@@ -36,11 +36,13 @@
 )]
 
 mod algorithms;
+mod defer;
 mod geometry;
 pub mod imbalance;
 mod nextafter;
 mod real;
 pub mod topology;
+mod work_share;
 
 pub use crate::algorithms::*;
 pub use crate::geometry::BoundingBox;

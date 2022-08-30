@@ -1,5 +1,6 @@
 use std::fmt;
 
+mod arc_swap;
 mod ckk;
 mod fiduccia_mattheyses;
 mod graph_growth;
@@ -13,6 +14,9 @@ mod recursive_bisection;
 mod vn;
 mod z_curve;
 
+pub use arc_swap::ArcSwap;
+pub use arc_swap::AsWeight;
+pub use arc_swap::Metadata as AsMetadata;
 pub use ckk::CkkWeight;
 pub use ckk::CompleteKarmarkarKarp;
 pub use fiduccia_mattheyses::FiducciaMattheyses;
