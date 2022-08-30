@@ -1,10 +1,13 @@
 ALGORITHMS="
 -a kk,2
+-a kk,2 -a arcswap,0.05
 -a kk,2 -a fm,0.05
 -a kk,2 -a fm,0.05,16
 -a rcb,1
+-a rcb,1 -a arcswap,0.05
 -a rcb,1 -a fm,0.05
 -a hilbert,2
+-a hilbert,2 -a arcswap,0.05
 -a hilbert,2 -a fm,0.05
 
 -a kk,3
