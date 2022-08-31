@@ -1,6 +1,8 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
-use rayon::iter::IndexedParallelIterator as _;
+use num::FromPrimitive;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMat;
@@ -8,6 +10,7 @@ use sprs::CsMatView;
 use sprs::TriMat;
 use std::collections::HashSet;
 use std::iter::Sum;
+use std::ops::Mul;
 
 /// The edge cut of a partition.
 ///
@@ -53,26 +56,35 @@ where
         .sum()
 }
 
-pub fn lambda_cut<T>(adjacency: CsMatView<'_, T>, partition: &[usize]) -> usize {
+pub fn lambda_cut<T, W>(adjacency: CsMatView<'_, T>, partition: &[usize], weights: W) -> W::Item
+where
+    W: IntoParallelIterator,
+    W::Iter: IndexedParallelIterator,
+    W::Item: Sum + Mul<Output = W::Item> + FromPrimitive,
+{
     let indptr = adjacency.indptr().into_raw_storage();
     let indices = adjacency.indices();
     indptr
         .par_iter()
         .zip(&indptr[1..])
+        .zip(weights)
         .enumerate()
-        .map_with(HashSet::new(), |neighbor_parts, (node, (start, end))| {
-            let neighbors = &indices[*start..*end];
-            let node_part = partition[node];
-            neighbor_parts.clear();
-            for neighbor in neighbors {
-                let neighbor_part = partition[*neighbor];
-                if neighbor_part == node_part {
-                    continue;
+        .map_with(
+            HashSet::new(),
+            |neighbor_parts, (node, ((start, end), node_weight))| {
+                let neighbors = &indices[*start..*end];
+                let node_part = partition[node];
+                neighbor_parts.clear();
+                for neighbor in neighbors {
+                    let neighbor_part = partition[*neighbor];
+                    if neighbor_part == node_part {
+                        continue;
+                    }
+                    neighbor_parts.insert(neighbor_part);
                 }
-                neighbor_parts.insert(neighbor_part);
-            }
-            neighbor_parts.len()
-        })
+                W::Item::from_usize(neighbor_parts.len()).unwrap() * node_weight
+            },
+        )
         .sum()
 }
 
