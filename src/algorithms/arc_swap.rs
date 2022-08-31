@@ -86,9 +86,9 @@ where
             }
             None => {
                 let max_part_weight = *part_weights.iter().max_by(partial_cmp).unwrap();
-                max_part_weight
-                    + (max_part_weight + max_part_weight - total_weight)
-                        / W::from_usize(2 * thread_count).unwrap()
+                let ideal_part_weight = total_weight / W::from_usize(part_count).unwrap();
+                ideal_part_weight
+                    + (max_part_weight - ideal_part_weight) / W::from_usize(thread_count).unwrap()
             }
         };
         (total_weight, part_weights[0], max_part_weight)
