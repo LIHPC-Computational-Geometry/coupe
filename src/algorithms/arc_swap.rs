@@ -129,7 +129,7 @@ where
 
     let make_move =
         |cut: &mut Vec<usize>, part_weights: &mut [W], metadata: &mut Metadata| -> bool {
-            let (moved_vertex, move_gain, target_part, _lock) = loop {
+            let moved_vertex = loop {
                 let vertex = match cut.pop() {
                     Some(v) => {
                         metadata.move_attempts += 1;
@@ -184,7 +184,7 @@ where
                     metadata.locked_count += 1;
                     continue;
                 }
-                let lock_guard = defer({
+                let _lock_guard = defer({
                     let locks = &locks;
                     move || locks[vertex].store(false, Ordering::Release)
                 });
@@ -196,16 +196,14 @@ where
                     continue;
                 }
 
+                metadata.move_count += 1;
+                metadata.edge_cut_gain += gain;
                 part_weights[initial_part] -= weight;
                 part_weights[target_part] += weight;
+                partition[vertex].store(target_part, Ordering::Relaxed);
 
-                break (vertex, gain, target_part, lock_guard);
+                break vertex;
             };
-
-            metadata.move_count += 1;
-            metadata.edge_cut_gain += move_gain;
-
-            partition[moved_vertex].store(target_part, Ordering::Relaxed);
 
             for (neighbor, _edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
                 let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
