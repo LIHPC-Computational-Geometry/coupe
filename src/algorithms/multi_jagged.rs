@@ -349,7 +349,7 @@ pub(crate) fn split_at_mut_many<'a, T>(
 /// let weights = [4.2; 9];
 /// let mut partition = [0; 9];
 ///
-/// // generate a partition of 4 parts
+/// // generate a partition of 9 parts
 /// coupe::MultiJagged { part_count: 9, max_iter: 4 }
 ///     .partition(&mut partition, (&points, &weights))?;
 ///
