@@ -168,7 +168,7 @@ do
 				Algorithm: <code>$algorithm</code>
 				<pre>
 				$(cat "${svg_file%.*}.log")
-				$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part")
+				$(part-info --mesh "$mesh_file" --weights "$weight_file" --partition "${svg_file%.*}.part" --edge-weights linear)
 				mesh file: ${svg_file%.*}.mesh
 				</pre>
 				<img src="$(basename "$svg_file")" alt="$mesh_file; $weight_distribution; $algorithm">
