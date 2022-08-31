@@ -1,26 +1,15 @@
 use super::Error;
 use crate::defer::defer;
+use crate::partial_cmp;
 use crate::work_share::work_share;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
-use std::cmp;
 use std::mem;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-
-fn partial_cmp<W>(a: &W, b: &W) -> cmp::Ordering
-where
-    W: PartialOrd,
-{
-    if a < b {
-        cmp::Ordering::Less
-    } else {
-        cmp::Ordering::Greater
-    }
-}
 
 /// Diagnostic data for a [ArcSwap] run.
 #[non_exhaustive]
