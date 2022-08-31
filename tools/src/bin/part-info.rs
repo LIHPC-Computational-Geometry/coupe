@@ -131,10 +131,18 @@ fn main() -> Result<()> {
         "edge cut: {}",
         coupe::topology::edge_cut(adjacency.view(), &parts),
     );
-    println!(
-        "lambda cut: {}",
-        coupe::topology::lambda_cut(adjacency.view(), &parts),
-    );
+    match &weights {
+        mesh_io::weight::Array::Integers(v) => {
+            let lambda_cut =
+                coupe::topology::lambda_cut(adjacency.view(), &parts, v.par_iter().map(|c| c[0]));
+            println!("lambda cut: {}", lambda_cut);
+        }
+        mesh_io::weight::Array::Floats(v) => {
+            let lambda_cut =
+                coupe::topology::lambda_cut(adjacency.view(), &parts, v.par_iter().map(|c| c[0]));
+            println!("lambda cut: {}", lambda_cut);
+        }
+    }
 
     Ok(())
 }
