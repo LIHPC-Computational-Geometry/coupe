@@ -24,6 +24,10 @@ for details.
 *-h, --help*
 	Show a help message and exit.
 
+*-E, --edge-weights* <variant>
+	Change how edge weights are set.  Possible values are listed in
+	*mesh-part*(1).
+
 *-m, --mesh* <path>
 	Required.  A path to the mesh that has been partitionned.
 
