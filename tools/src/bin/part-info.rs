@@ -3,6 +3,8 @@ use anyhow::Result;
 use coupe::num_traits::FromPrimitive;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
+use coupe_tools::set_edge_weights;
+use coupe_tools::EdgeWeightDistribution;
 use mesh_io::medit::Mesh;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
@@ -51,6 +53,12 @@ where
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optopt(
+        "E",
+        "edge-weights",
+        "Change how edge weights are set",
+        "VARIANT",
+    );
     options.optopt("m", "mesh", "mesh file", "FILE");
     options.optopt("n", "parts", "number of expected parts", "COUNT");
     options.optopt("p", "partition", "partition file", "FILE");
@@ -65,6 +73,11 @@ fn main() -> Result<()> {
     if !matches.free.is_empty() {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
+
+    let edge_weights = matches
+        .opt_get("E")
+        .context("invalid value for -E, --edge-weights")?
+        .unwrap_or(coupe_tools::EdgeWeightDistribution::Uniform);
 
     let mesh_file = matches
         .opt_str("m")
@@ -84,22 +97,20 @@ fn main() -> Result<()> {
     let weight_file = fs::File::open(weight_file).context("failed to open weight file")?;
     let weight_file = io::BufReader::new(weight_file);
 
+    let weights = mesh_io::weight::read(weight_file).context("failed to read weight file")?;
+
     let (adjacency, parts) = rayon::join(
         || -> Result<_> {
             let mesh = Mesh::from_reader(mesh_file).context("failed to read mesh file")?;
-            let adjacency = coupe_tools::dual(&mesh);
+            let mut adjacency = coupe_tools::dual(&mesh);
+            if edge_weights != EdgeWeightDistribution::Uniform {
+                set_edge_weights(&mut adjacency, &weights, edge_weights);
+            }
             Ok(adjacency)
         },
         || -> Result<_> {
-            let (parts, weights) = rayon::join(
-                || {
-                    mesh_io::partition::read(partition_file)
-                        .context("failed to read partition file")
-                },
-                || mesh_io::weight::read(weight_file).context("failed to read weight file"),
-            );
-            let parts = parts?;
-            let weights = weights?;
+            let parts = mesh_io::partition::read(partition_file)
+                .context("failed to read partition file")?;
 
             let part_count = matches
                 .opt_get("n")?
