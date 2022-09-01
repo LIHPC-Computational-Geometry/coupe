@@ -232,7 +232,7 @@ where
 ///
 /// coupe::Random { rng: rand::thread_rng(), part_count }
 ///     .partition(&mut partition, ())?;
-/// coupe::VnFirst { part_count }
+/// coupe::VnFirst
 ///     .partition(&mut partition, &weights)?;
 /// # Ok(())
 /// # }
@@ -244,9 +244,7 @@ where
 /// Graph Partitioning. Other [cs.OH]. Université de Bordeaux, 2017. English.
 /// NNT : 2017BORD0961. tel-01713977
 #[derive(Clone, Copy, Debug)]
-pub struct VnFirst {
-    pub part_count: usize,
-}
+pub struct VnFirst;
 
 impl<'a, W> crate::Partition<&'a [W]> for VnFirst
 where
@@ -260,7 +258,11 @@ where
         part_ids: &mut [usize],
         weights: &'a [W],
     ) -> Result<Self::Metadata, Self::Error> {
-        vn_first_mono(part_ids, weights, self.part_count)
+        let part_count = 1 + *part_ids.par_iter().max().unwrap_or(&0);
+        if part_count < 2 {
+            return Ok(0);
+        }
+        vn_first_mono(part_ids, weights, part_count)
     }
 }
 

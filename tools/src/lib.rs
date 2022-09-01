@@ -359,12 +359,8 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
         "ckk" => Box::new(coupe::CompleteKarmarkarKarp {
             tolerance: require(parse(args.next()))?,
         }),
-        "vn-best" => Box::new(coupe::VnBest {
-            part_count: require(parse(args.next()))?,
-        }),
-        "vn-first" => Box::new(coupe::VnFirst {
-            part_count: require(parse(args.next()))?,
-        }),
+        "vn-best" => Box::new(coupe::VnBest),
+        "vn-first" => Box::new(coupe::VnFirst),
         "rcb" => Box::new(coupe::Rcb {
             iter_count: require(parse(args.next()))?,
             tolerance: optional(parse(args.next()), 0.05)?,
