@@ -30,7 +30,7 @@ where
         .map(|criterion| {
             let total_weight: T = weights.par_iter().map(|weight| weight[criterion]).sum();
             let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
-            (0..part_count)
+            let imbalance = (0..part_count)
                 .into_par_iter()
                 .map(|part| {
                     let part_weight: T = part_ids
@@ -45,7 +45,11 @@ where
                 .max_by(|part_weight0, part_weight1| {
                     f64::partial_cmp(part_weight0, part_weight1).unwrap()
                 })
-                .unwrap()
+                .unwrap();
+            // Floating-point sums are not accurate enough and in some cases
+            // the sum of the weights of the largest part ends up smaller
+            // than the total weights divided by the number of parts.
+            f64::max(0.0, imbalance)
         })
         .collect()
 }
