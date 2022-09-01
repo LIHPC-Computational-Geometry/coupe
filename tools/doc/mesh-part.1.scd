@@ -108,10 +108,10 @@ These algorithms create partitions by only taking weights into account.
 Number partition improving algorithms:++
 These algorithms improve partitions by only taking weights into account.
 
-	*vn-best*,PART_COUNT
+	*vn-best*
 		Steepest descent Vector of Numbers algorithm
 
-	*vn-first*,PART_COUNT
+	*vn-first*
 		Descent Vector of Numbers algorithm
 
 Geometric partitioning algorithms:++
