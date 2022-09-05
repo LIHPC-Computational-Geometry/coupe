@@ -239,6 +239,7 @@ where
     let mut metadata =
         partition
             .par_iter()
+            .with_min_len(items_per_thread)
             .enumerate()
             .fold(
                 || (Metadata::default(), Vec::new(), part_weights.clone()),
