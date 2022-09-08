@@ -8,7 +8,6 @@ ARGS="-m ../meshes/triangles_small.meshb -w /dev/shm/triangles.weights --edge-we
 ALGORITHMS="
 -a random,2
 -a random,2 -a arcswap,0.05
--a random,2 -a arcswap,0.05 -a arcswap,0.05
 -a rcb,1
 -a rcb,1 -a arcswap,0.05
 -a rcb,1 -a vn-best
