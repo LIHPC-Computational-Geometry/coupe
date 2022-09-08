@@ -107,11 +107,15 @@ fn apply_distribution<const D: usize>(
                 || axis_iter.clone().min_by(partial_cmp).unwrap(),
                 || axis_iter.clone().max_by(partial_cmp).unwrap(),
             );
-            let alpha = (to - from) / (max - min);
-            let beta = -min * alpha;
-            Box::new(move |coordinates| {
-                from + f64::mul_add(coordinates[axis as usize], alpha, beta)
-            })
+            let mut alpha = if max == min {
+                0.0
+            } else {
+                (to - from) / (max - min)
+            };
+            while to - from < alpha * (max - min) {
+                alpha = coupe::nextafter(alpha, f64::NEG_INFINITY);
+            }
+            Box::new(move |coordinates| f64::mul_add(coordinates[axis as usize] - min, alpha, from))
         }
         Distribution::Spike(height) => {
             let bb = match coupe::BoundingBox::from_points(points.par_iter().cloned()) {
@@ -205,4 +209,39 @@ fn main() -> Result<()> {
         3 => weight_gen::<3>(mesh, distributions, matches.opt_present("i")),
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use coupe::Point2D;
+    use proptest::collection::vec;
+    use proptest::strategy::Strategy;
+
+    /// Strategy for finite, non-NaN floats that are within reasonable bounds.
+    fn float() -> impl Strategy<Value = f64> {
+        -1e150..1e150
+    }
+
+    proptest::proptest!(
+        #[test]
+        fn linear_within_bounds(
+            points in vec(
+                float().prop_map(|a| Point2D::new(a, a)),
+                2..200
+            ),
+        ) {
+            const LOW: f64 = 0.0;
+            const HIGH: f64 = 100.0;
+            let dist = Distribution::Linear(Axis::X, LOW, HIGH);
+            let dist = apply_distribution(dist, &points);
+            for p in points {
+                let weight = dist(p);
+                proptest::prop_assert!(
+                    (LOW..=HIGH).contains(&weight),
+                    "point {p:?} has weight {weight} which is not in [{LOW}, {HIGH}]",
+                );
+            }
+        }
+    );
 }
