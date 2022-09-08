@@ -24,6 +24,8 @@ includes the following tools:
     - mesh-reorder changes the order of mesh elements.
 - in the `report` directory, a collection of shell scripts that aggregate
   results into visual reports:
+    - `imbedgecut` generates an SVG graph comparing the imbalance/edge-cut of
+      various algorithms,
     - `quality` generates an HTML report of partitioning results for a given
       mesh directory,
     - `efficiency` generates a CSV file and a SVG graph showing the efficiency
