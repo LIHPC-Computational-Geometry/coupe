@@ -67,8 +67,9 @@ fn parse_distribution(definition: &str) -> Result<Distribution> {
     }
 
     fn axis_arg(arg: Option<&str>) -> Option<Result<Axis>> {
+        let arg = arg?;
         Some(
-            arg?.parse::<Axis>()
+            arg.parse::<Axis>()
                 .with_context(|| format!("arg {:?} is not a valid axis", arg)),
         )
     }
