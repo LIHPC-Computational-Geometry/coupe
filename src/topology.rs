@@ -54,6 +54,13 @@ where
         .sum()
 }
 
+/// Compute the λ-1 cut (lambda-1 cut).
+///
+/// The λ-1 cut is the sum, for each vertex, of the number of different parts in
+/// its neighborhood times its communication weight.
+///
+/// This metric better represents the actual communication cost of a partition,
+/// albeit more expensive to compute.
 pub fn lambda_cut<T, W>(adjacency: CsMatView<'_, T>, partition: &[usize], weights: W) -> W::Item
 where
     W: IntoParallelIterator,
