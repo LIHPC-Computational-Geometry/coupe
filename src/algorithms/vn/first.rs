@@ -16,7 +16,7 @@ where
             actual: weights.len(),
         });
     }
-    assert_ne!(num_parts, 0);
+    debug_assert_ne!(num_parts, 0);
     if weights.is_empty() || num_parts < 2 {
         return Ok(0);
     }
