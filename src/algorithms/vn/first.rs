@@ -6,11 +6,7 @@ use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
 
-fn vn_first_mono<T>(
-    partition: &mut [usize],
-    weights: &[T],
-    num_parts: usize,
-) -> Result<usize, Error>
+fn vn_first<T>(partition: &mut [usize], weights: &[T], num_parts: usize) -> Result<usize, Error>
 where
     T: VnFirstWeight,
 {
@@ -145,7 +141,7 @@ where
         if part_count < 2 {
             return Ok(0);
         }
-        vn_first_mono(part_ids, weights, part_count)
+        vn_first(part_ids, weights, part_count)
     }
 }
 
@@ -161,9 +157,9 @@ mod tests {
         const W: [i32; 6] = [1, 2, 3, 4, 5, 6];
         let mut part = [0; W.len()];
 
-        vn_first_mono(&mut part, &W, 1).unwrap();
+        vn_first(&mut part, &W, 1).unwrap();
         let imb_ini = imbalance::imbalance(2, &part, W);
-        vn_first_mono(&mut part, &W, 2).unwrap();
+        vn_first(&mut part, &W, 2).unwrap();
         let imb_end = imbalance::imbalance(2, &part, W);
         assert!(imb_end <= imb_ini);
         println!("imbalance : {} < {}", imb_end, imb_ini);
@@ -180,7 +176,7 @@ mod tests {
                 })
         ) {
             let imb_ini = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
-            vn_first_mono(&mut partition, &weights, 2).unwrap();
+            vn_first(&mut partition, &weights, 2).unwrap();
             let imb_end = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
             // Not sure if it is true for max_imbalance (i.e. weighter - lighter)
             proptest::prop_assert!(imb_end <= imb_ini);
