@@ -29,7 +29,7 @@ where
     }
 
     let (min_load, mut max_load) = part_loads.iter().cloned().minmax().into_option().unwrap();
-    let mut imbalance = max_load.clone() - min_load;
+    let mut imbalance = max_load - min_load;
 
     let mut i = weights.len();
     let mut i_last = 0;
@@ -53,15 +53,15 @@ where
                 continue;
             }
 
-            part_loads[p] = part_loads[p].clone() - weights[i].clone();
-            part_loads[q] += weights[i].clone();
+            part_loads[p] = part_loads[p] - weights[i];
+            part_loads[q] += weights[i];
             let (new_min_load, new_max_load) =
                 part_loads.iter().cloned().minmax().into_option().unwrap();
-            let new_imbalance = new_max_load.clone() - new_min_load.clone();
+            let new_imbalance = new_max_load - new_min_load;
             if imbalance < new_imbalance {
                 // The move does not decrease the partition imbalance.
-                part_loads[p] += weights[i].clone();
-                part_loads[q] = part_loads[p].clone() - weights[i].clone();
+                part_loads[p] += weights[i];
+                part_loads[q] = part_loads[p] - weights[i];
                 continue;
             }
             imbalance = new_imbalance;
@@ -79,7 +79,7 @@ where
 /// Trait alias for values accepted as weights by [VnFirst].
 pub trait VnFirstWeight
 where
-    Self: Clone + Send + Sync,
+    Self: Copy + Send + Sync,
     Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
     Self: Sub<Output = Self> + AddAssign,
 {
@@ -87,7 +87,7 @@ where
 
 impl<T> VnFirstWeight for T
 where
-    Self: Clone + Send + Sync,
+    Self: Copy + Send + Sync,
     Self: Sum + PartialOrd + num::FromPrimitive + num::Zero + num::One,
     Self: Sub<Output = Self> + AddAssign,
 {
