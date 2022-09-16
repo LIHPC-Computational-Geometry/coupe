@@ -1,0 +1,10 @@
+# directories
+/benches
+/example
+/target
+/build
+
+# files
+LICENCE*
+*.md
+
