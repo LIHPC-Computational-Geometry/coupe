@@ -136,9 +136,11 @@ docker container run -dit \
     coupe
 
 # Generate a linear weight distribution from an embedded mesh file.
-docker exec coupe_c sh -c 'cat meshes/hole.mesh | weight-gen \
-    --distribution linear,x,0,100 \
-    >shared/hole.linear.weights'
+# Note: option `--integers` can be used to generate integers instead of
+# floating-point numbers.
+docker exec coupe_c sh -c 'weight-gen --distribution linear,x,0,100 \
+    <shared/sample.mesh \
+    >shared/sample.linear.weights'
 
 # Partition the previous mesh and the generated weight distribution into 2 parts.
 # using the Recursive Coordinate Bisection (RCB) algorithm coupled with the
@@ -146,18 +148,18 @@ docker exec coupe_c sh -c 'cat meshes/hole.mesh | weight-gen \
 docker exec coupe_c sh -c 'mesh-part \
     --algorithm rcb,1 \
     --algorithm fm \
-    --mesh meshes/hole.mesh \
-    --weights shared/hole.linear.weights \
-    >shared/hole.linear.rcb-fm.part'
+    --mesh shared/sample.mesh \
+    --weights shared/sample.linear.weights \
+    >shared/sample.linear.rcb-fm.part'
 
 # Merge partition file into MEDIT mesh file and converts it to .svg file.
 docker exec coupe_c sh -c 'apply-part \
-    --mesh meshes/hole.mesh \
-    --partition shared/hole.linear.rcb-fm.part \
-    | medit2svg >shared/hole.rcb-fm.svg'
+    --mesh shared/sample.mesh \
+    --partition shared/sample.linear.rcb-fm.part \
+    | medit2svg >shared/sample.rcb-fm.svg'
 
 # Open the svg file in firefox.
-firefox hole.rcb-fm.svg &
+firefox sample.rcb-fm.svg &
 ```
 
 [intel]: https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/analyze-performance/code-profiling-scenarios/task-analysis.html#task-analysis_TOP_TASKS
