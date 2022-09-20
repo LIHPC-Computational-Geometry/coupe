@@ -553,11 +553,11 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
 ///
 /// // create an unbalanced partition:
 /// //  - p1: total weight = 1
-/// //  - p2: total weight = 7
-/// //  - p3: total weight = 1
-/// let mut partition = [1, 2, 2, 2, 2, 2, 2, 2, 3];
+/// //  - p2: total weight = 1
+/// //  - p3: total weight = 7
+/// let mut partition = [0, 2, 2, 2, 2, 2, 2, 2, 1];
 ///
-/// coupe::KMeans { part_count: 3, delta_threshold: 0.0, ..Default::default() }
+/// coupe::KMeans { delta_threshold: 0.0, ..Default::default() }
 ///     .partition(&mut partition, (&points, &weights))?;
 ///
 /// assert_eq!(partition[0], partition[1]);
@@ -573,7 +573,6 @@ fn max_distance<const D: usize>(points: &[PointND<D>]) -> f64 {
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct KMeans {
-    pub part_count: usize,
     pub imbalance_tol: f64,
     pub delta_threshold: f64,
     pub max_iter: usize,
@@ -586,7 +585,6 @@ pub struct KMeans {
 impl Default for KMeans {
     fn default() -> Self {
         Self {
-            part_count: 7,
             imbalance_tol: 5.,
             delta_threshold: 0.01,
             max_iter: 500,
@@ -612,8 +610,12 @@ where
         part_ids: &mut [usize],
         (points, weights): (&'a [PointND<D>], &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
+        let num_partitions = 1 + *part_ids.par_iter().max().unwrap_or(&0);
+        if num_partitions < 2 {
+            return Ok(());
+        }
         let settings = BalancedKmeansSettings {
-            num_partitions: self.part_count,
+            num_partitions,
             imbalance_tol: self.imbalance_tol,
             delta_threshold: self.delta_threshold,
             max_iter: self.max_iter,
