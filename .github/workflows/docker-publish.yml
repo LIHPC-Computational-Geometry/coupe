@@ -8,10 +8,6 @@ name: Docker
 on:
   workflow_dispatch:
     inputs:
-      recipes_branch:
-        description: 'Coupe recipes branch'
-        required: true
-        default: 'main'
       tag_name:
         description: 'Tag name for image'
         required: true
@@ -72,7 +68,6 @@ jobs:
         with:
           build-args: |
             BASEIMAGE=${{ matrix.config.base_image }}
-            RECIPES_BANCH=${{ github.event.inputs.recipes_branch }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -68,7 +68,6 @@ jobs:
         with:
           build-args: |
             BASEIMAGE=${{ matrix.config.base_image }}
-            RECIPES_BANCH='main'
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
