@@ -45,7 +45,3 @@ proptest = { version = "1.0.0", default-features = false, features = ["std", "ti
 tracing-subscriber = "0.3"
 tracing-chrome = "0.4"
 tracing-tree = "0.2"
-
-[[bench]]
-name = "benchmark"
-harness = false
