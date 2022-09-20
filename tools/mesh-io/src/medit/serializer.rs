@@ -46,6 +46,10 @@ impl fmt::Display for Mesh {
             writeln!(f, " {}", node_ref)?;
         }
         for (element_type, nodes, refs) in &self.topology {
+            if *element_type == ElementType::Vertex {
+                // Breaks MEDIT and meshio-py.
+                continue;
+            }
             let element_count = refs.len();
             write!(f, "\n{}\n\t{}\n", element_type, element_count)?;
             for (element, element_ref) in nodes.chunks(element_type.node_count()).zip(refs) {
