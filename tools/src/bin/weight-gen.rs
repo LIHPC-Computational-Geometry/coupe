@@ -40,13 +40,19 @@ impl std::str::FromStr for Axis {
 }
 
 #[derive(Copy, Clone)]
-enum Distribution {
-    Constant(f64),
-    Linear(Axis, f64, f64),
-    Spike(f64),
+struct Spike<const D: usize> {
+    height: f64,
+    position: PointND<D>,
 }
 
-fn parse_distribution(definition: &str) -> Result<Distribution> {
+#[derive(Clone)]
+enum Distribution<const D: usize> {
+    Constant(f64),
+    Linear(Axis, f64, f64),
+    Spike(Vec<Spike<D>>),
+}
+
+fn parse_distribution<const D: usize>(definition: &str) -> Result<Distribution<D>> {
     let mut args = definition.split(',');
     let name = args.next().context("empty definition")?;
 
@@ -86,18 +92,31 @@ fn parse_distribution(definition: &str) -> Result<Distribution> {
             Distribution::Linear(axis, from, to)
         }
         "spike" => {
-            let height = required(f64_arg(args.next()))?;
-            if height <= 0.0 {
-                anyhow::bail!("expected 'spike' argument to be strictly positive");
+            let mut spikes = Vec::new();
+            while let Some(height) = f64_arg(args.next()) {
+                let height = height?;
+                if height <= 0.0 {
+                    anyhow::bail!(
+                        "expected 'spike' height to be strictly positive, found {height}"
+                    );
+                }
+                let mut position = [0.0; D];
+                for position in &mut position {
+                    *position = required(f64_arg(args.next()))?;
+                }
+                spikes.push(Spike {
+                    height,
+                    position: PointND::from(position),
+                });
             }
-            Distribution::Spike(height)
+            Distribution::Spike(spikes)
         }
         _ => anyhow::bail!("unknown distribution {:?}", name),
     })
 }
 
 fn apply_distribution<const D: usize>(
-    d: Distribution,
+    d: Distribution<D>,
     points: &[PointND<D>],
 ) -> Box<dyn Fn(PointND<D>) -> f64> {
     match d {
@@ -118,16 +137,18 @@ fn apply_distribution<const D: usize>(
             }
             Box::new(move |coordinates| f64::mul_add(coordinates[axis as usize] - min, alpha, from))
         }
-        Distribution::Spike(height) => {
-            let bb = match coupe::BoundingBox::from_points(points.par_iter().cloned()) {
-                Some(v) => v,
-                None => return Box::new(|_| 1.0),
-            };
-            let center = bb.center();
-            let height = f64::ln(height);
+        Distribution::Spike(mut spikes) => {
+            for spike in &mut spikes {
+                spike.height = f64::ln(spike.height);
+            }
             Box::new(move |point| {
-                let distance = (center - point).norm();
-                f64::exp(height - distance)
+                spikes
+                    .iter()
+                    .map(|spike| {
+                        let distance = (spike.position - point).norm();
+                        f64::exp(spike.height - distance)
+                    })
+                    .sum()
             })
         }
     }
@@ -135,9 +156,14 @@ fn apply_distribution<const D: usize>(
 
 fn weight_gen<const D: usize>(
     mesh: Mesh,
-    distributions: Vec<Distribution>,
+    distributions: Vec<String>,
     gen_integers: bool,
 ) -> Result<()> {
+    let distributions: Vec<Distribution<D>> = distributions
+        .into_iter()
+        .map(|spec| parse_distribution(&spec))
+        .collect::<Result<_>>()?;
+
     let points = coupe_tools::barycentres::<D>(&mesh);
 
     let distributions: Vec<_> = distributions
@@ -189,11 +215,7 @@ fn main() -> Result<()> {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
-    let distributions: Vec<_> = matches
-        .opt_strs("d")
-        .into_iter()
-        .map(|spec| parse_distribution(&spec))
-        .collect::<Result<_>>()?;
+    let distributions = matches.opt_strs("d");
     if distributions.is_empty() {
         anyhow::bail!("missing required option 'distribution'");
     }

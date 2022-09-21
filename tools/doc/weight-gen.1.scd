@@ -53,9 +53,9 @@ horizontal (X, abscissa) axis, from 0 to 100:
 
 	weight-gen --distribution linear,x,0,100
 
-And the following example shows how to set the weights to the same value:
+And the following example shows how to form a spike of height 4.2 at the origin:
 
-	weight-gen --distribution constant,4.2
+	weight-gen --distribution spike,4.2,0,0
 
 # SUPPORTED DISTRIBUTIONS
 
@@ -69,10 +69,11 @@ The following distributions are supported:
 	lowest coordinate on that axis are assigned the value FROM, and the one
 	at the highest coordinate are assigned the value TO.
 
-*spike*,HEIGHT
-	Weights form a spike of the given height at the center of the mesh.  The
+*spike*,HEIGHT,POSITION,...
+	Weights form a spike of the given height at the given position.  The
 	spike has an exponential shape: weights are of the order of _exp(-d)_ where
-	_d_ is the distance between the element and the center of the mesh.
+	_d_ is the distance between the element and the center of the mesh. Multiple
+	spikes can be specified.
 
 # WEIGHT FILE
 
