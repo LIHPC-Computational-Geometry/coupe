@@ -3,6 +3,8 @@ use super::Problem;
 use super::ToRunner;
 use anyhow::Context as _;
 use mesh_io::weight;
+use scotch::graph::Data;
+use scotch::Graph;
 use scotch::Num;
 
 pub struct Standard {
@@ -22,24 +24,24 @@ impl<const D: usize> ToRunner<D> for Standard {
         }
         let weights: Vec<_> = weights.iter().map(|i| i[0] as Num).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency().into_raw_storage();
+        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
         let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
+        let adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Num).collect();
 
         let mut strat = scotch::Strategy::new();
         let arch = scotch::Architecture::complete(self.part_count as Num);
 
         let mut scotch_partition = vec![0; weights.len()];
         Box::new(move |partition| {
-            let graph_data = scotch::graph::Data::new(0, &xadj, &[], &weights, &[], &adjncy, &[]);
-            let mut graph =
-                scotch::Graph::build(&graph_data).context("failed to build SCOTCH graph")?;
+            let graph_data = Data::new(0, &xadj, &adjwgt, &weights, &[], &adjncy, &[]);
+            let mut graph = Graph::build(&graph_data).context("failed to build SCOTCH graph")?;
             graph.check().context("failed to build SCOTCH graph")?;
             graph
                 .mapping(&arch, &mut scotch_partition)
                 .compute(&mut strat)
                 .context("SCOTCH partitioning failed")?;
-            for (dst, src) in partition.iter_mut().zip(&mut scotch_partition) {
+            for (dst, src) in partition.iter_mut().zip(&scotch_partition) {
                 *dst = *src as usize;
             }
             Ok(None)
