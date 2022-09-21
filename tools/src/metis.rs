@@ -20,16 +20,18 @@ impl<const D: usize> ToRunner<D> for Recursive {
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
         let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency().into_raw_storage();
+        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
+        let mut adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Idx).collect();
 
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
             metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
                 .set_vwgt(&mut weights)
+                .set_adjwgt(&mut adjwgt)
                 .part_recursive(&mut metis_partition)?;
-            for (dst, src) in partition.iter_mut().zip(&mut metis_partition) {
+            for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }
             Ok(None)
@@ -52,16 +54,18 @@ impl<const D: usize> ToRunner<D> for KWay {
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
         let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
 
-        let (xadj, adjncy, _) = problem.adjacency().into_raw_storage();
+        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
+        let mut adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Idx).collect();
 
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
             metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
                 .set_vwgt(&mut weights)
+                .set_adjwgt(&mut adjwgt)
                 .part_kway(&mut metis_partition)?;
-            for (dst, src) in partition.iter_mut().zip(&mut metis_partition) {
+            for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }
             Ok(None)
