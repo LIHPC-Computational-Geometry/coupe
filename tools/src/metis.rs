@@ -7,6 +7,7 @@ use metis::Idx;
 
 pub struct Recursive {
     pub part_count: Idx,
+    pub tolerance: Option<f64>,
 }
 
 impl<const D: usize> ToRunner<D> for Recursive {
@@ -25,12 +26,17 @@ impl<const D: usize> ToRunner<D> for Recursive {
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
         let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
+        let tolerance = self.tolerance.map(|f| (f * 1000.0) as Idx);
+
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
-            metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
+            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
                 .set_vwgt(&mut weights)
-                .set_adjwgt(&mut adjwgt)
-                .part_recursive(&mut metis_partition)?;
+                .set_adjwgt(&mut adjwgt);
+            if let Some(tolerance) = tolerance {
+                graph = graph.set_option(metis::option::UFactor(tolerance));
+            }
+            graph.part_recursive(&mut metis_partition)?;
             for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }
@@ -41,6 +47,7 @@ impl<const D: usize> ToRunner<D> for Recursive {
 
 pub struct KWay {
     pub part_count: Idx,
+    pub tolerance: Option<f64>,
 }
 
 impl<const D: usize> ToRunner<D> for KWay {
@@ -59,12 +66,17 @@ impl<const D: usize> ToRunner<D> for KWay {
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
         let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
+        let tolerance = self.tolerance.map(|f| (f * 1000.0) as Idx);
+
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
-            metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
+            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)
                 .set_vwgt(&mut weights)
-                .set_adjwgt(&mut adjwgt)
-                .part_kway(&mut metis_partition)?;
+                .set_adjwgt(&mut adjwgt);
+            if let Some(tolerance) = tolerance {
+                graph = graph.set_option(metis::option::UFactor(tolerance));
+            }
+            graph.part_kway(&mut metis_partition)?;
             for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }

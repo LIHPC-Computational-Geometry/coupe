@@ -440,11 +440,13 @@ where
         #[cfg(feature = "metis")]
         "metis:recursive" => Box::new(metis::Recursive {
             part_count: require(parse(args.next()))?,
+            tolerance: parse(args.next()).transpose()?,
         }),
 
         #[cfg(feature = "metis")]
         "metis:kway" => Box::new(metis::KWay {
             part_count: require(parse(args.next()))?,
+            tolerance: parse(args.next()).transpose()?,
         }),
 
         #[cfg(feature = "scotch")]
