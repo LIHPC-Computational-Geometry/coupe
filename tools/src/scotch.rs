@@ -22,12 +22,12 @@ impl<const D: usize> ToRunner<D> for Standard {
         if weights.first().map_or(1, Vec::len) != 1 {
             return runner_error("SCOTCH cannot do multi-criteria partitioning");
         }
-        let weights: Vec<_> = weights.iter().map(|i| i[0] as Num).collect();
+        let weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
         let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
-        let adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Num).collect();
+        let adjwgt = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let mut strat = scotch::Strategy::new();
         let arch = scotch::Architecture::complete(self.part_count as Num);

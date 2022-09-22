@@ -18,12 +18,12 @@ impl<const D: usize> ToRunner<D> for Recursive {
             }
         };
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
-        let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
+        let mut weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
-        let mut adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Idx).collect();
+        let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
@@ -52,12 +52,12 @@ impl<const D: usize> ToRunner<D> for KWay {
             }
         };
         let ncon = weights.first().map_or(1, Vec::len) as Idx;
-        let mut weights: Vec<_> = weights.iter().flatten().map(|i| *i as Idx).collect();
+        let mut weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
-        let mut adjwgt: Vec<_> = adjwgt.iter().map(|i| *i as Idx).collect();
+        let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let mut metis_partition = vec![0; weights.len()];
         Box::new(move |partition| {
