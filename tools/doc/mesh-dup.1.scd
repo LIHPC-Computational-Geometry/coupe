@@ -13,8 +13,8 @@ mesh-dup - Duplicate the elements of a mesh
 mesh-dup copies the elements of a mesh a number of times so that the output mesh
 forms a (hyper)grid of input meshs, mainly for performance tests on algorithms.
 
-Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
-for details.
+Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+FORMAT* for details.
 
 # OPTIONS
 

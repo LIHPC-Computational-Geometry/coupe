@@ -16,8 +16,8 @@ part-info prints the following information:
 - the edge cut,
 - the lambda-1 cut.
 
-Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
-for details.
+Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+FORMAT* for details.
 
 # OPTIONS
 

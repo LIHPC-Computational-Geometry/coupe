@@ -17,8 +17,8 @@ changed.
 The tool can be used in conjunction of *mesh-reorder* or *mesh-dup*, which both
 produce very typical element orderings and may disrupt algorithms.
 
-Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
-for details.
+Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+FORMAT* for details.
 
 # OPTIONS
 

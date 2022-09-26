@@ -18,8 +18,8 @@ mesh-refine only works on 2D meshes composed exclusively of triangles and
 quadrilaterals.  It splits either of them into four equal parts at each
 iteration.
 
-Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
-for details.
+Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+FORMAT* for details.
 
 # OPTIONS
 

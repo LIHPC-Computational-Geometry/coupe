@@ -15,6 +15,8 @@ use std::str::FromStr;
 
 pub mod medit;
 pub mod partition;
+#[cfg(feature = "vtkio")]
+pub mod vtk;
 pub mod weight;
 
 type Ref = isize;
@@ -72,6 +74,9 @@ pub enum Error {
     Io(io::Error),
     UnknownFormat,
     Medit(medit::ParseError),
+
+    #[cfg(feature = "vtkio")]
+    Vtk(vtkio::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -82,6 +87,9 @@ impl fmt::Display for Error {
             Self::Io(err) => write!(f, "io: {err}"),
             Self::UnknownFormat => write!(f, "unknown format"),
             Self::Medit(err) => write!(f, "medit: {err}"),
+
+            #[cfg(feature = "vtkio")]
+            Self::Vtk(err) => write!(f, "vtk: {err}"),
         }
     }
 }
@@ -100,6 +108,16 @@ impl From<medit::ParseError> for Error {
     }
 }
 
+#[cfg(feature = "vtkio")]
+impl From<vtkio::Error> for Error {
+    fn from(err: vtkio::Error) -> Self {
+        match err {
+            vtkio::Error::IO(io_err) => Self::Io(io_err),
+            _ => Self::Vtk(err),
+        }
+    }
+}
+
 impl Mesh {
     /// Import a mesh from a file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Mesh> {
@@ -109,13 +127,17 @@ impl Mesh {
 
     pub fn from_reader(mut r: impl io::BufRead) -> Result<Mesh> {
         let buf = r.fill_buf()?;
-        Ok(if medit::test_format_binary(buf) {
-            medit::parse_binary(r)?
-        } else if medit::test_format_ascii(buf) {
-            medit::parse_ascii(r)?
-        } else {
-            return Err(Error::UnknownFormat);
-        })
+        if medit::test_format_binary(buf) {
+            return Ok(medit::parse_binary(r)?);
+        }
+        if medit::test_format_ascii(buf) {
+            return Ok(medit::parse_ascii(r)?);
+        }
+        #[cfg(feature = "vtk-legacy")]
+        if vtk::test_format_legacy(buf) {
+            return Ok(vtk::parse_legacy(r)?);
+        }
+        Err(Error::UnknownFormat)
     }
 }
 

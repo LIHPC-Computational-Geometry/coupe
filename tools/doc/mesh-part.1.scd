@@ -19,8 +19,8 @@ the resulting partition on standard output.
 
 part-bench benchmarks the speed of the given algorithms and prints the results.
 
-Only MEDIT meshes are supported, for now.  See *apply-part(1)*'s *INPUT FORMAT*
-for details.
+Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+FORMAT* for details.
 
 See *ALGORITHMS* for a list of supported algorithms.
 
