@@ -1,9 +1,10 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::num_traits::AsPrimitive;
 use coupe::num_traits::FromPrimitive;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
-use coupe::topology::lambda_cut;
+use coupe::sprs::CsMatView;
 use coupe_tools::set_edge_weights;
 use coupe_tools::EdgeWeightDistribution;
 use mesh_io::Mesh;
@@ -16,6 +17,8 @@ use std::env;
 use std::fmt;
 use std::fs;
 use std::io;
+use std::iter::Sum;
+use std::ops::Mul;
 
 const USAGE: &str = "Usage: part-info [options]";
 
@@ -159,6 +162,31 @@ fn empty_part_count(part_ids: &[usize], part_count: usize) -> usize {
             .len()
 }
 
+/// Wrapper around coupe's [coupe::topology::lambda_cut] that applies the edge
+/// weight distribution and sums the criterions.
+fn lambda_cut<T>(
+    adjacency: CsMatView<f64>,
+    parts: &[usize],
+    edge_weights: EdgeWeightDistribution,
+    weights: &[Vec<T>],
+) -> T
+where
+    T: Sum + Mul<Output = T> + AsPrimitive<f64> + Send + Sync + FromPrimitive,
+{
+    let weights = weights.par_iter().map(|weight| match edge_weights {
+        EdgeWeightDistribution::Uniform => T::from_usize(weight.len()).unwrap(),
+        EdgeWeightDistribution::Linear => weight.iter().cloned().sum(),
+        EdgeWeightDistribution::Sqrt => {
+            let sqrt_sum: f64 = weight
+                .iter()
+                .map(|criterion| f64::sqrt(criterion.as_()))
+                .sum();
+            T::from_f64(sqrt_sum).unwrap()
+        }
+    });
+    coupe::topology::lambda_cut(adjacency, parts, weights)
+}
+
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
@@ -246,16 +274,12 @@ fn main() -> Result<()> {
         coupe::topology::edge_cut(adjacency.view(), &parts),
     );
     let lambda_cut: Box<dyn fmt::Display> = match &weights {
-        mesh_io::weight::Array::Integers(v) => Box::new(lambda_cut(
-            adjacency.view(),
-            &parts,
-            v.par_iter().map(|c| c[0]),
-        )),
-        mesh_io::weight::Array::Floats(v) => Box::new(lambda_cut(
-            adjacency.view(),
-            &parts,
-            v.par_iter().map(|c| c[0]),
-        )),
+        mesh_io::weight::Array::Integers(v) => {
+            Box::new(lambda_cut(adjacency.view(), &parts, edge_weights, v))
+        }
+        mesh_io::weight::Array::Floats(v) => {
+            Box::new(lambda_cut(adjacency.view(), &parts, edge_weights, v))
+        }
     };
     println!("Lambda cut size: {}", lambda_cut);
 
