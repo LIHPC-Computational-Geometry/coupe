@@ -2,9 +2,8 @@ use anyhow::Context as _;
 use anyhow::Result;
 use mesh_io::Mesh;
 use std::env;
-use std::io;
 
-const USAGE: &str = "Usage: mesh-reorder [options] <in.mesh >out.mesh";
+const USAGE: &str = "Usage: mesh-reorder [options] [in-mesh [out-mesh]] <in.mesh >out.mesh";
 
 fn shuffle_couple<R, T>(mut rng: R, data: &[T], refs: &[isize]) -> (Vec<T>, Vec<isize>, Vec<usize>)
 where
@@ -72,7 +71,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 2 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -82,16 +81,13 @@ fn main() -> Result<()> {
         .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
 
     eprintln!("Reading mesh...");
-    let stdin = io::stdin();
-    let stdin = stdin.lock();
-    let stdin = io::BufReader::new(stdin);
-    let mut mesh = Mesh::from_reader(stdin).unwrap();
+    let mut mesh = coupe_tools::read_mesh(matches.free.get(0))?;
 
     eprintln!("Shuffling mesh...");
     mesh = shuffle(rand::thread_rng(), mesh);
 
     eprintln!("Writing mesh...");
-    coupe_tools::write_mesh(&mesh, format)?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.get(1))?;
 
     Ok(())
 }

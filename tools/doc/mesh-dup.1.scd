@@ -6,12 +6,15 @@ mesh-dup - Duplicate the elements of a mesh
 
 # SYNOPSIS
 
-*mesh-dup* [--times <n>] <input.mesh >output.mesh
+*mesh-dup* [--times <n>] [input.mesh [output.mesh]]
 
 # DESCRIPTION
 
 mesh-dup copies the elements of a mesh a number of times so that the output mesh
 forms a (hyper)grid of input meshs, mainly for performance tests on algorithms.
+
+If input.mesh is omitted or is -, it is read from standard input.
+If output.mesh is omitted or is -, it is written to standard output.
 
 Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
 FORMAT* for details.

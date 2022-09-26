@@ -19,10 +19,10 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::Registry;
 use tracing_tree::HierarchicalLayer;
 
-const USAGE: &str = "Usage: mesh-part [options] >out.part";
+const USAGE: &str = "Usage: mesh-part [options] [out-part] >out.part";
 
 fn main_d<const D: usize>(
-    matches: getopts::Matches,
+    matches: &getopts::Matches,
     edge_weights: coupe_tools::EdgeWeightDistribution,
     mesh: Mesh,
     weights: weight::Array,
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 1 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -150,15 +150,13 @@ fn main() -> Result<()> {
     let weights = weights?;
 
     let partition = match mesh.dimension() {
-        2 => main_d::<2>(matches, edge_weights, mesh, weights)?,
-        3 => main_d::<3>(matches, edge_weights, mesh, weights)?,
+        2 => main_d::<2>(&matches, edge_weights, mesh, weights)?,
+        3 => main_d::<3>(&matches, edge_weights, mesh, weights)?,
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
 
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let stdout = io::BufWriter::new(stdout);
-    mesh_io::partition::write(stdout, partition).context("failed to print partition")?;
+    let output = coupe_tools::writer(matches.free.get(1))?;
+    mesh_io::partition::write(output, partition).context("failed to write partition")?;
 
     Ok(())
 }

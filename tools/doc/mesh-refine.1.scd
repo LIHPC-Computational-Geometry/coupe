@@ -6,13 +6,15 @@ mesh-refine - Refine a mesh
 
 # SYNOPSIS
 
-*mesh-refine* [--times <n>] <input.mesh >output.mesh
+*mesh-refine* [--times <n>] [input.mesh [output.mesh]]
 
 # DESCRIPTION
 
-mesh-refine splits the cell of a mesh from its standard input into smaller
-cells and prints the resulting mesh on its standard output, mainly for
-performance tests on algorithms.
+mesh-refine splits the cell of a mesh into smaller cells, mainly for performance
+tests on algorithms.
+
+If input.mesh is omitted or is -, it is read from standard input.
+If output.mesh is omitted or is -, it is written to standard output.
 
 mesh-refine only works on 2D meshes composed exclusively of triangles and
 quadrilaterals.  It splits either of them into four equal parts at each

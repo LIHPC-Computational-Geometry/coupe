@@ -1,4 +1,3 @@
-use anyhow::Context as _;
 use anyhow::Result;
 use coupe::sprs::CsMatView;
 use coupe::Point2D;
@@ -10,7 +9,7 @@ use std::collections::HashSet;
 use std::env;
 use std::io;
 
-const USAGE: &str = "Usage: medit2svg [options] <in.mesh >out.svg";
+const USAGE: &str = "Usage: medit2svg [options] [in-mesh [out-svg]] <in.mesh >out.svg";
 
 /// Returns the list of elements that are interesting.
 fn elements(mesh: &Mesh) -> impl Iterator<Item = (ElementType, &[usize], isize)> {
@@ -287,22 +286,15 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 2 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
-    eprintln!("Reading mesh from stdin...");
-    let stdin = io::stdin();
-    let stdin = stdin.lock();
-    let stdin = io::BufReader::new(stdin);
-    let mesh = Mesh::from_reader(stdin).context("failed to read mesh")?;
+    let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
 
-    eprintln!("Writing SVG to stdout...");
-    let stdout = io::stdout();
-    let stdout = stdout.lock();
-    let stdout = io::BufWriter::new(stdout);
+    let output = coupe_tools::writer(matches.free.get(1))?;
     match mesh.dimension() {
-        2 => write_svg::<_>(stdout, &mesh)?,
+        2 => write_svg(output, &mesh)?,
         n => anyhow::bail!("expected 2D mesh, got a {n}D mesh"),
     };
 

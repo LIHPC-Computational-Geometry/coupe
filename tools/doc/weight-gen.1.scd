@@ -6,12 +6,14 @@ weight-gen - Generate a distribution of weights for a given mesh
 
 # SYNOPSIS
 
-*weight-gen* [options...] <input.mesh >output.weights
+*weight-gen* [options...] [input.mesh [output.weights]]
 
 # DESCRIPTION
 
-weight-gen generates weights for a given mesh provided to standard input, and
-writes the output weight distribution in standard output.
+weight-gen generates weights for a given mesh.
+
+If input.mesh is omitted or is -, it is read from standard input.
+If output.weights is omitted or is -, it is written to standard output.
 
 Unless *-i, --integers* is specified, the generated weights are floating-point
 numbers.

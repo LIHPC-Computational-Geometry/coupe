@@ -6,7 +6,7 @@ use std::env;
 use std::fs;
 use std::io;
 
-const USAGE: &str = "Usage: apply-weight [options] >out.mesh";
+const USAGE: &str = "Usage: apply-weight [options] [out-mesh] >out.mesh";
 
 fn apply(mesh: &mut Mesh, weights: impl Iterator<Item = isize>) {
     if let Some(element_dim) = mesh
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 1 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         }
     }
 
-    coupe_tools::write_mesh(&mesh, format)?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.get(0))?;
 
     Ok(())
 }
