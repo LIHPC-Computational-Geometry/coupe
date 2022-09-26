@@ -30,6 +30,10 @@ where
         .map(|criterion| {
             let total_weight: T = weights.par_iter().map(|weight| weight[criterion]).sum();
             let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
+            if ideal_part_weight == 0.0 {
+                // Avoid divisions by zero.
+                return 0.0;
+            }
             let imbalance = (0..part_count)
                 .into_par_iter()
                 .map(|part| {
