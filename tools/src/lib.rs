@@ -17,9 +17,9 @@ use coupe::sprs::CsMatView;
 use coupe::sprs::CSR;
 use coupe::Partition as _;
 use coupe::PointND;
-use mesh_io::medit::ElementType;
-use mesh_io::medit::Mesh;
 use mesh_io::weight;
+use mesh_io::ElementType;
+use mesh_io::Mesh;
 use once_cell::sync::OnceCell;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
@@ -732,12 +732,13 @@ impl std::str::FromStr for MeshFormat {
 /// Write a mesh to stdout in the given format.
 pub fn write_mesh(mesh: &Mesh, format: MeshFormat) -> Result<()> {
     match format {
-        MeshFormat::MeditAscii => println!("{mesh}"),
+        MeshFormat::MeditAscii => println!("{}", mesh.display_medit_ascii()),
         MeshFormat::MeditBinary => {
             let stdout = io::stdout();
             let stdout = stdout.lock();
             let stdout = io::BufWriter::new(stdout);
-            mesh.write_to(stdout).context("failed to write mesh")?;
+            mesh.serialize_medit_binary(stdout)
+                .context("failed to write mesh")?;
         }
     }
     Ok(())

@@ -1,12 +1,26 @@
-use super::parser::code;
-use super::ElementType;
-use super::Mesh;
+use super::code;
+use crate::ElementType;
+use crate::Mesh;
 use std::fmt;
 use std::io;
 
-impl fmt::Display for ElementType {
+/// Deserialize a mesh into the ASCII MEDIT format.
+#[derive(Debug)]
+pub struct DisplayAscii<'a> {
+    mesh: &'a Mesh,
+}
+
+impl Mesh {
+    pub fn display_medit_ascii(&self) -> DisplayAscii<'_> {
+        DisplayAscii { mesh: self }
+    }
+}
+
+struct AsciiElementType(ElementType);
+
+impl fmt::Display for AsciiElementType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        match self.0 {
             ElementType::Vertex => write!(f, "Vertices"),
             ElementType::Edge => write!(f, "Edges"),
             ElementType::Triangle => write!(f, "Triangles"),
@@ -31,27 +45,32 @@ impl ElementType {
     }
 }
 
-impl fmt::Display for Mesh {
+impl fmt::Display for DisplayAscii<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "MeshVersionFormatted 2\nDimension {}\n\nVertices\n\t{}\n",
-            self.dimension,
-            self.node_count(),
+            self.mesh.dimension,
+            self.mesh.node_count(),
         )?;
-        for (coordinates, node_ref) in self.nodes() {
+        for (coordinates, node_ref) in self.mesh.nodes() {
             for coordinate in coordinates {
                 write!(f, " {}", coordinate)?;
             }
             writeln!(f, " {}", node_ref)?;
         }
-        for (element_type, nodes, refs) in &self.topology {
+        for (element_type, nodes, refs) in &self.mesh.topology {
             if *element_type == ElementType::Vertex {
                 // Breaks MEDIT and meshio-py.
                 continue;
             }
             let element_count = refs.len();
-            write!(f, "\n{}\n\t{}\n", element_type, element_count)?;
+            write!(
+                f,
+                "\n{}\n\t{}\n",
+                AsciiElementType(*element_type),
+                element_count,
+            )?;
             for (element, element_ref) in nodes.chunks(element_type.node_count()).zip(refs) {
                 for node in element {
                     write!(f, " {}", node + 1)?;
@@ -64,7 +83,7 @@ impl fmt::Display for Mesh {
 }
 
 impl Mesh {
-    pub fn write_to<W: io::Write>(&self, mut w: W) -> io::Result<()> {
+    pub fn serialize_medit_binary<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         // Header
         w.write_all(&i32::to_le_bytes(1))?; // magic code
         w.write_all(&i32::to_le_bytes(4))?; // version
@@ -112,7 +131,7 @@ impl Mesh {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::parse_ascii;
 
     #[test]
     fn test_serialize() {
@@ -132,7 +151,8 @@ Triangles
  2 3 4 0
 
 End";
-        let output = input.parse::<Mesh>().unwrap().to_string();
+        let mesh = parse_ascii(input.as_bytes()).unwrap();
+        let output = mesh.display_medit_ascii().to_string();
         assert_eq!(input, output);
     }
 }

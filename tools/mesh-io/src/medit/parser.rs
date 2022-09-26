@@ -1,13 +1,12 @@
-use super::{ElementType, Mesh};
-
+use super::code;
+use crate::ElementType;
+use crate::Mesh;
 use std::cell;
 use std::error;
 use std::fmt;
-use std::fs;
 use std::io;
 use std::mem;
 use std::num;
-use std::path;
 use std::str;
 
 #[derive(Debug)]
@@ -95,17 +94,6 @@ impl str::FromStr for ElementType {
             _ => return Err(()),
         })
     }
-}
-
-pub(super) mod code {
-    pub const DIMENSION: i64 = 3;
-    pub const VERTEX: i64 = 4;
-    pub const EDGE: i64 = 5;
-    pub const TRIANGLE: i64 = 6;
-    pub const QUAD: i64 = 7;
-    pub const TETRAHEDRON: i64 = 8;
-    pub const HEXAHEDRON: i64 = 9;
-    pub const END: i64 = 54;
 }
 
 impl ElementType {
@@ -200,7 +188,7 @@ where
     }
 }
 
-fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
+pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
     enum Read {
         T,
         L,
@@ -385,6 +373,26 @@ fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
     Ok(mesh)
 }
 
+pub fn test_format_ascii(header: &[u8]) -> bool {
+    const HEADER: &str = "meshversionformatted";
+    if header.len() < HEADER.len() {
+        return false;
+    }
+    let header = match std::str::from_utf8(&header[..HEADER.len()]) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    header.eq_ignore_ascii_case(HEADER)
+}
+
+pub fn test_format_binary(header: &[u8]) -> bool {
+    if header.len() < 4 {
+        return false;
+    }
+    let binary_magic = &header[..4];
+    binary_magic == [1, 0, 0, 0] || binary_magic == [0, 0, 0, 1]
+}
+
 // Taken from nschloe's meshio[0] implementation. It seems medit binary files
 // are encoded like so:
 //
@@ -404,7 +412,7 @@ fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
 //     float   := f32 / f64 ; depends on the file version
 //
 // [0] https://github.com/nschloe/meshio
-fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
+pub fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
     let mut magic = [0; 4];
     input.read_exact(&mut magic)?;
     let magic = u32::from_le_bytes(magic);
@@ -561,40 +569,6 @@ fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
     }
 
     Ok(mesh)
-}
-
-fn parse<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
-    let buf = input.fill_buf()?;
-    if buf.len() < 4 {
-        return Err(Error::from(io::ErrorKind::UnexpectedEof));
-    }
-    let binary_magic = &buf[0..4];
-    let is_binary = binary_magic == [1, 0, 0, 0] || binary_magic == [0, 0, 0, 1];
-    if is_binary {
-        parse_binary(input)
-    } else {
-        parse_ascii(input)
-    }
-}
-
-impl Mesh {
-    /// Import from a medit mesh file.
-    pub fn from_file(path: impl AsRef<path::Path>) -> Result<Mesh, Error> {
-        let file = fs::File::open(path)?;
-        parse(io::BufReader::new(file))
-    }
-
-    pub fn from_reader(r: impl io::BufRead) -> Result<Mesh, Error> {
-        parse(r)
-    }
-}
-
-impl str::FromStr for Mesh {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Mesh, Error> {
-        parse(io::Cursor::new(s))
-    }
 }
 
 #[cfg(test)]

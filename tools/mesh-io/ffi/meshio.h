@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ERROR_GENERIC             -1
 #define ERROR_BAD_HEADER          -2
 #define ERROR_UNSUPPORTED_VERSION -3
@@ -43,33 +47,37 @@ void mio_weights_first_criterion(double *criterion, struct mio_weights *weights)
 /** Free a weight array. */
 void mio_weights_free(struct mio_weights *weights);
 
-/** A mesh (medit .mesh format). */
-struct mio_medit_mesh;
-/** Read a medit mesh from the given file descriptor.
+/** A mesh. */
+struct mio_mesh;
+/** Read a mesh from the given file descriptor.
  *
  * Returns NULL on error.
- * The return value must be freed with medit_free.
+ * The return value must be freed with mio_mesh_free.
  * The file descriptor is closed. */
-struct mio_medit_mesh *mio_medit_read(int fd);
+struct mio_mesh *mio_mesh_read(int fd);
 /** Free the given mesh. */
-void mio_medit_free(struct mio_medit_mesh *mesh);
+void mio_mesh_free(struct mio_mesh *mesh);
 /** The dimension of the mesh. */
-int mio_medit_dimension(struct mio_medit_mesh *mesh);
+int mio_mesh_dimension(struct mio_mesh *mesh);
 /** The number of nodes/vertices in the mesh. */
-uint64_t mio_medit_node_count(struct mio_medit_mesh *mesh);
+uint64_t mio_mesh_node_count(struct mio_mesh *mesh);
 /** The coordinates of the given node/vertex. */
-const double *mio_medit_coordinates(struct mio_medit_mesh *mesh, uintptr_t node_idx);
+const double *mio_mesh_coordinates(struct mio_mesh *mesh, uintptr_t node_idx);
 
 /** The number of elements/cells in the mesh. */
-uint64_t mio_medit_element_count(struct mio_medit_mesh *mesh);
+uint64_t mio_mesh_element_count(struct mio_mesh *mesh);
 /** Information about an element. */
 struct mio_element {
     int dimension;
     int node_count;
-    /** node_count indices that can be passed to mio_medit_coordinates. */
+    /** node_count indices that can be passed to mio_mesh_coordinates. */
     const uintptr_t *nodes;
 };
 /** Retrieve information about an element. */
-void mio_medit_element(struct mio_element *element, struct mio_medit_mesh *mesh, uintptr_t element_idx);
+void mio_mesh_element(struct mio_element *element, struct mio_mesh *mesh, uintptr_t element_idx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
