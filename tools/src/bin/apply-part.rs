@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::io;
 
-const USAGE: &str = "Usage: apply-part [options] >out.mesh";
+const USAGE: &str = "Usage: apply-part [options] [out-mesh] >out.mesh";
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 1 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
             .for_each(|((_, _, element_ref), part)| *element_ref = part as isize);
     }
 
-    coupe_tools::write_mesh(&mesh, format)?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.get(0))?;
 
     Ok(())
 }

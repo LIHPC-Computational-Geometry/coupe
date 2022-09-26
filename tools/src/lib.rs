@@ -27,6 +27,7 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice as _;
 use std::any;
+use std::fs::File;
 use std::io;
 use std::iter::Sum;
 use std::mem;
@@ -729,17 +730,44 @@ impl std::str::FromStr for MeshFormat {
     }
 }
 
-/// Write a mesh to stdout in the given format.
-pub fn write_mesh(mesh: &Mesh, format: MeshFormat) -> Result<()> {
-    match format {
-        MeshFormat::MeditAscii => println!("{}", mesh.display_medit_ascii()),
-        MeshFormat::MeditBinary => {
+/// Helper to read a mesh either from stdin or from a file.
+pub fn read_mesh(filename: Option<&String>) -> Result<Mesh> {
+    Ok(match filename.cloned().as_deref() {
+        None | Some("-") => {
+            let stdin = io::stdin();
+            let stdin = stdin.lock();
+            let stdin = io::BufReader::new(stdin);
+            Mesh::from_reader(stdin).context("failed to read mesh from stdin")?
+        }
+        Some(filename) => Mesh::from_file(filename).context("failed to read mesh from file")?,
+    })
+}
+
+/// Helper function to retrieve the Write implementation matching the given
+/// command-line argument.
+pub fn writer(filename: Option<&String>) -> Result<impl io::Write> {
+    let w: Box<dyn io::Write> = match filename.cloned().as_deref() {
+        None | Some("-") => {
             let stdout = io::stdout();
             let stdout = stdout.lock();
-            let stdout = io::BufWriter::new(stdout);
-            mesh.serialize_medit_binary(stdout)
-                .context("failed to write mesh")?;
+            Box::new(stdout)
         }
+        Some(filename) => {
+            let file = File::create(filename).context("failed to create output file")?;
+            Box::new(file)
+        }
+    };
+    Ok(io::BufWriter::new(w))
+}
+
+/// Helper to write a mesh, either to stdout or to a file, in the given format.
+pub fn write_mesh(mesh: &Mesh, format: MeshFormat, filename: Option<&String>) -> Result<()> {
+    use std::io::Write;
+
+    let mut w = writer(filename)?;
+    match format {
+        MeshFormat::MeditAscii => writeln!(w, "{}", mesh.display_medit_ascii())?,
+        MeshFormat::MeditBinary => mesh.serialize_medit_binary(w)?,
     }
     Ok(())
 }

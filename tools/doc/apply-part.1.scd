@@ -8,9 +8,9 @@ apply-weight - Colorize a mesh with a weight file for visualization
 
 # SYNOPSIS
 
-*apply-part* --mesh <path> --partition <path> >output.mesh
+*apply-part* --mesh <path> --partition <path> [output.mesh]
 
-*apply-weight* --mesh <path> --weights <path> >output.mesh
+*apply-weight* --mesh <path> --weights <path> [output.mesh]
 
 # DESCRIPTION
 
@@ -18,7 +18,7 @@ apply-part (apply-weight) merges a partition file (resp. weight file) into
 the free-form fields of a MEDIT mesh file, so that the partition (resp. weight
 distribution) can be visualized with medit tools.
 
-The output mesh is written on standard output.
+If output.mesh is omitted or is -, it is written to standard output.
 
 Only MEDIT meshes are supported, for now.  See *INPUT FORMAT* for details.
 

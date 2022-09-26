@@ -6,9 +6,8 @@ use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::cmp;
 use std::env;
-use std::io;
 
-const USAGE: &str = "Usage: weight-gen [options] <in.mesh >out.weights";
+const USAGE: &str = "Usage: weight-gen [options] [in-mesh [out-weights]] <in.mesh >out.weights";
 
 fn partial_cmp(a: &f64, b: &f64) -> cmp::Ordering {
     if a < b {
@@ -157,7 +156,7 @@ fn apply_distribution<const D: usize>(
 fn weight_gen<const D: usize>(
     mesh: Mesh,
     distributions: Vec<String>,
-    gen_integers: bool,
+    matches: getopts::Matches,
 ) -> Result<()> {
     let distributions: Vec<Distribution<D>> = distributions
         .into_iter()
@@ -177,17 +176,14 @@ fn weight_gen<const D: usize>(
             .map(|distribution| distribution(*point))
     });
 
-    eprintln!("Writing weight distributions to standard output...");
-
-    let output = io::stdout();
-    let output = output.lock();
-    let output = io::BufWriter::new(output);
-    if gen_integers {
+    let output = coupe_tools::writer(matches.free.get(1))?;
+    if matches.opt_present("i") {
         let weights = weights.map(|weight| weight.map(|criterion| criterion as i64));
-        mesh_io::weight::write_integers(output, weights).context("failed to write weight array")
+        mesh_io::weight::write_integers(output, weights)
     } else {
-        mesh_io::weight::write_floats(output, weights).context("failed to write weight array")
+        mesh_io::weight::write_floats(output, weights)
     }
+    .context("failed to write weight array")
 }
 
 fn main() -> Result<()> {
@@ -211,7 +207,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 2 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -220,16 +216,11 @@ fn main() -> Result<()> {
         anyhow::bail!("missing required option 'distribution'");
     }
 
-    eprintln!("Reading mesh from standard input...");
-
-    let input = io::stdin();
-    let input = input.lock();
-    let input = io::BufReader::new(input);
-    let mesh = Mesh::from_reader(input).context("failed to read mesh")?;
+    let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
 
     match mesh.dimension() {
-        2 => weight_gen::<2>(mesh, distributions, matches.opt_present("i")),
-        3 => weight_gen::<3>(mesh, distributions, matches.opt_present("i")),
+        2 => weight_gen::<2>(mesh, distributions, matches),
+        3 => weight_gen::<3>(mesh, distributions, matches),
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     }
 }

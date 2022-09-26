@@ -1,10 +1,8 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use mesh_io::Mesh;
 use std::env;
-use std::io;
 
-const USAGE: &str = "Usage: mesh-refine [options] <in.mesh >out.mesh";
+const USAGE: &str = "Usage: mesh-refine [options] [in-mesh [out-mesh]] <in.mesh >out.mesh";
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
@@ -23,7 +21,7 @@ fn main() -> Result<()> {
         eprintln!("{}", options.usage(USAGE));
         return Ok(());
     }
-    if !matches.free.is_empty() {
+    if matches.free.len() > 2 {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
@@ -38,10 +36,7 @@ fn main() -> Result<()> {
         .unwrap_or(1);
 
     eprintln!("Reading mesh...");
-    let stdin = io::stdin();
-    let stdin = stdin.lock();
-    let stdin = io::BufReader::new(stdin);
-    let mut mesh = Mesh::from_reader(stdin).context("failed to read mesh")?;
+    let mut mesh = coupe_tools::read_mesh(matches.free.get(0))?;
     eprintln!(" -> Dimension: {}", mesh.dimension());
     eprintln!(" -> Nodes: {}", mesh.node_count());
     eprintln!(" -> Elements: {}", mesh.element_count());
@@ -56,7 +51,7 @@ fn main() -> Result<()> {
     eprintln!(" -> Elements: {}", mesh.element_count());
 
     eprintln!("Writing mesh...");
-    coupe_tools::write_mesh(&mesh, format)?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.get(1))?;
 
     Ok(())
 }

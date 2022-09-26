@@ -8,14 +8,16 @@ part-bench - Benchmark an algorithm
 
 # SYNOPSIS
 
-*mesh-part* [options...] >output.part
+*mesh-part* [options...] [output.part]
 
 *part-bench* [options...]
 
 # DESCRIPTION
 
-mesh-part applies partitioning algorithms onto a given mesh in order, and writes
-the resulting partition on standard output.
+mesh-part applies partitioning algorithms onto a given mesh in order, and
+outputs the resulting partition.
+
+If output.part is omitted or is -, it is written to standard output.
 
 part-bench benchmarks the speed of the given algorithms and prints the results.
 

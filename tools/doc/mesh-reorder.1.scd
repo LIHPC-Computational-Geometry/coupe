@@ -6,13 +6,16 @@ mesh-reorder - Change the order of the vertices and the elements of a mesh
 
 # SYNOPSIS
 
-*mesh-reorder* <input.mesh >output.mesh
+*mesh-reorder* [input.mesh [output.mesh]]
 
 # DESCRIPTION
 
 mesh-reorder shuffles the vertices and the elements of a mesh, without altering
 its mathematical structure: only the order in which they appear in the file is
 changed.
+
+If input.mesh is omitted or is -, it is read from standard input.
+If output.mesh is omitted or is -, it is written to standard output.
 
 The tool can be used in conjunction of *mesh-reorder* or *mesh-dup*, which both
 produce very typical element orderings and may disrupt algorithms.
