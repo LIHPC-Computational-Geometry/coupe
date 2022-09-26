@@ -2,6 +2,7 @@ use super::runner_error;
 use super::Problem;
 use super::Runner;
 use super::ToRunner;
+use anyhow::Context;
 use mesh_io::weight;
 use metis::Idx;
 
@@ -36,7 +37,9 @@ impl<const D: usize> ToRunner<D> for Recursive {
             if let Some(tolerance) = tolerance {
                 graph = graph.set_option(metis::option::UFactor(tolerance));
             }
-            graph.part_recursive(&mut metis_partition)?;
+            graph
+                .part_recursive(&mut metis_partition)
+                .context("METIS partitioning failed")?;
             for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }
@@ -76,7 +79,9 @@ impl<const D: usize> ToRunner<D> for KWay {
             if let Some(tolerance) = tolerance {
                 graph = graph.set_option(metis::option::UFactor(tolerance));
             }
-            graph.part_kway(&mut metis_partition)?;
+            graph
+                .part_kway(&mut metis_partition)
+                .context("METIS partitioning failed")?;
             for (dst, src) in partition.iter_mut().zip(&metis_partition) {
                 *dst = *src as usize;
             }
