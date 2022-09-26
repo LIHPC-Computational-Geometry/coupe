@@ -44,9 +44,15 @@ Only MEDIT meshes are supported, for now.  See *INPUT FORMAT* for details.
 
 # INPUT FORMAT
 
-These programs can accept both ASCII and binary MEDIT meshes, and will detect
-automatically the correct version to use, regardless of file extension.  There
-is currently no way to force a particular format.
+These programs can accept multiple mesh formats, and will detect automatically
+the correct version to use, regardless of the file extension.  There is
+currently no way to force a particular format for input.
+
+The supported mesh formats are:
+
+- MEDIT, both ASCII and binary variants,
+- VTK, legacy ASCII and binary variants.  The binary variant assumes little
+  endian numbers.
 
 # OUTPUT FORMAT
 

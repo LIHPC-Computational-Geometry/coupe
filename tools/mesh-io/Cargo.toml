@@ -11,5 +11,18 @@ readme = "../README.md"
 repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 
+[features]
+default = ["vtk-legacy"]
+
+# File format: VTK (legacy)
+vtk-legacy = ["vtkio"]
+
+# Read from and write to compressed mesh files
+compression = ["vtkio?/compression"]
+
+
 [dependencies]
 itertools = "0.10"
+
+# VTK file formats
+vtkio = { version = "0.6", default-features = false, optional = true }
