@@ -1,3 +1,5 @@
+#![allow(clippy::just_underscores_and_digits)]
+
 use anyhow::Context as _;
 use anyhow::Result;
 use coupe::nalgebra::allocator::Allocator;
