@@ -18,4 +18,3 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 mesh-io = { version = "0.1", path = ".." }
-libc = "0.2"

@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)] // See `meshio.h`.
 
-use libc::c_int;
 use mesh_io::Mesh;
+use std::ffi::c_int;
 use std::fs;
 use std::io;
 use std::mem;
