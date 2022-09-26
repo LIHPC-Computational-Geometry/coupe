@@ -438,16 +438,34 @@ where
         }),
 
         #[cfg(feature = "metis")]
-        "metis:recursive" => Box::new(metis::Recursive {
-            part_count: require(parse(args.next()))?,
-            tolerance: parse(args.next()).transpose()?,
-        }),
+        "metis:recursive" => {
+            let part_count = require(parse(args.next()))?;
+            let tolerance = parse(args.next()).transpose()?;
+            if let Some(tolerance) = tolerance {
+                if tolerance < 0.001 {
+                    anyhow::bail!("METIS does not support tolerances below 0.001");
+                }
+            }
+            Box::new(metis::Recursive {
+                part_count,
+                tolerance,
+            })
+        }
 
         #[cfg(feature = "metis")]
-        "metis:kway" => Box::new(metis::KWay {
-            part_count: require(parse(args.next()))?,
-            tolerance: parse(args.next()).transpose()?,
-        }),
+        "metis:kway" => {
+            let part_count = require(parse(args.next()))?;
+            let tolerance = parse(args.next()).transpose()?;
+            if let Some(tolerance) = tolerance {
+                if tolerance < 0.001 {
+                    anyhow::bail!("METIS does not support tolerances below 0.001");
+                }
+            }
+            Box::new(metis::KWay {
+                part_count,
+                tolerance,
+            })
+        }
 
         #[cfg(feature = "scotch")]
         "scotch:std" => Box::new(scotch::Standard {
