@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use anyhow::Result;
 use coupe::PointND;
-use mesh_io::medit::Mesh;
+use mesh_io::Mesh;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::cmp;
@@ -225,7 +225,7 @@ fn main() -> Result<()> {
     let input = io::stdin();
     let input = input.lock();
     let input = io::BufReader::new(input);
-    let mesh = mesh_io::medit::Mesh::from_reader(input).context("failed to read mesh")?;
+    let mesh = Mesh::from_reader(input).context("failed to read mesh")?;
 
     match mesh.dimension() {
         2 => weight_gen::<2>(mesh, distributions, matches.opt_present("i")),

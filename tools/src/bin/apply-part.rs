@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use mesh_io::medit::ElementType;
+use mesh_io::ElementType;
 use std::env;
 use std::fs;
 use std::io;
@@ -32,8 +32,7 @@ fn main() -> Result<()> {
     let mesh_file = matches
         .opt_str("m")
         .context("missing required option 'mesh'")?;
-    let mut mesh =
-        mesh_io::medit::Mesh::from_file(mesh_file).context("failed to read mesh file")?;
+    let mut mesh = mesh_io::Mesh::from_file(mesh_file).context("failed to read mesh file")?;
 
     let partition_file = matches
         .opt_str("p")

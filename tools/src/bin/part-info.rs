@@ -5,7 +5,7 @@ use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
 use coupe_tools::set_edge_weights;
 use coupe_tools::EdgeWeightDistribution;
-use mesh_io::medit::Mesh;
+use mesh_io::Mesh;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;

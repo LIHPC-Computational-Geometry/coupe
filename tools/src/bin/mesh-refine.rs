@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use mesh_io::medit::Mesh;
+use mesh_io::Mesh;
 use std::env;
 use std::io;
 

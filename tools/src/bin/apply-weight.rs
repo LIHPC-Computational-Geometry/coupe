@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use mesh_io::medit::ElementType;
-use mesh_io::medit::Mesh;
+use mesh_io::ElementType;
+use mesh_io::Mesh;
 use std::env;
 use std::fs;
 use std::io;

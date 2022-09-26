@@ -1,6 +1,7 @@
 #![allow(clippy::missing_safety_doc)] // See `meshio.h`.
 
 use libc::c_int;
+use mesh_io::Mesh;
 use std::fs;
 use std::io;
 use std::mem;
@@ -127,10 +128,10 @@ pub unsafe extern "C" fn mio_weights_free(weights: *mut mesh_io::weight::Array) 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_read(fd: c_int) -> *mut mesh_io::medit::Mesh {
+pub unsafe extern "C" fn mio_mesh_read(fd: c_int) -> *mut Mesh {
     let f = fs::File::from_raw_fd(fd);
     let mut r = io::BufReader::new(f);
-    let m = match mesh_io::medit::Mesh::from_reader(&mut r) {
+    let m = match Mesh::from_reader(&mut r) {
         Ok(m) => m,
         Err(_) => return ptr::null_mut(),
     };
@@ -138,14 +139,14 @@ pub unsafe extern "C" fn mio_medit_read(fd: c_int) -> *mut mesh_io::medit::Mesh 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_free(medit: *mut mesh_io::medit::Mesh) {
+pub unsafe extern "C" fn mio_mesh_free(medit: *mut Mesh) {
     if !medit.is_null() {
         mem::drop(Box::from_raw(medit));
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_dimension(medit: *mut mesh_io::medit::Mesh) -> c_int {
+pub unsafe extern "C" fn mio_mesh_dimension(medit: *mut Mesh) -> c_int {
     assert!(!medit.is_null());
 
     let medit = Box::from_raw(medit);
@@ -156,7 +157,7 @@ pub unsafe extern "C" fn mio_medit_dimension(medit: *mut mesh_io::medit::Mesh) -
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_node_count(medit: *mut mesh_io::medit::Mesh) -> u64 {
+pub unsafe extern "C" fn mio_mesh_node_count(medit: *mut Mesh) -> u64 {
     assert!(!medit.is_null());
 
     let medit = Box::from_raw(medit);
@@ -167,10 +168,7 @@ pub unsafe extern "C" fn mio_medit_node_count(medit: *mut mesh_io::medit::Mesh) 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_coordinates(
-    medit: *mut mesh_io::medit::Mesh,
-    node_idx: usize,
-) -> *const f64 {
+pub unsafe extern "C" fn mio_mesh_coordinates(medit: *mut Mesh, node_idx: usize) -> *const f64 {
     assert!(!medit.is_null());
 
     let medit = Box::from_raw(medit);
@@ -181,7 +179,7 @@ pub unsafe extern "C" fn mio_medit_coordinates(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_element_count(medit: *mut mesh_io::medit::Mesh) -> u64 {
+pub unsafe extern "C" fn mio_mesh_element_count(medit: *mut Mesh) -> u64 {
     assert!(!medit.is_null());
 
     let medit = Box::from_raw(medit);
@@ -199,9 +197,9 @@ pub struct MeditElement {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_medit_element(
+pub unsafe extern "C" fn mio_mesh_element(
     element: *mut MeditElement,
-    medit: *mut mesh_io::medit::Mesh,
+    medit: *mut Mesh,
     element_idx: usize,
 ) {
     assert!(!medit.is_null());
