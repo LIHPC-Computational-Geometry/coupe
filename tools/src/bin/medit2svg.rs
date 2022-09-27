@@ -125,6 +125,38 @@ fn merge_paths(mut paths: Vec<Vec<usize>>) -> impl Iterator<Item = Vec<usize>> {
     })
 }
 
+/// Returns the coordinates from a path and removes redundant nodes.
+fn path_to_coords(mesh: &Mesh, path: Vec<usize>) -> Vec<Point2D> {
+    fn are_aligned(p1: Point2D, p2: Point2D, p3: Point2D) -> bool {
+        const EPSILON: f64 = 1e-9;
+        let alignment = if f64::abs(p1[0] - p3[0]) < EPSILON {
+            p2[0] - p1[0]
+        } else if f64::abs(p1[1] - p3[1]) < EPSILON {
+            p2[1] - p1[1]
+        } else {
+            (p2[0] - p1[0]) / (p3[0] - p1[0]) - (p2[1] - p1[1]) / (p3[1] - p1[1])
+        };
+        f64::abs(alignment) < EPSILON
+    }
+
+    let mut path_coords: Vec<Point2D> = Vec::with_capacity(path.len());
+    for node in path {
+        let coords = mesh.node(node);
+        let coords = Point2D::new(coords[0], coords[1]);
+        let len = path_coords.len();
+        if let (Some(last_coords), Some(laster_coords)) =
+            (path_coords.get(len - 2), path_coords.last())
+        {
+            if are_aligned(*laster_coords, *last_coords, coords) {
+                path_coords[len - 1] = coords;
+                continue;
+            }
+        }
+        path_coords.push(coords);
+    }
+    path_coords
+}
+
 /// Returns the path that goes around the given set of elements.
 fn frontier<'a>(
     el_set: &HashSet<usize>,
@@ -169,14 +201,7 @@ fn frontier<'a>(
         .collect();
     merge_paths(path_set)
         .into_iter()
-        .map(|path| {
-            path.into_iter()
-                .map(|node| {
-                    let coords = mesh.node(node);
-                    Point2D::from([coords[0], coords[1]])
-                })
-                .collect()
-        })
+        .map(|path| path_to_coords(mesh, path))
         .collect()
 }
 
