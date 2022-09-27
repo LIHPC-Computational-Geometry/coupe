@@ -14,15 +14,19 @@ pub struct Standard {
 impl<const D: usize> ToRunner<D> for Standard {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> super::Runner<'a> {
         let weights = match &problem.weights {
-            weight::Array::Integers(is) => is,
-            weight::Array::Floats(_) => {
-                return runner_error("SCOTCH does not support float weights");
+            weight::Array::Integers(is) => {
+                if is.first().map_or(1, Vec::len) != 1 {
+                    return runner_error("SCOTCH cannot do multi-criteria partitioning");
+                }
+                crate::zoom_in(is.iter().map(|v| Some(v[0])))
+            }
+            weight::Array::Floats(fs) => {
+                if fs.first().map_or(1, Vec::len) != 1 {
+                    return runner_error("SCOTCH cannot do multi-criteria partitioning");
+                }
+                crate::zoom_in(fs.iter().map(|v| Some(v[0])))
             }
         };
-        if weights.first().map_or(1, Vec::len) != 1 {
-            return runner_error("SCOTCH cannot do multi-criteria partitioning");
-        }
-        let weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
