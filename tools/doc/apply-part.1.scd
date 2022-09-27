@@ -51,8 +51,8 @@ currently no way to force a particular format for input.
 The supported mesh formats are:
 
 - MEDIT, both ASCII and binary variants,
-- VTK, legacy ASCII and binary variants.  The binary variant assumes little
-  endian numbers.
+- VTK, legacy ASCII and binary variants.  The binary variant assumes big endian
+  numbers.
 
 # OUTPUT FORMAT
 

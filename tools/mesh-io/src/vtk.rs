@@ -98,7 +98,7 @@ fn add_piece(mesh: &mut Mesh, piece: UnstructuredGridPiece) {
 }
 
 pub fn parse_legacy<R: io::BufRead>(input: R) -> Result<Mesh, Error> {
-    let vtk = Vtk::parse_legacy_le(input)?;
+    let vtk = Vtk::parse_legacy_be(input)?;
     let mut mesh = Mesh::new(DIMENSION);
     match vtk.data {
         DataSet::ImageData { .. } => todo!(),
