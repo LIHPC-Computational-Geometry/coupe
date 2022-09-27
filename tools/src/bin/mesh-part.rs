@@ -155,7 +155,7 @@ fn main() -> Result<()> {
         n => anyhow::bail!("expected 2D or 3D mesh, got a {n}D mesh"),
     };
 
-    let output = coupe_tools::writer(matches.free.get(1))?;
+    let output = coupe_tools::writer(matches.free.get(0))?;
     mesh_io::partition::write(output, partition).context("failed to write partition")?;
 
     Ok(())
