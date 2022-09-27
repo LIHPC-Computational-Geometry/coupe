@@ -5,6 +5,8 @@ use std::fmt;
 use std::io;
 
 /// Deserialize a mesh into the ASCII MEDIT format.
+///
+/// This type implements [`Display`](fmt::Display).
 #[derive(Debug)]
 pub struct DisplayAscii<'a> {
     mesh: &'a Mesh,
