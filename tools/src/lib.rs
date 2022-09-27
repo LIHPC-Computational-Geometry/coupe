@@ -706,6 +706,8 @@ pub fn set_edge_weights(
 pub enum MeshFormat {
     MeditAscii,
     MeditBinary,
+    VtkAscii,
+    VtkBinary,
 }
 
 #[derive(Debug)]
@@ -713,7 +715,7 @@ pub struct MeshFormatError;
 
 impl std::fmt::Display for MeshFormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "expected 'mesh' or 'meshb'")
+        write!(f, "expected 'mesh', 'meshb', 'vtk-ascii' or 'vtk-binary'")
     }
 }
 impl std::error::Error for MeshFormatError {}
@@ -725,6 +727,8 @@ impl std::str::FromStr for MeshFormat {
         Ok(match &*s.to_ascii_lowercase() {
             "mesh" => Self::MeditAscii,
             "meshb" => Self::MeditBinary,
+            "vtk-ascii" => Self::VtkAscii,
+            "vtk-binary" => Self::VtkBinary,
             _ => return Err(MeshFormatError),
         })
     }
@@ -768,6 +772,8 @@ pub fn write_mesh(mesh: &Mesh, format: MeshFormat, filename: Option<&String>) ->
     match format {
         MeshFormat::MeditAscii => writeln!(w, "{}", mesh.display_medit_ascii())?,
         MeshFormat::MeditBinary => mesh.serialize_medit_binary(w)?,
+        MeshFormat::VtkAscii => writeln!(w, "{}", mesh.display_vtk_ascii())?,
+        MeshFormat::VtkBinary => mesh.serialize_vtk_binary(w)?,
     }
     Ok(())
 }
