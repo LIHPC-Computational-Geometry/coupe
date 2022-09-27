@@ -1,4 +1,3 @@
-use super::runner_error;
 use super::Problem;
 use super::Runner;
 use super::ToRunner;
@@ -13,14 +12,18 @@ pub struct Recursive {
 
 impl<const D: usize> ToRunner<D> for Recursive {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
-        let weights = match &problem.weights {
-            weight::Array::Integers(is) => is,
-            weight::Array::Floats(_) => {
-                return runner_error("METIS does not support float weights")
+        let (ncon, mut weights) = match &problem.weights {
+            weight::Array::Integers(is) => {
+                let ncon = is.first().map_or(1, Vec::len) as Idx;
+                let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
+                (ncon, weights)
+            }
+            weight::Array::Floats(fs) => {
+                let ncon = fs.first().map_or(1, Vec::len) as Idx;
+                let weights = crate::zoom_in(fs.iter().map(|v| v.iter().cloned()));
+                (ncon, weights)
             }
         };
-        let ncon = weights.first().map_or(1, Vec::len) as Idx;
-        let mut weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
@@ -55,14 +58,18 @@ pub struct KWay {
 
 impl<const D: usize> ToRunner<D> for KWay {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
-        let weights = match &problem.weights {
-            weight::Array::Integers(is) => is,
-            weight::Array::Floats(_) => {
-                return runner_error("METIS does not support float weights")
+        let (ncon, mut weights) = match &problem.weights {
+            weight::Array::Integers(is) => {
+                let ncon = is.first().map_or(1, Vec::len) as Idx;
+                let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
+                (ncon, weights)
+            }
+            weight::Array::Floats(fs) => {
+                let ncon = fs.first().map_or(1, Vec::len) as Idx;
+                let weights = crate::zoom_in(fs.iter().map(|v| v.iter().cloned()));
+                (ncon, weights)
             }
         };
-        let ncon = weights.first().map_or(1, Vec::len) as Idx;
-        let mut weights = crate::zoom_in(weights.iter().map(|v| v.iter().cloned()));
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
