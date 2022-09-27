@@ -20,7 +20,7 @@ distribution) can be visualized with medit tools.
 
 If output.mesh is omitted or is -, it is written to standard output.
 
-Only MEDIT meshes are supported, for now.  See *INPUT FORMAT* for details.
+Only some specific mesh formats are supported.  See *INPUT FORMAT* for details.
 
 # OPTIONS
 
