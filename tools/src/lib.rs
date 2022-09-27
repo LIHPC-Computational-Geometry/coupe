@@ -765,10 +765,30 @@ pub fn writer(filename: Option<&String>) -> Result<impl io::Write> {
 }
 
 /// Helper to write a mesh, either to stdout or to a file, in the given format.
-pub fn write_mesh(mesh: &Mesh, format: MeshFormat, filename: Option<&String>) -> Result<()> {
+pub fn write_mesh(
+    mesh: &Mesh,
+    format: Option<MeshFormat>,
+    filename: Option<&String>,
+) -> Result<()> {
     use std::io::Write;
 
     let mut w = writer(filename)?;
+    let format = format
+        .or_else(|| {
+            let path = std::path::Path::new(filename?);
+            let extension = path.extension()?;
+            let extension = extension.to_str()?;
+            if extension.eq_ignore_ascii_case("mesh") {
+                Some(MeshFormat::MeditAscii)
+            } else if extension.eq_ignore_ascii_case("meshb") {
+                Some(MeshFormat::MeditBinary)
+            } else if extension.eq_ignore_ascii_case("vtk") {
+                Some(MeshFormat::VtkAscii)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(MeshFormat::MeditBinary);
     match format {
         MeshFormat::MeditAscii => writeln!(w, "{}", mesh.display_medit_ascii())?,
         MeshFormat::MeditBinary => mesh.serialize_medit_binary(w)?,
