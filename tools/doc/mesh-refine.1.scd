@@ -29,8 +29,8 @@ FORMAT* for details.
 	Show a help message and exit.
 
 *-f, --format* <format>
-	Set the output format.  See *apply-part(1)*'s *OUTPUT FORMAT* for the list
-	of accepted values.
+	Override the output format.  By default, the file format is inferred from
+	the file extension.  See *apply-part(1)*'s *OUTPUT FORMAT* for more info.
 
 *-n, --times* <n>
 	Iterate a given number of times.  By default, only once.

@@ -41,10 +41,9 @@ fn main() -> Result<()> {
         anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
     }
 
-    let format: coupe_tools::MeshFormat = matches
+    let format = matches
         .opt_get("f")
-        .context("invalid value for option 'format'")?
-        .unwrap_or(coupe_tools::MeshFormat::MeditBinary);
+        .context("invalid value for option 'format'")?;
 
     let mesh_file = matches
         .opt_str("m")

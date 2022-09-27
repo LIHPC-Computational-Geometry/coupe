@@ -28,8 +28,8 @@ Only some specific mesh formats are supported.  See *INPUT FORMAT* for details.
 	Show a help message and exit.
 
 *-f, --format* <format>
-	Set the output format.  See *OUTPUT FORMAT* for the list of accepted
-	values.
+	Override the output format.  By default, the file format is inferred from
+	the file extension.  See *OUTPUT FORMAT* for more info.
 
 *-m, --mesh* <path>
 	Use the given mesh file as template.
