@@ -60,10 +60,12 @@ The *-f, --format* option changes the output format of the program.  These
 values are currently accepted:
 
 - _meshb_ (default): output MEDIT binary,
-- _mesh_: output MEDIT ASCII.
+- _mesh_: output MEDIT ASCII,
+- _vtk-ascii_: output VTK ASCII,
+- _vtk-binary_: output VTK binary (big endian).
 
 In general, you'll want the default _meshb_ format.  It is faster to read from and
-write to.  Use the ASCII format for debugging or for compatibility.
+write to.  Use the MEDIT ASCII format for debugging or for compatibility.
 
 # SEE ALSO
 
