@@ -1,4 +1,4 @@
-mesh-refine(1)
+mesh-dup(1)
 
 # NAME
 
