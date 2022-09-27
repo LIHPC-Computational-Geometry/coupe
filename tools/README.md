@@ -17,8 +17,8 @@ includes the following tools:
     - apply-part encodes a partition in a mesh file for visualization.
     - apply-weight encodes a weight distribution in a mesh file for
       visualization,
-    - medit2svg outputs an SVG given a MEDIT mesh file, for use with the two
-      above tools,
+    - mesh-svg outputs an SVG given a mesh file, for use with the two above
+      tools,
     - mesh-dup and mesh-refine increase the size of a mesh by either duplicating
       the vertices or splitting its elements into smaller ones, respectively,
     - mesh-reorder changes the order of mesh elements.
@@ -156,7 +156,7 @@ docker exec coupe_c sh -c 'mesh-part \
 docker exec coupe_c sh -c 'apply-part \
     --mesh shared/sample.mesh \
     --partition shared/sample.linear.rcb-fm.part \
-    | medit2svg >shared/sample.rcb-fm.svg'
+    | mesh-svg >shared/sample.rcb-fm.svg'
 
 # Open the svg file in firefox.
 firefox sample.rcb-fm.svg &
