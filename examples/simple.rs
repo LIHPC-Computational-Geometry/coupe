@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //      +---+---+       +---+---+
     //     0    3    6     1    2    3
     //
-    let coordinates: [Point2D; 9] = [
+    let coordinates: &[Point2D] = &[
         Point2D::new(0.0, 0.0),
         Point2D::new(0.0, 1.0),
         Point2D::new(0.0, 2.0),

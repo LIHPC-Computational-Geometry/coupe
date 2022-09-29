@@ -236,20 +236,36 @@ impl<const D: usize> ToRunner<D> for coupe::Rcb {
 impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
-        if D != 2 {
-            return runner_error("hilbert is only implemented for 2D meshes");
-        }
-        // SAFETY: is a noop since D == 2
-        let points = unsafe { mem::transmute::<&[PointND<D>], &[PointND<2>]>(problem.points()) };
-        match &problem.weights {
-            Integers(_) => runner_error("hilbert is only implemented for floats"),
-            Floats(fs) => {
-                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
-                Box::new(move |partition| {
-                    self.partition(partition, (points, &weights))?;
-                    Ok(None)
-                })
+        if D == 2 {
+            // SAFETY: is a noop since D == 2
+            let points =
+                unsafe { mem::transmute::<&[PointND<D>], &[PointND<2>]>(problem.points()) };
+            match &problem.weights {
+                Integers(_) => runner_error("hilbert is only implemented for floats"),
+                Floats(fs) => {
+                    let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                    Box::new(move |partition| {
+                        self.partition(partition, (points, &weights))?;
+                        Ok(None)
+                    })
+                }
             }
+        } else if D == 3 {
+            // SAFETY: is a noop since D == 3
+            let points =
+                unsafe { mem::transmute::<&[PointND<D>], &[PointND<3>]>(problem.points()) };
+            match &problem.weights {
+                Integers(_) => runner_error("hilbert is only implemented for floats"),
+                Floats(fs) => {
+                    let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                    Box::new(move |partition| {
+                        self.partition(partition, (points, &weights))?;
+                        Ok(None)
+                    })
+                }
+            }
+        } else {
+            runner_error("hilbert is only implemented for 2D and 3D meshes")
         }
     }
 }

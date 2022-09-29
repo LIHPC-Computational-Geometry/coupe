@@ -379,7 +379,8 @@ pub unsafe extern "C" fn coupe_hilbert(
             Err(_) => return Error::Alloc,
         };
 
-        let res = coupe::HilbertCurve { part_count, order }.partition(partition, (points, weights));
+        let res =
+            coupe::HilbertCurve { part_count, order }.partition(partition, (&*points, weights));
 
         match res {
             Ok(()) => Error::Ok,

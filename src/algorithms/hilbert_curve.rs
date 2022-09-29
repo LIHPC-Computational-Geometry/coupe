@@ -12,31 +12,21 @@
 
 use crate::geometry::OrientedBoundingBox;
 use crate::Point2D;
+use crate::Point3D;
+use crate::PointND;
 use rayon::prelude::*;
 use std::fmt;
 
-fn hilbert_curve_partition(
+fn partition_indexed<const D: usize>(
     partition: &mut [usize],
-    points: &[Point2D],
+    points: &[PointND<D>],
     weights: &[f64],
     part_count: usize,
-    order: usize,
+    index_fn: impl Fn(&PointND<D>) -> u64 + Send + Sync,
 ) {
-    debug_assert!(!partition.is_empty()); // to compute the bounding box
-    debug_assert_eq!(partition.len(), points.len());
-    debug_assert_eq!(partition.len(), weights.len());
-    debug_assert!(order < 64);
-
-    let compute_hilbert_index = hilbert_index_computer(points, order);
-    let mut permutation = (0..points.len()).into_par_iter().collect::<Vec<_>>();
-    let hilbert_indices = points
-        .par_iter()
-        .map(compute_hilbert_index)
-        .collect::<Vec<_>>();
-
-    permutation
-        .as_mut_slice()
-        .par_sort_by_key(|idx| hilbert_indices[*idx]);
+    let hilbert_indices: Vec<u64> = points.par_iter().map(index_fn).collect();
+    let mut permutation: Vec<usize> = (0..partition.len()).into_par_iter().collect();
+    permutation.par_sort_by_key(|idx| hilbert_indices[*idx]);
 
     // dummy modifiers to use directly the routine from multi_jagged
     let modifiers = vec![1. / part_count as f64; part_count];
@@ -78,19 +68,36 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
     }
 }
 
+/// Returns a function that maps 2D points to their hilbert curve index.
+///
 /// Panics if `points` is empty.
-fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
+fn index_fn_2d(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
     let mbr = OrientedBoundingBox::from_points(points).unwrap();
     let aabb = mbr.aabb();
     let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
     let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
     move |p| {
         let p = mbr.obb_to_aabb(p);
-        encode(x_mapping(p.x), y_mapping(p.y), order)
+        encode_2d(x_mapping(p.x), y_mapping(p.y), order)
     }
 }
 
-/// Slower version of [encode], used to build the lookup table used by [encode].
+/// Returns a function that maps 3D points to their hilbert curve index.
+///
+/// Panics if `points` is empty.
+fn index_fn_3d(points: &[Point3D], order: usize) -> impl Fn(&Point3D) -> u64 {
+    let mbr = OrientedBoundingBox::from_points(points).unwrap();
+    let aabb = mbr.aabb();
+    let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
+    let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
+    let z_mapping = segment_to_segment(aabb.p_min.z, aabb.p_max.z, order);
+    move |p| {
+        let p = mbr.obb_to_aabb(p);
+        encode_3d(x_mapping(p.x), y_mapping(p.y), z_mapping(p.z), order)
+    }
+}
+
+/// Slower version of [encode_2d], to build the lookup table for [encode_2d].
 ///
 /// This version takes the initial configuration as argument and also returns
 /// the final configuration.
@@ -100,7 +107,7 @@ fn hilbert_index_computer(points: &[Point2D], order: usize) -> impl Fn(&Point2D)
 ///
 /// TODO: once const-fn are more mature, take the "order" argument into account,
 /// though it is only set to 6 for the purpose of building the lookup table.
-const fn encode_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
+const fn encode_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
     // BASE_PATTERN[i][j] is the hilbert index given:
     // - i: the current configuration,
     // - j: the quadrant in row-major order.
@@ -156,20 +163,7 @@ const fn encode_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usi
     (hilbert, config)
 }
 
-const HILBERT_LUT: [u16; 16_384] = {
-    let mut lut = [0; 16_384];
-    let mut i: usize = 0;
-    while i < 16_384 {
-        let zorder = (i & 0xfff) as u64;
-        let config = i >> 12;
-        let (hilbert_order, config) = encode_slow(zorder, 6, config);
-        lut[i] = (config << 12) as u16 | hilbert_order as u16;
-        i += 1;
-    }
-    lut
-};
-
-fn encode(x: u64, y: u64, order: usize) -> u64 {
+fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
     debug_assert!(order < 64);
     debug_assert!(
         x < (1 << order),
@@ -184,6 +178,19 @@ fn encode(x: u64, y: u64, order: usize) -> u64 {
         order,
     );
 
+    const LUT: [u16; 16_384] = {
+        let mut lut = [0; 16_384];
+        let mut i: usize = 0;
+        while i < 16_384 {
+            let zorder = (i & 0xfff) as u64;
+            let config = i >> 12;
+            let (hilbert_order, config) = encode_2d_slow(zorder, 6, config);
+            lut[i] = (config << 12) as u16 | hilbert_order as u16;
+            i += 1;
+        }
+        lut
+    };
+
     let zorder = unsafe {
         std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
             | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
@@ -193,16 +200,71 @@ fn encode(x: u64, y: u64, order: usize) -> u64 {
     let mut hilbert: u64 = 0;
     let mut shift: i64 = 2 * order as i64 - 12;
     while shift > 0 {
-        config = HILBERT_LUT[((config & !0xfff) | ((zorder >> shift) & 0xfff) as u16) as usize];
+        config = LUT[((config & !0xfff) | ((zorder >> shift) & 0xfff) as u16) as usize];
         hilbert = (hilbert << 12) | (config & 0xfff) as u64;
         shift -= 12;
     }
 
-    config =
-        HILBERT_LUT[((config & !0xfff) | ((zorder << (-shift) as u64) & 0xfff) as u16) as usize];
+    config = LUT[((config & !0xfff) | ((zorder << (-shift) as u64) & 0xfff) as u16) as usize];
     hilbert = (hilbert << 12) | (config & 0xfff) as u64;
 
     hilbert >> -shift
+}
+
+fn encode_3d(x: u64, y: u64, z: u64, order: usize) -> u64 {
+    debug_assert!(order < 64);
+    debug_assert!(
+        x < (1 << order),
+        "Cannot encode the point {:?} on an hilbert curve of order {} because x >= 2^order.",
+        (x, y, z),
+        order,
+    );
+    debug_assert!(
+        y < (1 << order),
+        "Cannot encode the point {:?} on an hilbert curve of order {} because y >= 2^order.",
+        (x, y, z),
+        order,
+    );
+    debug_assert!(
+        z < (1 << order),
+        "Cannot encode the point {:?} on an hilbert curve of order {} because z >= 2^order.",
+        (x, y, z),
+        order,
+    );
+
+    #[allow(clippy::unusual_byte_groupings)]
+    #[rustfmt::skip]
+    const LUT: [u8; 96] = [
+        0b0110_000, 0b0100_001, 0b0011_011, 0b0100_010, 0b0101_111, 0b1001_110, 0b0011_100, 0b1001_101,
+        0b1000_010, 0b0011_101, 0b0110_011, 0b0110_100, 0b1000_001, 0b0011_110, 0b1001_000, 0b0111_111,
+        0b1001_100, 0b1011_111, 0b1001_011, 0b0011_000, 0b0110_101, 0b0110_110, 0b1010_010, 0b1010_001,
+        0b0010_010, 0b0000_011, 0b0010_001, 0b1010_000, 0b0111_101, 0b0000_100, 0b0111_110, 0b0001_111,
+        0b0000_000, 0b0111_011, 0b1000_111, 0b0111_100, 0b0110_001, 0b0110_010, 0b1010_110, 0b1010_101,
+        0b1010_100, 0b1010_011, 0b0000_101, 0b1011_010, 0b1001_111, 0b0111_000, 0b0000_110, 0b1011_001,
+        0b0100_000, 0b0010_111, 0b0000_001, 0b1011_110, 0b0001_011, 0b0001_100, 0b0000_010, 0b1011_101,
+        0b0101_010, 0b0101_001, 0b0001_101, 0b0001_110, 0b0100_011, 0b1011_000, 0b0100_100, 0b0011_111,
+        0b1011_100, 0b0100_101, 0b1010_111, 0b0100_110, 0b1011_011, 0b1001_010, 0b0001_000, 0b1001_001,
+        0b0101_110, 0b0101_101, 0b0001_001, 0b0001_010, 0b0000_111, 0b0010_100, 0b1000_000, 0b0010_011,
+        0b1000_110, 0b0011_001, 0b0100_111, 0b0010_000, 0b1000_101, 0b0011_010, 0b0101_100, 0b0101_011,
+        0b0010_110, 0b0110_111, 0b0010_101, 0b1000_100, 0b0111_001, 0b0101_000, 0b0111_010, 0b1000_011,
+    ];
+
+    let zorder = unsafe {
+        std::arch::x86_64::_pdep_u64(x, 0x9249_2492_4924_9249 << 2)
+            | std::arch::x86_64::_pdep_u64(y, 0x9249_2492_4924_9249 << 1)
+            | std::arch::x86_64::_pdep_u64(z, 0x9249_2492_4924_9249)
+    };
+
+    let mut config = 0;
+    let mut hilbert = 0;
+
+    for i in (0..order).rev() {
+        config = LUT[(config | ((zorder >> (3 * i)) & 7)) as usize] as u64;
+        hilbert = (hilbert << 3) | (config & 7);
+        config &= !7;
+    }
+
+    hilbert
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -247,7 +309,7 @@ impl std::error::Error for Error {}
 /// use coupe::Partition as _;
 /// use coupe::Point2D;
 ///
-/// let points = [
+/// let points: &[Point2D] = &[
 ///     Point2D::new(0., 0.),
 ///     Point2D::new(1., 1.),
 ///     Point2D::new(0., 10.),
@@ -272,10 +334,13 @@ impl std::error::Error for Error {}
 /// # }
 /// ```
 ///
-/// # Reference
+/// # References
 ///
 /// Marot, Célestin. *Parallel tetrahedral mesh generation*. Prom.: Remacle,
 /// Jean-François <http://hdl.handle.net/2078.1/240626>.
+///
+/// rawunprotected. *LUT-based 3D Hilbert curves*.
+/// <http://threadlocalmutex.com/?p=149>
 #[derive(Clone, Copy, Debug)]
 pub struct HilbertCurve {
     pub part_count: usize,
@@ -291,10 +356,8 @@ impl Default for HilbertCurve {
     }
 }
 
-// hilbert curve is only implemented in 2d for now
-impl<P, W> crate::Partition<(P, W)> for HilbertCurve
+impl<W> crate::Partition<(&[Point2D], W)> for HilbertCurve
 where
-    P: AsRef<[Point2D]>,
     W: AsRef<[f64]>,
 {
     type Metadata = ();
@@ -303,7 +366,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (points, weights): (P, W),
+        (points, weights): (&[Point2D], W),
     ) -> Result<Self::Metadata, Self::Error> {
         if self.order >= 64 {
             return Err(Error::InvalidOrder {
@@ -314,12 +377,46 @@ where
         if part_ids.is_empty() {
             return Ok(());
         }
-        hilbert_curve_partition(
+        let index_fn = index_fn_2d(points, self.order as usize);
+        partition_indexed(
             part_ids,
-            points.as_ref(),
+            points,
             weights.as_ref(),
             self.part_count,
-            self.order as usize,
+            index_fn,
+        );
+        Ok(())
+    }
+}
+
+impl<W> crate::Partition<(&[Point3D], W)> for HilbertCurve
+where
+    W: AsRef<[f64]>,
+{
+    type Metadata = ();
+    type Error = Error;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&[Point3D], W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        if self.order >= 64 {
+            return Err(Error::InvalidOrder {
+                max: 63,
+                actual: self.order,
+            });
+        }
+        if part_ids.is_empty() {
+            return Ok(());
+        }
+        let index_fn = index_fn_3d(points, self.order as usize);
+        partition_indexed(
+            part_ids,
+            points,
+            weights.as_ref(),
+            self.part_count,
+            index_fn,
         );
         Ok(())
     }
@@ -357,7 +454,7 @@ mod tests {
         let points = vec![(0, 0), (1, 1), (1, 0), (0, 1)];
         let indices = points
             .into_iter()
-            .map(|(x, y)| encode(x, y, 1))
+            .map(|(x, y)| encode_2d(x, y, 1))
             .collect::<Vec<_>>();
 
         assert_eq!(indices, vec![0, 2, 3, 1]);
@@ -387,7 +484,7 @@ mod tests {
         let expected: Vec<_> = (0..16).collect();
         let indices = points
             .into_iter()
-            .map(|(x, y)| encode(x, y, 2))
+            .map(|(x, y)| encode_2d(x, y, 2))
             .collect::<Vec<_>>();
 
         assert_eq!(indices, expected);
