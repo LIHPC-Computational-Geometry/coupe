@@ -59,28 +59,6 @@ fn hilbert_curve_partition(
         });
 }
 
-#[allow(unused)]
-pub(crate) fn hilbert_curve_reorder(points: &[Point2D], order: usize) -> Vec<usize> {
-    let mut permutation: Vec<usize> = (0..points.len()).into_par_iter().collect();
-    hilbert_curve_reorder_permu(points, &mut permutation, order);
-    permutation
-}
-
-/// Reorder a set of points and weights following the hilbert curve technique.
-/// First, the minimal bounding rectangle of the set of points is computed and local
-/// coordinated are defined on it: the mbr is seen as [0; 2^order - 1]^2.
-/// Then the hilbert curve is computed from those local coordinates.
-fn hilbert_curve_reorder_permu(points: &[Point2D], permutation: &mut [usize], order: usize) {
-    debug_assert!(order < 32);
-
-    let compute_hilbert_index = hilbert_index_computer(points, order);
-
-    permutation.par_sort_by_key(|idx| {
-        let p = &points[*idx];
-        compute_hilbert_index(p)
-    });
-}
-
 /// Compute a mapping from [min; max] to [0; 2**order-1]
 fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
     debug_assert!(min <= max);
