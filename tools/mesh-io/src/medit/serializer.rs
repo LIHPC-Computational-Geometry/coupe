@@ -110,6 +110,10 @@ impl Mesh {
 
         // Elements
         for (element_type, nodes, refs) in &self.topology {
+            if *element_type == ElementType::Vertex {
+                // Breaks MEDIT and meshio-py.
+                continue;
+            }
             w.write_all(&i32::to_le_bytes(element_type.code() as i32))?;
             let element_count = refs.len();
             let nodes_per_element = element_type.node_count();
