@@ -27,7 +27,7 @@ impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ErrorKind::UnexpectedToken { expected, found } => {
-                write!(f, "expected token {:?}, found {}", expected, found)
+                write!(f, "expected token {:?}, found {:?}", expected, found)
             }
             ErrorKind::Io(err) => write!(f, "io error: {}", err),
             ErrorKind::BadInteger(err) => write!(f, "when parsing integer: {}", err),
