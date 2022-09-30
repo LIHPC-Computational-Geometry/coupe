@@ -24,15 +24,26 @@ fn partition_indexed<const D: usize>(
     part_count: usize,
     index_fn: impl Fn(&PointND<D>) -> u64 + Send + Sync,
 ) {
+    let span = tracing::info_span!("compute indices");
+    let enter = span.enter();
+
     let hilbert_indices: Vec<u64> = points.par_iter().map(index_fn).collect();
     let mut permutation: Vec<usize> = (0..partition.len()).into_par_iter().collect();
     permutation.par_sort_by_key(|idx| hilbert_indices[*idx]);
+
+    mem::drop(enter);
+    let span = tracing::info_span!("computing split positions");
+    let enter = span.enter();
 
     // dummy modifiers to use directly the routine from multi_jagged
     let modifiers = vec![1. / part_count as f64; part_count];
 
     let split_positions =
         super::multi_jagged::compute_split_positions(weights, &permutation, &modifiers);
+
+    mem::drop(enter);
+    let span = tracing::info_span!("apply part ids");
+    let _enter = span.enter();
 
     let sub_permutation =
         super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
