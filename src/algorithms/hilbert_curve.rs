@@ -14,8 +14,151 @@ use crate::geometry::OrientedBoundingBox;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
+use num_traits::AsPrimitive;
+use num_traits::NumAssign;
+use num_traits::One;
 use rayon::prelude::*;
 use std::fmt;
+use std::iter::Sum;
+use std::mem;
+
+/// Divide `points` into `n` parts of similar weights.
+///
+/// The result is an array of `n` elements, the ith element is the the ???est
+/// value of the ith part.
+fn weighted_quantiles<P, W>(points: &[P], weights: &[W], n: usize) -> Vec<P>
+where
+    P: 'static + Copy + PartialOrd + Send + Sync,
+    P: NumAssign + One,
+    usize: AsPrimitive<P>,
+    W: Send + Sync,
+    W: NumAssign + Sum + AsPrimitive<f64>,
+    usize: AsPrimitive<W>,
+{
+    debug_assert!(n > 0);
+
+    const SPLIT_TOLERANCE: f64 = 0.05;
+    let _2_p = {
+        let _1_p = P::one();
+        _1_p + _1_p
+    };
+
+    let (min, max) = rayon::join(
+        || *points.par_iter().min_by(crate::partial_cmp).unwrap(),
+        || *points.par_iter().max_by(crate::partial_cmp).unwrap(),
+    );
+
+    struct Split<P> {
+        position: P,
+        min_bound: P,
+        max_bound: P,
+        settled: bool,
+    }
+
+    let mut splits: Vec<Split<P>> = (1..n)
+        .map(|i| Split {
+            position: min + AsPrimitive::<P>::as_(i) * (max - min) / AsPrimitive::<P>::as_(n),
+            min_bound: min,
+            max_bound: max,
+            settled: false,
+        })
+        .collect();
+
+    // Number of splits that need to be settled.
+    let mut todo_split_count = n - 1;
+
+    while todo_split_count > 0 {
+        let part_weights = points
+            .par_iter()
+            .zip(weights)
+            .fold(
+                || vec![W::zero(); n],
+                |mut part_weights, (p, w)| {
+                    let (Ok(split) | Err(split)) =
+                        splits.binary_search_by(|split| crate::partial_cmp(&split.position, p));
+                    part_weights[split] += *w;
+                    part_weights
+                },
+            )
+            .reduce_with(|mut pw0, pw1| {
+                for (pw0, pw1) in pw0.iter_mut().zip(pw1) {
+                    *pw0 += pw1;
+                }
+                pw0
+            })
+            .unwrap();
+
+        let total_weight: W = part_weights.iter().cloned().sum();
+        let prefix_left_weights = part_weights
+            .iter()
+            .scan(W::zero(), |weight_sum, part_weight| {
+                *weight_sum += *part_weight;
+                Some(*weight_sum)
+            });
+
+        for (p, left_weight) in (0..n - 1).zip(prefix_left_weights) {
+            if splits[p].settled {
+                continue;
+            }
+            let left_weight_ratio = left_weight.as_() / (p + 1) as f64;
+            let right_weight_ratio = (total_weight - left_weight).as_() / (n - p - 1) as f64;
+            if f64::abs(left_weight_ratio - right_weight_ratio) / total_weight.as_()
+                < SPLIT_TOLERANCE
+            {
+                splits[p].settled = true;
+                todo_split_count -= 1;
+                continue;
+            }
+            let expected_left_weight = (p + 1) as f64 * total_weight.as_() / n as f64;
+            if left_weight_ratio < right_weight_ratio {
+                splits[p].min_bound = splits[p].position;
+                let mut pw = left_weight;
+                for q in p + 1..n - 1 {
+                    pw += part_weights[q];
+                    if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
+                        splits[p].min_bound = splits[q].position;
+                        splits[p].max_bound = splits[q].position;
+                        break;
+                    } else if expected_left_weight < pw.as_() {
+                        if splits[q].position < splits[p].max_bound {
+                            splits[p].max_bound = splits[q].position;
+                        }
+                        break;
+                    } else if pw.as_() < expected_left_weight {
+                        splits[p].min_bound = splits[q].position;
+                    }
+                }
+            } else {
+                splits[p].max_bound = splits[p].position;
+                let mut pw = left_weight;
+                for q in (0..p).rev() {
+                    pw -= part_weights[q + 1];
+                    if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
+                        splits[p].min_bound = splits[q].position;
+                        splits[p].max_bound = splits[q].position;
+                        break;
+                    } else if pw.as_() < expected_left_weight {
+                        if splits[p].min_bound < splits[q].position {
+                            splits[p].min_bound = splits[q].position;
+                        }
+                        break;
+                    } else if expected_left_weight < pw.as_() {
+                        splits[p].max_bound = splits[q].position;
+                    }
+                }
+            }
+            let new_position = (splits[p].min_bound + splits[p].max_bound) / _2_p;
+            if splits[p].position == new_position {
+                splits[p].settled = true;
+                todo_split_count -= 1;
+                continue;
+            }
+            splits[p].position = new_position;
+        }
+    }
+
+    splits.into_iter().map(|split| split.position).collect()
+}
 
 fn partition_indexed<const D: usize>(
     partition: &mut [usize],
@@ -28,35 +171,23 @@ fn partition_indexed<const D: usize>(
     let enter = span.enter();
 
     let hilbert_indices: Vec<u64> = points.par_iter().map(index_fn).collect();
-    let mut permutation: Vec<usize> = (0..partition.len()).into_par_iter().collect();
-    permutation.par_sort_by_key(|idx| hilbert_indices[*idx]);
 
     mem::drop(enter);
     let span = tracing::info_span!("computing split positions");
     let enter = span.enter();
 
-    // dummy modifiers to use directly the routine from multi_jagged
-    let modifiers = vec![1. / part_count as f64; part_count];
-
-    let split_positions =
-        super::multi_jagged::compute_split_positions(weights, &permutation, &modifiers);
+    let split_positions = weighted_quantiles(&hilbert_indices, weights, part_count);
 
     mem::drop(enter);
     let span = tracing::info_span!("apply part ids");
     let _enter = span.enter();
 
-    let sub_permutation =
-        super::multi_jagged::split_at_mut_many(&mut permutation, &split_positions);
-    let atomic_partition_handle = std::sync::atomic::AtomicPtr::new(partition.as_mut_ptr());
-
-    sub_permutation
-        .par_iter()
-        .enumerate()
-        .for_each(|(part_id, slice)| {
-            let ptr = atomic_partition_handle.load(std::sync::atomic::Ordering::Relaxed);
-            for i in &**slice {
-                unsafe { std::ptr::write(ptr.add(*i), part_id) }
-            }
+    partition
+        .par_iter_mut()
+        .zip(hilbert_indices)
+        .for_each(|(part, index)| {
+            let (Ok(part_id) | Err(part_id)) = split_positions.binary_search(&index);
+            *part = part_id;
         });
 }
 
