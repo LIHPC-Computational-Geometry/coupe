@@ -18,6 +18,8 @@ shift
 
 csv="$BASELINE.strong.csv"
 svg="$BASELINE.strong.svg"
+csv_wt="$BASELINE.wt.csv"
+svg_wt="$BASELINE.wt.svg"
 
 bg_path() {
 	benchmark_group=$1
@@ -47,7 +49,7 @@ stddev_ns() {
 	fi
 }
 
-sayfile Aggregating "$csv"
+sayfile Aggregating "$csv_wt"
 
 thread_counts=$(
 for benchmark_group in "$@"
@@ -65,10 +67,10 @@ done | sort -n | uniq
 	for benchmark_group in "$@"
 	do
 		group=$(echo "$benchmark_group" | tr ';' '_')
-		printf " ; %s" "$group"
+		printf ";%s" "$group"
 	done
 	printf "\n"
-) >"$csv"
+) >"$csv_wt"
 
 echo "$thread_counts" | while read -r thread_count
 do
@@ -77,37 +79,86 @@ do
 	do
 		if t=$(time_ns "$benchmark_group" "$thread_count")
 		then
-			t_seq=$(time_ns "$benchmark_group" 1)
-			speedup=$(echo "$t_seq / $t" | bc -l)
-			printf " ; %f" "$speedup"
+			printf ";%f" "$t"
 		else
-			printf " ;"
+			printf ";"
 		fi
 	done
 	printf "\n"
-done >>"$csv"
+done >>"$csv_wt"
+
+sayfile Aggregating "$csv"
+
+awk '
+BEGIN { FS = ";"; OFS = ";" }
+(NR == 1) { print }
+(NR == 2) {
+	for (i = 2; i <= NF; i++) { t_seq[i] = $i; $i = 1 }
+	print
+}
+(NR > 2) {
+	for (i = 2; i <= NF; i++) {
+		if ($i != "") { $i = t_seq[i] / $i }
+	}
+	print
+}
+' "$csv_wt" >"$csv"
+
+speedup_bound=$(awk '
+	BEGIN { max_speedup = 0; FS = ";" }
+	(NR > 1) {
+		for (i = 2; i <= NF; i++) {
+			if (max_speedup < $i) { max_speedup = $i }
+		}
+	}
+	END { print max_speedup * 1.05 }
+' "$csv")
 
 max_thread_count=$(echo "$thread_counts" | tail -n1)
-plot_cmds=$(awk -v csv="$csv" "BEGIN{
-	for (i=1; i<ARGC; i++) {
-		gsub(/_/, \"\\\\_\", ARGV[i])
-		printf \",'%s' using 1:%d title '%s' with linespoints\",csv,i+1,ARGV[i]
-	}
-}" $@)
+plot_cmds() {
+	csv="$1"
+	shift
+
+	i=2
+	for p in "$@"
+	do
+		p=$(echo "$p" | sed 's/_/\\_/g')
+		printf "'%s' using 1:%d title '%s' with linespoints" "$csv" "$i" "$p"
+		if [ $i -le $# ]
+		then printf ", "
+		fi
+		i=$((i+1))
+	done
+}
+
+sayfile Rendering "$svg"
 
 gnuplot <<EOF
 	set output '$svg'
 	set datafile separator ';'
 	set term svg size 1366,768
 
-	set title 'Strong scaling'
+	set title '$TITLE - strong scaling'
 	set xlabel 'Number of threads'
 	set ylabel 'Speedup'
 	set xrange [1:$max_thread_count]
-	set logscale x 2
-	set logscale y 2
+	set yrange [1:$speedup_bound]
 	set grid ytics
-	plot x title 'Ideal' dashtype 2 $plot_cmds
+	plot x title 'Ideal' dashtype 2, $(plot_cmds "$csv" "$@")
 EOF
 
-say Rendered "$svg"
+sayfile Rendering "$svg_wt"
+
+gnuplot <<EOF
+	set output '$svg_wt'
+	set datafile separator ';'
+	set term svg size 1366,768
+
+	set title '$TITLE - wall time'
+	set xlabel 'Number of threads'
+	set ylabel 'Wall time (ns)'
+	set xrange [1:$max_thread_count]
+	set logscale y 10
+	set grid ytics
+	plot $(plot_cmds "$csv_wt" "$@")
+EOF
