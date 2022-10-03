@@ -1,4 +1,7 @@
 use super::Error;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use sprs::CsMatView;
@@ -244,7 +247,7 @@ where
 pub trait FmWeight
 where
     Self: Copy + std::fmt::Debug + Send + Sync,
-    Self: Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive + num::Zero,
+    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
     Self: Sub<Output = Self> + AddAssign + SubAssign,
 {
 }
@@ -252,7 +255,7 @@ where
 impl<T> FmWeight for T
 where
     Self: Copy + std::fmt::Debug + Send + Sync,
-    Self: Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive + num::Zero,
+    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
     Self: Sub<Output = Self> + AddAssign + SubAssign,
 {
 }

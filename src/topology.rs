@@ -1,6 +1,6 @@
 //! Utilities to handle topologic concepts and metrics related to mesh
 
-use num::FromPrimitive;
+use num_traits::FromPrimitive;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator as _;

@@ -1,3 +1,6 @@
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+
 use super::Error;
 use std::iter::Sum;
 use std::ops::Add;
@@ -158,14 +161,14 @@ pub struct CompleteKarmarkarKarp {
 /// Trait alias for values accepted as weights by [CompleteKarmarkarKarp].
 pub trait CkkWeight
 where
-    Self: Copy + Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + Sum + PartialOrd + FromPrimitive + ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self>,
 {
 }
 
 impl<T> CkkWeight for T
 where
-    Self: Copy + Sum + PartialOrd + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + Sum + PartialOrd + FromPrimitive + ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self>,
 {
 }

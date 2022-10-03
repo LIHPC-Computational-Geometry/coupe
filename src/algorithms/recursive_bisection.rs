@@ -9,6 +9,7 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::ToTypenum;
+use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::cmp;
 use std::iter::Sum;
@@ -444,7 +445,7 @@ where
 pub trait RcbWeight
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + num::ToPrimitive,
+    Self: Sum + PartialOrd + ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
@@ -452,7 +453,7 @@ where
 impl<T> RcbWeight for T
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + num::ToPrimitive,
+    Self: Sum + PartialOrd + ToPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }

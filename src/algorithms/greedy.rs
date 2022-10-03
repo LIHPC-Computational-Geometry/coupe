@@ -1,4 +1,5 @@
 use super::Error;
+use num_traits::Zero;
 use std::ops::AddAssign;
 
 /// Implementation of the greedy algorithm.
@@ -50,11 +51,11 @@ where
 /// Trait alias for values accepted as weights by [Greedy].
 pub trait GreedyWeight
 where
-    Self: PartialOrd + num::Zero + Clone + AddAssign,
+    Self: PartialOrd + Zero + Clone + AddAssign,
 {
 }
 
-impl<T> GreedyWeight for T where Self: PartialOrd + num::Zero + Clone + AddAssign {}
+impl<T> GreedyWeight for T where Self: PartialOrd + Zero + Clone + AddAssign {}
 
 /// # Greedy number partitioning algorithm
 ///

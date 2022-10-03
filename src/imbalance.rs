@@ -1,7 +1,7 @@
 use itertools::Itertools;
-use num::FromPrimitive;
-use num::ToPrimitive;
-use num::Zero;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator as _;
