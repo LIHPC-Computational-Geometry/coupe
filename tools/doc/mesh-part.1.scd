@@ -61,9 +61,26 @@ Options specific to *mesh-part*:
 
 Options specific to *part-bench*:
 
-*-e, --efficiency*
+*-e, --efficiency* [threads]
 	Measure strong scaling by running the algorithm with different amounts of
 	threads.
+
+	By default, part-bench starts at 1 thread, then doubles the thread count
+	until it exceeds the number of available hardware threads.
+
+	You can specify arbitrary thread counts in the following manner:
+
+	```
+	threads = range *( , range )
+	range   = VALUE / ( FROM : TO ) / ( FROM : TO : STEP )
+	```
+
+	For example, the following invocation will run the algorithms for 1 thread,
+	then 2, 6, 10, ... to 64, then 72, 80, 88, ... to 256.
+
+		part-bench -e 1,2:64:4,64:256:8,256
+
+	Ranges are exclusive.
 
 *-b, --baseline* <name>
 *-s, --save-baseline* <name>

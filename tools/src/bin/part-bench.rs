@@ -13,10 +13,45 @@ use mesh_io::Mesh;
 use std::env;
 use std::fs;
 use std::io;
+use std::iter;
+use std::ops::Range;
 use std::thread::sleep;
 use std::time::Duration;
 
 const USAGE: &str = "Usage: part-bench [options]";
+
+struct RangeWithStep {
+    range: Range<usize>,
+    step_by: usize,
+}
+
+fn parse_ranges(s: &str) -> Result<Vec<RangeWithStep>> {
+    s.split(',')
+        .map(|range_str| {
+            let components: Vec<&str> = range_str.split(':').collect();
+            let (range, step_by) = match *components {
+                [] => anyhow::bail!("missing range definition"),
+                [value] => {
+                    let value = value.parse()?;
+                    (value..value + 1, 1)
+                }
+                [from, to] => (from.parse()?..to.parse()?, 1),
+                [from, to, step_by] => (from.parse()?..to.parse()?, step_by.parse()?),
+                _ => anyhow::bail!("excessive arguments"),
+            };
+            Ok(RangeWithStep { range, step_by })
+        })
+        .collect()
+}
+
+impl IntoIterator for RangeWithStep {
+    type Item = usize;
+    type IntoIter = std::iter::StepBy<Range<usize>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.range.step_by(self.step_by)
+    }
+}
 
 fn criterion_options(options: &mut getopts::Options) {
     // TODO use Criterion::configure_with_args when it respects POSIX's "--"
@@ -94,6 +129,40 @@ fn build_pool(thread_count: usize) -> rayon::ThreadPool {
         .unwrap()
 }
 
+fn measure_efficiency(
+    c: &mut Criterion,
+    benchmark_name: String,
+    thread_counts: Option<String>,
+    mut benchmark: impl FnMut() + Send,
+) -> Result<()> {
+    let mut g = c.benchmark_group(benchmark_name);
+
+    let thread_counts: Box<dyn Iterator<Item = usize>> = match thread_counts {
+        Some(s) => {
+            let ranges = parse_ranges(&s).context("failed to parse the value of -e")?;
+            Box::new(ranges.into_iter().flatten())
+        }
+        None => {
+            let max_threads = rayon::current_num_threads();
+            let it = iter::successors(Some(1), move |t| (t * 2 <= max_threads).then(|| t * 2));
+            Box::new(it)
+        }
+    };
+    let mut thread_counts = thread_counts.peekable();
+
+    while let Some(thread_count) = thread_counts.next() {
+        let pool = build_pool(thread_count);
+        let benchmark_name = format!("threads={thread_count}");
+        g.bench_function(&benchmark_name, |b| pool.install(|| b.iter(&mut benchmark)));
+        if thread_counts.peek().is_some() {
+            println!("Waiting 4s for CPUs to cool down...");
+            sleep(Duration::from_secs(4));
+        }
+    }
+
+    Ok(())
+}
+
 fn main_d<const D: usize>(
     matches: getopts::Matches,
     edge_weights: coupe_tools::EdgeWeightDistribution,
@@ -163,20 +232,7 @@ where
         }
     };
     if matches.opt_present("e") {
-        let max_threads = rayon::current_num_threads();
-        let mut g = c.benchmark_group(benchmark_name);
-        let mut thread_count = 1;
-        loop {
-            let pool = build_pool(thread_count);
-            let benchmark_name = format!("threads={thread_count}");
-            g.bench_function(&benchmark_name, |b| pool.install(|| b.iter(&mut benchmark)));
-            thread_count *= 2;
-            if max_threads < thread_count {
-                break;
-            }
-            println!("Waiting 4s for CPUs to cool down...");
-            sleep(Duration::from_secs(4));
-        }
+        measure_efficiency(&mut c, benchmark_name, matches.opt_str("e"), benchmark)?;
     } else {
         c.bench_function(&benchmark_name, |b| b.iter(&mut benchmark));
     }
@@ -196,7 +252,7 @@ fn main() -> Result<()> {
         "name of the algorithm to run, see ALGORITHMS",
         "NAME",
     );
-    options.optflag("e", "efficiency", "Benchmark efficiency");
+    options.optflagopt("e", "efficiency", "Benchmark efficiency", "THREADS");
     options.optopt(
         "E",
         "edge-weights",
