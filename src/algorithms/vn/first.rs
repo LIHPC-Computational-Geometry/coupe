@@ -80,7 +80,7 @@ where
 pub trait VnFirstWeight
 where
     Self: Copy + Send + Sync,
-    Self: Sum + PartialOrd + num::Zero + num::One,
+    Self: Sum + PartialOrd + num_traits::Zero + num_traits::One,
     Self: Sub<Output = Self> + AddAssign,
 {
 }
@@ -88,7 +88,7 @@ where
 impl<T> VnFirstWeight for T
 where
     Self: Copy + Send + Sync,
-    Self: Sum + PartialOrd + num::Zero + num::One,
+    Self: Sum + PartialOrd + num_traits::Zero + num_traits::One,
     Self: Sub<Output = Self> + AddAssign,
 {
 }

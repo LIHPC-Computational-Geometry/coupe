@@ -1,4 +1,5 @@
 use super::Error;
+use num_traits::Zero;
 use std::collections::BinaryHeap;
 use std::ops::Sub;
 use std::ops::SubAssign;
@@ -118,11 +119,11 @@ where
 /// Trait alias for values accepted as weights by [KarmarkarKarp].
 pub trait KkWeight
 where
-    Self: num::Zero + Ord + Sub<Output = Self> + SubAssign + Copy,
+    Self: Zero + Ord + Sub<Output = Self> + SubAssign + Copy,
 {
 }
 
-impl<T> KkWeight for T where Self: num::Zero + Ord + Sub<Output = Self> + SubAssign + Copy {}
+impl<T> KkWeight for T where Self: Zero + Ord + Sub<Output = Self> + SubAssign + Copy {}
 
 /// # Karmarkar-Karp algorithm
 ///

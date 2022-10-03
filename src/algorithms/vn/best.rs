@@ -1,6 +1,8 @@
 use crate::imbalance::compute_parts_load;
 use crate::Error;
 use itertools::Itertools;
+use num_traits::One;
+use num_traits::Zero;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::ops::AddAssign;
@@ -134,7 +136,7 @@ where
 pub trait VnBestWeight
 where
     Self: Copy + Send + Sync,
-    Self: PartialOrd + num::Zero + num::One,
+    Self: PartialOrd + Zero + One,
     Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
@@ -142,7 +144,7 @@ where
 impl<T> VnBestWeight for T
 where
     Self: Copy + Send + Sync,
-    Self: PartialOrd + num::Zero + num::One,
+    Self: PartialOrd + Zero + One,
     Self: Div<Output = Self> + Mul<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }

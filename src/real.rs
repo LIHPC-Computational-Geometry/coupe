@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::{fmt, iter, ops};
 
-use num::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 
 /// A floating-point value that cannot be NAN nor infinity.
 ///

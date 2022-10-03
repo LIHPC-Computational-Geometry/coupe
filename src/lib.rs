@@ -51,7 +51,7 @@ pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
 
 pub use nalgebra;
-pub use num::traits as num_traits;
+pub use num_traits;
 pub use rayon;
 pub use sprs;
 

@@ -2,6 +2,9 @@ use super::Error;
 use crate::defer::defer;
 use crate::partial_cmp;
 use crate::work_share::work_share;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
@@ -307,8 +310,8 @@ where
 /// Trait alias for values accepted as weights by [ArcSwap].
 pub trait AsWeight
 where
-    Self: Copy + PartialOrd + Send + Sync + num::Zero,
-    Self: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + PartialOrd + Send + Sync + Zero,
+    Self: std::iter::Sum + FromPrimitive + ToPrimitive,
     Self: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = Self>,
     Self: std::ops::Mul<Output = Self> + std::ops::Div<Output = Self>,
 {
@@ -316,8 +319,8 @@ where
 
 impl<T> AsWeight for T
 where
-    Self: Copy + PartialOrd + Send + Sync + num::Zero,
-    Self: std::iter::Sum + num::FromPrimitive + num::ToPrimitive,
+    Self: Copy + PartialOrd + Send + Sync + Zero,
+    Self: std::iter::Sum + FromPrimitive + ToPrimitive,
     Self: std::ops::AddAssign + std::ops::SubAssign + std::ops::Sub<Output = Self>,
     Self: std::ops::Mul<Output = Self> + std::ops::Div<Output = Self>,
 {
