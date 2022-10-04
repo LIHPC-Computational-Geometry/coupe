@@ -49,6 +49,28 @@ fn configure_criterion(mut c: Criterion, matches: &getopts::Matches) -> Result<C
     Ok(c)
 }
 
+fn build_global_pool() {
+    let core_count = affinity::get_core_num();
+    rayon::ThreadPoolBuilder::new()
+        .spawn_handler(|thread| {
+            let mut b = std::thread::Builder::new();
+            if let Some(name) = thread.name() {
+                b = b.name(name.to_owned());
+            }
+            if let Some(stack_size) = thread.stack_size() {
+                b = b.stack_size(stack_size);
+            }
+            b.spawn(move || {
+                let core_idx = thread.index() % core_count;
+                affinity::set_thread_affinity([core_idx]).unwrap();
+                thread.run();
+            })?;
+            Ok(())
+        })
+        .build()
+        .unwrap();
+}
+
 fn build_pool(thread_count: usize) -> rayon::ThreadPool {
     let core_count = affinity::get_core_num();
     rayon::ThreadPoolBuilder::new()
@@ -211,6 +233,8 @@ fn main() -> Result<()> {
         .context("missing required option 'weights'")?;
     let weights = fs::File::open(&weight_file).context("failed to open weight file")?;
     let weights = io::BufReader::new(weights);
+
+    build_global_pool();
 
     let (mesh, weights) = rayon::join(
         || Mesh::from_reader(mesh_file).context("failed to read mesh file"),
