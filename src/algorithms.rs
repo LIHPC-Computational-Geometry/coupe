@@ -12,7 +12,6 @@ mod kk;
 mod multi_jagged;
 mod recursive_bisection;
 mod vn;
-mod z_curve;
 
 pub use arc_swap::ArcSwap;
 pub use arc_swap::AsWeight;
@@ -27,6 +26,7 @@ pub use greedy::Greedy;
 pub use greedy::GreedyWeight;
 pub use hilbert_curve::Error as HilbertCurveError;
 pub use hilbert_curve::HilbertCurve;
+pub use hilbert_curve::ZCurve;
 pub use k_means::KMeans;
 pub use kernighan_lin::KernighanLin;
 pub use kk::KarmarkarKarp;
@@ -39,7 +39,6 @@ pub use vn::VnBest;
 pub use vn::VnBestWeight;
 pub use vn::VnFirst;
 pub use vn::VnFirstWeight;
-pub use z_curve::ZCurve;
 
 /// Common errors thrown by algorithms.
 #[derive(Clone, Copy, Debug)]

@@ -557,6 +557,118 @@ where
     }
 }
 
+fn zcurve_2d([x, y]: [u64; 2]) -> u64 {
+    unsafe {
+        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
+    }
+}
+
+fn zcurve_3d([x, y, z]: [u64; 3]) -> u64 {
+    unsafe {
+        std::arch::x86_64::_pdep_u64(x, 0x9249_2492_4924_9249 << 2)
+            | std::arch::x86_64::_pdep_u64(y, 0x9249_2492_4924_9249 << 1)
+            | std::arch::x86_64::_pdep_u64(z, 0x9249_2492_4924_9249)
+    }
+}
+
+/// # Z space-filling curve algorithm
+///
+/// The Z-curve uses space hashing to partition points. The points in the same part of a partition
+/// have the same Z-hash. This hash is computed by recursively constructing a N-dimensional region tree.
+///
+/// # Example
+///
+/// ```rust
+/// # fn main() -> Result<(), std::convert::Infallible> {
+/// use coupe::Partition as _;
+/// use coupe::Point2D;
+///
+/// let points = [
+///     Point2D::new(0., 0.),
+///     Point2D::new(1., 1.),
+///     Point2D::new(0., 10.),
+///     Point2D::new(1., 9.),
+///     Point2D::new(9., 1.),
+///     Point2D::new(10., 0.),
+///     Point2D::new(10., 10.),
+///     Point2D::new(9., 9.),
+/// ];
+/// let mut partition = [0; 8];
+///
+/// // generate a partition of 4 parts
+/// coupe::ZCurve { part_count: 4, order: 5 }
+///     .partition(&mut partition, &points)?;
+///
+/// assert_eq!(partition[0], partition[1]);
+/// assert_eq!(partition[2], partition[3]);
+/// assert_eq!(partition[4], partition[5]);
+/// assert_eq!(partition[6], partition[7]);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct ZCurve {
+    pub part_count: usize,
+    pub order: u32,
+}
+
+impl<W> crate::Partition<(&[Point2D], W)> for ZCurve
+where
+    W: AsRef<[f64]>,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&[Point2D], W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        if part_ids.is_empty() {
+            return Ok(());
+        }
+        let order = self.order as usize;
+        let index_fn = index_fn(points, order, zcurve_2d);
+        partition_indexed(
+            part_ids,
+            points,
+            weights.as_ref(),
+            self.part_count,
+            index_fn,
+        );
+        Ok(())
+    }
+}
+
+impl<W> crate::Partition<(&[Point3D], W)> for ZCurve
+where
+    W: AsRef<[f64]>,
+{
+    type Metadata = ();
+    type Error = std::convert::Infallible;
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        (points, weights): (&[Point3D], W),
+    ) -> Result<Self::Metadata, Self::Error> {
+        if part_ids.is_empty() {
+            return Ok(());
+        }
+        let order = self.order as usize;
+        let index_fn = index_fn(points, order, zcurve_3d);
+        partition_indexed(
+            part_ids,
+            points,
+            weights.as_ref(),
+            self.part_count,
+            index_fn,
+        );
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

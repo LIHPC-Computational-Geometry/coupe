@@ -81,42 +81,6 @@ impl<const D: usize> BoundingBox<D> {
         (self.p_min + self.p_max) / 2.0
     }
 
-    // region = bdim...b2b1b0 where bi are bits (0 or 1)
-    // if bi is set (i.e. bi == 1) then the matching region has a i-th coordinates from center[i] to p_max[i]
-    // otherwise, the matching region has a i-th coordinates from p_min[i] to center[i]
-    pub fn sub_aabb(&self, region: u32) -> Self {
-        assert!(
-            region < 2u32.pow(D as u32),
-            "Wrong region. Region should be composed of dim bits."
-        );
-
-        let center = self.center();
-
-        let p_min =
-            PointND::<D>::from_iterator(self.p_min.iter().zip(center.iter()).enumerate().map(
-                |(i, (min, center))| {
-                    if (region >> i) & 1 == 0 {
-                        *min
-                    } else {
-                        *center
-                    }
-                },
-            ));
-
-        let p_max =
-            PointND::<D>::from_iterator(center.iter().zip(self.p_max.iter()).enumerate().map(
-                |(i, (center, max))| {
-                    if (region >> i) & 1 == 0 {
-                        *center
-                    } else {
-                        *max
-                    }
-                },
-            ));
-
-        Self { p_min, p_max }
-    }
-
     pub fn contains(&self, point: &PointND<D>) -> bool {
         let eps = 10. * std::f64::EPSILON;
         self.p_min
@@ -227,16 +191,6 @@ impl<const D: usize> OrientedBoundingBox<D> {
         })
     }
 
-    /// Constructs a new Mbr that is a sub-Mbr of the current one.
-    /// More precisely, it bounds exactly the specified quadrant.
-    pub fn sub_mbr(&self, region: u32) -> Self {
-        Self {
-            aabb: self.aabb.sub_aabb(region),
-            aabb_to_obb: self.aabb_to_obb,
-            obb_to_aabb: self.obb_to_aabb,
-        }
-    }
-
     /// Computes the distance between a point and the current bounding box.
     pub fn distance_to_point(&self, point: &PointND<D>) -> f64 {
         self.aabb.distance_to_point(&(self.obb_to_aabb * point))
@@ -252,13 +206,6 @@ impl<const D: usize> OrientedBoundingBox<D> {
     #[allow(unused)]
     pub fn contains(&self, point: &PointND<D>) -> bool {
         self.aabb.contains(&(self.obb_to_aabb * point))
-    }
-
-    /// Returns the quadrant of the Aabb in which the specified point is.
-    /// A Mbr quadrant is defined as a quadrant of the associated Aabb.
-    /// Returns `None` if the specified point is not contained in the Aabb.
-    pub fn region(&self, point: &PointND<D>) -> Option<u32> {
-        self.aabb.region(&(self.obb_to_aabb * point))
     }
 
     /// Returns the rotated min and max points of the Aabb.
@@ -335,7 +282,6 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     use approx::assert_ulps_eq;
-    use itertools::Itertools as _;
     use nalgebra::Matrix2;
 
     #[test]
@@ -429,35 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn test_obb_quadrant() {
-        let points = [
-            Point2D::from([0., 1.]),
-            Point2D::from([1., 0.]),
-            Point2D::from([5., 6.]),
-            Point2D::from([6., 5.]),
-        ];
-
-        let obb = OrientedBoundingBox::from_points(&points).unwrap();
-
-        let none = obb.region(&Point2D::from([0., 0.]));
-        let q1 = obb.region(&Point2D::from([1.2, 1.2]));
-        let q2 = obb.region(&Point2D::from([5.8, 4.9]));
-        let q3 = obb.region(&Point2D::from([0.2, 1.1]));
-        let q4 = obb.region(&Point2D::from([5.1, 5.8]));
-
-        println!("q1 = {:?}", q1);
-        println!("q2 = {:?}", q2);
-        println!("q3 = {:?}", q3);
-        println!("q4 = {:?}", q4);
-
-        assert!(none.is_none());
-        assert!(q1.is_some());
-        assert!(q2.is_some());
-        assert!(q3.is_some());
-        assert!(q4.is_some());
-    }
-
-    #[test]
     fn test_householder_reflexion() {
         let el = PointND::<6>::new_random();
         let mat = householder_reflection(&el);
@@ -515,38 +432,5 @@ mod tests {
         let expected = Point3D::from([1., -1., -1.]);
 
         assert_relative_eq!(expected.cross(&vec).norm(), 0., epsilon = 1e-15);
-    }
-
-    #[test]
-    fn test_obb_octant() {
-        let points = [
-            Point3D::from([0., 1., 0.]),
-            Point3D::from([1., 0., 0.]),
-            Point3D::from([5., 6., 0.]),
-            Point3D::from([6., 5., 0.]),
-            Point3D::from([0., 1., 1.]),
-            Point3D::from([1., 0., 1.]),
-            Point3D::from([5., 6., 1.]),
-            Point3D::from([6., 5., 1.]),
-        ];
-
-        let obb = OrientedBoundingBox::from_points(&points).unwrap();
-
-        let none = obb.region(&Point3D::from([0., 0., 0.]));
-        let octants = vec![
-            obb.region(&Point3D::from([1.2, 1.2, 0.3])),
-            obb.region(&Point3D::from([5.8, 4.9, 0.3])),
-            obb.region(&Point3D::from([0.2, 1.1, 0.3])),
-            obb.region(&Point3D::from([5.1, 5.8, 0.3])),
-            obb.region(&Point3D::from([1.2, 1.2, 0.7])),
-            obb.region(&Point3D::from([5.8, 4.9, 0.7])),
-            obb.region(&Point3D::from([0.2, 1.1, 0.7])),
-            obb.region(&Point3D::from([5.1, 5.8, 0.7])),
-        ];
-        assert_eq!(none, None);
-        assert!(octants.iter().all(|o| o.is_some()));
-        // we cannot test if each octant is the right one because the orientation of the base
-        // change is unspecified
-        assert_eq!(8, octants.iter().unique().count());
     }
 }
