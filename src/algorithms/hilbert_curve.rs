@@ -1,19 +1,13 @@
-//! An implementation of the Hilbert space filling curve.
-//!
-//! With this technique, a set of 2D points (p0, ..., pn) is mapped to a set of numbers (i1, ..., in)
-//! used to reorder the set of points. How the mapping is defined follows how encoding the Hilbert curve is
-//! described in "Encoding and Decoding the Hilbert Order" by XIAN LIU and GÜNTHER SCHRACK
-//!
-//! The hilbert curve depends on a grid resolution called `order`. Basically,
-//! the minimal bounding rectangle of the set of points is split in 2^(2*order) cells.
-//! All the points in a given cell will have the same encoding.
-//!
-//! The complexity of encoding a point is O(order)
-
 use crate::geometry::OrientedBoundingBox;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
+use nalgebra::allocator::Allocator;
+use nalgebra::ArrayStorage;
+use nalgebra::Const;
+use nalgebra::DefaultAllocator;
+use nalgebra::DimDiff;
+use nalgebra::DimSub;
 use num_traits::AsPrimitive;
 use num_traits::NumAssign;
 use num_traits::One;
@@ -210,36 +204,33 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
     }
 }
 
-/// Returns a function that maps 2D points to their hilbert curve index.
+/// Returns a function that maps points to their curve index.
 ///
 /// Panics if `points` is empty.
-fn index_fn_2d(points: &[Point2D], order: usize) -> impl Fn(&Point2D) -> u64 {
+fn index_fn<const D: usize>(
+    points: &[PointND<D>],
+    order: usize,
+    curve: impl Fn([u64; D]) -> u64,
+) -> impl Fn(&PointND<D>) -> u64
+where
+    Const<D>: DimSub<Const<1>>,
+    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
+        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+{
     let mbr = OrientedBoundingBox::from_points(points).unwrap();
     let aabb = mbr.aabb();
-    let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
-    let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
+    // TODO use array::zip when stable
+    let mapping =
+        [0; D].map(|coord| segment_to_segment(aabb.p_min[coord], aabb.p_max[coord], order));
     move |p| {
-        let p = mbr.obb_to_aabb(p);
-        encode_2d(x_mapping(p.x), y_mapping(p.y), order)
+        let p: [f64; D] = mbr.obb_to_aabb(p).into();
+        // TODO use array::zip when stable
+        let mapped = [0; D].map(|coord| mapping[coord](p[coord]));
+        curve(mapped)
     }
 }
 
-/// Returns a function that maps 3D points to their hilbert curve index.
-///
-/// Panics if `points` is empty.
-fn index_fn_3d(points: &[Point3D], order: usize) -> impl Fn(&Point3D) -> u64 {
-    let mbr = OrientedBoundingBox::from_points(points).unwrap();
-    let aabb = mbr.aabb();
-    let x_mapping = segment_to_segment(aabb.p_min.x, aabb.p_max.x, order);
-    let y_mapping = segment_to_segment(aabb.p_min.y, aabb.p_max.y, order);
-    let z_mapping = segment_to_segment(aabb.p_min.z, aabb.p_max.z, order);
-    move |p| {
-        let p = mbr.obb_to_aabb(p);
-        encode_3d(x_mapping(p.x), y_mapping(p.y), z_mapping(p.z), order)
-    }
-}
-
-/// Slower version of [encode_2d], to build the lookup table for [encode_2d].
+/// Slower version of [hilbert_2d], to build the lookup table for [hilbert_2d].
 ///
 /// This version takes the initial configuration as argument and also returns
 /// the final configuration.
@@ -249,7 +240,7 @@ fn index_fn_3d(points: &[Point3D], order: usize) -> impl Fn(&Point3D) -> u64 {
 ///
 /// TODO: once const-fn are more mature, take the "order" argument into account,
 /// though it is only set to 6 for the purpose of building the lookup table.
-const fn encode_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
+const fn hilbert_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
     // BASE_PATTERN[i][j] is the hilbert index given:
     // - i: the current configuration,
     // - j: the quadrant in row-major order.
@@ -305,7 +296,7 @@ const fn encode_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, 
     (hilbert, config)
 }
 
-fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
+fn hilbert_2d([x, y]: [u64; 2], order: usize) -> u64 {
     debug_assert!(order < 64);
     debug_assert!(
         x < (1 << order),
@@ -326,7 +317,7 @@ fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
         while i < 16_384 {
             let zorder = (i & 0xfff) as u64;
             let config = i >> 12;
-            let (hilbert_order, config) = encode_2d_slow(zorder, 6, config);
+            let (hilbert_order, config) = hilbert_2d_slow(zorder, 6, config);
             lut[i] = (config << 12) as u16 | hilbert_order as u16;
             i += 1;
         }
@@ -353,7 +344,7 @@ fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
     hilbert >> -shift
 }
 
-fn encode_3d(x: u64, y: u64, z: u64, order: usize) -> u64 {
+fn hilbert_3d([x, y, z]: [u64; 3], order: usize) -> u64 {
     debug_assert!(order < 64);
     debug_assert!(
         x < (1 << order),
@@ -519,7 +510,8 @@ where
         if part_ids.is_empty() {
             return Ok(());
         }
-        let index_fn = index_fn_2d(points, self.order as usize);
+        let order = self.order as usize;
+        let index_fn = index_fn(points, order, |p| hilbert_2d(p, order));
         partition_indexed(
             part_ids,
             points,
@@ -552,7 +544,8 @@ where
         if part_ids.is_empty() {
             return Ok(());
         }
-        let index_fn = index_fn_3d(points, self.order as usize);
+        let order = self.order as usize;
+        let index_fn = index_fn(points, order, |p| hilbert_3d(p, order));
         partition_indexed(
             part_ids,
             points,
@@ -596,7 +589,7 @@ mod tests {
         let points = vec![(0, 0), (1, 1), (1, 0), (0, 1)];
         let indices = points
             .into_iter()
-            .map(|(x, y)| encode_2d(x, y, 1))
+            .map(|(x, y)| hilbert_2d([x, y], 1))
             .collect::<Vec<_>>();
 
         assert_eq!(indices, vec![0, 2, 3, 1]);
@@ -626,7 +619,7 @@ mod tests {
         let expected: Vec<_> = (0..16).collect();
         let indices = points
             .into_iter()
-            .map(|(x, y)| encode_2d(x, y, 2))
+            .map(|(x, y)| hilbert_2d([x, y], 2))
             .collect::<Vec<_>>();
 
         assert_eq!(indices, expected);
