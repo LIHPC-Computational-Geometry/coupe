@@ -9,6 +9,7 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::ToTypenum;
+use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::cmp;
@@ -108,14 +109,18 @@ struct Items<'a, const D: usize, W> {
     parts: &'a mut [&'a AtomicUsize],
 }
 
-/// Return value of [rcb_split] and [par_rcb_split].
-struct SplitResult<'a, const D: usize, W> {
-    left: Items<'a, D, W>,
-    right: Items<'a, D, W>,
-    /// Weight of the left part, used to compute the sum for the next iteration.
-    weight_left: W,
-    /// Coordinate value of the split, used to compute the [BoundingBox]es.
-    split_pos: f32,
+// TODO replace with derive once [T; D] implements Default for all D.
+impl<'a, const D: usize, W> Default for Items<'a, D, W> {
+    fn default() -> Self {
+        Self {
+            points: [(); D].map(|_| {
+                let a: &mut [f32] = &mut [];
+                a
+            }),
+            weights: &mut [],
+            parts: &mut [],
+        }
+    }
 }
 
 /// Split the arrays in `items` into the ones that have `points[i][coord]`
@@ -181,6 +186,124 @@ fn reorder_split<const D: usize, W>(
     (left, right)
 }
 
+/// Return value of [par_rcb_split].
+struct SplitResult<'a, const D: usize, W> {
+    left: Items<'a, D, W>,
+    right: Items<'a, D, W>,
+    /// Weight of the left part, used to compute the sum for the next iteration.
+    weight_left: W,
+    /// Coordinate values of the split, used to compute the [BoundingBox]es.
+    left_max_bound: f32,
+    right_min_bound: f32,
+}
+
+impl<'a, const D: usize, W> Default for SplitResult<'a, D, W>
+where
+    W: Default,
+{
+    fn default() -> Self {
+        Self {
+            left: Items::default(),
+            right: Items::default(),
+            weight_left: W::default(),
+            left_max_bound: f32::NEG_INFINITY,
+            right_min_bound: f32::INFINITY,
+        }
+    }
+}
+
+/// Accumulation result of [par_rcb_split].
+struct Accumulation<W> {
+    /// Number of points on the left of split_target.
+    count_left: usize,
+    /// Weight of the points on the left of split_target.
+    weight_left: W,
+    /// Weight of the points on the right of split_target.
+    weight_right: W,
+    /// Closest point to split_target while on the left of split_target.
+    closest_left_idx: Option<usize>,
+    /// Left point's distance to split target.
+    closest_left_dist: f32,
+    /// Closest point to split_target while on the right of split_target.
+    closest_right_idx: Option<usize>,
+    /// Right point's distance to split target.
+    closest_right_dist: f32,
+}
+
+impl<W> Default for Accumulation<W>
+where
+    W: Default,
+{
+    fn default() -> Self {
+        Self {
+            count_left: 0,
+            weight_left: W::default(),
+            weight_right: W::default(),
+            closest_left_idx: None,
+            closest_left_dist: f32::INFINITY,
+            closest_right_idx: None,
+            closest_right_dist: f32::INFINITY,
+        }
+    }
+}
+
+impl<W> Accumulation<W>
+where
+    W: RcbWeight,
+{
+    fn add_point(mut self, i: usize, diff_with_target: f32, weight: W) -> Self {
+        if diff_with_target < 0.0 {
+            // Point is on the left.
+            let distance = -diff_with_target;
+            self.count_left += 1;
+            self.weight_left += weight;
+            if distance < self.closest_left_dist {
+                self.closest_left_idx = Some(i);
+                self.closest_left_dist = distance;
+            }
+        } else {
+            // Point is on the right.
+            let distance = diff_with_target;
+            self.weight_right += weight;
+            if distance < self.closest_right_dist {
+                self.closest_right_idx = Some(i);
+                self.closest_right_dist = distance;
+            }
+        }
+        self
+    }
+
+    fn merge(a: Self, b: Self) -> Self {
+        let closest_left_idx;
+        let closest_left_dist;
+        if a.closest_left_dist < b.closest_left_dist {
+            closest_left_idx = a.closest_left_idx;
+            closest_left_dist = a.closest_left_dist;
+        } else {
+            closest_left_idx = b.closest_left_idx;
+            closest_left_dist = b.closest_left_dist;
+        }
+        let closest_right_idx;
+        let closest_right_dist;
+        if a.closest_right_dist < b.closest_right_dist {
+            closest_right_idx = a.closest_right_idx;
+            closest_right_dist = a.closest_right_dist;
+        } else {
+            closest_right_idx = b.closest_right_idx;
+            closest_right_dist = b.closest_right_dist;
+        }
+        Self {
+            count_left: a.count_left + b.count_left,
+            weight_left: a.weight_left + b.weight_left,
+            weight_right: a.weight_right + b.weight_right,
+            closest_left_idx,
+            closest_left_dist,
+            closest_right_idx,
+            closest_right_dist,
+        }
+    }
+}
+
 /// Splits the given items into two sets of similar weights (parallel version).
 fn par_rcb_split<const D: usize, W>(
     items: Items<'_, D, W>,
@@ -196,107 +319,77 @@ where
     let span = tracing::info_span!("par_rcb_split");
     let _enter = span.enter();
 
-    let mut prev_count_left = usize::MAX;
+    let ideal_part_weight = sum.to_f64().unwrap() / 2.0;
+    let max_part_weight = W::from_f64(ideal_part_weight * (1.0 + tolerance)).unwrap();
+    let mut allow_interrupts = true;
+
     loop {
         let split_target = (min + max) / 2.0;
 
-        // count_left: the number of points that are on the left of split_target
-        // weight_left: the weight of all those points
-        // nearest_idx: the index in `items` of the point that is 1/ on the
-        //    right side of split_target and 2/ the nearest to split_target
-        let (count_left, weight_left, nearest_idx, nearest_distance) = items.points[coord]
+        let res = items.points[coord]
             .par_iter()
             .with_min_len(4096)
             .zip(&*items.weights)
             .enumerate()
-            .fold(
-                || (0, W::default(), None, f32::INFINITY),
-                |(count, weight_left, mut nearest_idx, mut nearest_distance),
-                 (idx, (point, weight))| {
-                    let distance = point - split_target;
-                    if distance < 0.0 {
-                        (
-                            count + 1,
-                            weight_left + *weight,
-                            nearest_idx,
-                            nearest_distance,
-                        )
-                    } else {
-                        if distance < nearest_distance {
-                            nearest_distance = distance;
-                            nearest_idx = Some(idx);
-                        }
-                        (count, weight_left, nearest_idx, nearest_distance)
+            .try_fold(Accumulation::default, |acc, (idx, (point, weight))| {
+                Ok(acc.add_point(idx, point - split_target, *weight))
+            })
+            .try_reduce(Accumulation::default, |acc0, acc1| {
+                let acc = Accumulation::merge(acc0, acc1);
+                if allow_interrupts {
+                    if max_part_weight < acc.weight_left {
+                        return Err(acc);
                     }
-                },
-            )
-            .reduce(
-                || (0, W::default(), None, f32::INFINITY),
-                |(count0, weight0, nearest_idx0, nearest_distance0),
-                 (count1, weight1, nearest_idx1, nearest_distance1)| {
-                    let (nearest_idx, nearest_distance) = if nearest_distance0 < nearest_distance1 {
-                        (nearest_idx0, nearest_distance0)
-                    } else {
-                        (nearest_idx1, nearest_distance1)
-                    };
-                    (
-                        count0 + count1,
-                        weight0 + weight1,
-                        nearest_idx,
-                        nearest_distance,
-                    )
-                },
-            );
+                    if max_part_weight < acc.weight_right {
+                        return Err(acc);
+                    }
+                }
+                Ok(acc)
+            });
 
-        let nearest_idx = match nearest_idx {
-            Some(v) => v,
-            // Both following cases happen when all points are of the left side
-            // of the split_target.  This is the case when min and max are set
-            // too loosely, so we let it happen once. If this happens twice,
-            // then `prev_count_left` will be the equal to `count_left`.
-            None if prev_count_left == count_left => {
+        let partial_res = match res {
+            Ok(res) => {
+                // Both parts are below max_part_weight.
+                let closest_left_idx = match res.closest_left_idx {
+                    Some(v) => v,
+                    None => {
+                        // If there is no point below split_target, then items
+                        // should be empty?
+                        return SplitResult {
+                            left: items,
+                            weight_left: sum,
+                            left_max_bound: split_target,
+                            right_min_bound: split_target,
+                            ..SplitResult::default()
+                        };
+                    }
+                };
+                let closest_left = split_target - res.closest_left_dist;
+                let closest_right = split_target + res.closest_right_dist;
+                let (left, right) = reorder_split(items, closest_left_idx, coord);
                 return SplitResult {
-                    left: items,
-                    right: Items {
-                        points: array_init(|_| &mut [][..]),
-                        weights: &mut [],
-                        parts: &mut [],
-                    },
-                    weight_left: sum,
-                    split_pos: max,
+                    left,
+                    right,
+                    weight_left: res.weight_left,
+                    left_max_bound: closest_left,
+                    right_min_bound: closest_right,
                 };
             }
-            None => {
-                max = split_target;
-                prev_count_left = count_left;
-                continue;
-            }
+            // Otherwise, some part is too big, and partial_res has the results
+            // of the run which was interrupted early.
+            Err(partial_res) => partial_res,
         };
 
-        let imbalance = {
-            let ideal_weight_left = sum.to_f64().unwrap() / 2.0;
-            let weight_left = weight_left.to_f64().unwrap();
-            f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
-        };
-        if count_left == prev_count_left // there is no point between min and max
-            || max <= split_target + nearest_distance // or between split_target and max
-            || imbalance <= tolerance
-        {
-            let (left, right) = reorder_split(items, nearest_idx, coord);
-            return SplitResult {
-                left,
-                right,
-                weight_left,
-                split_pos: split_target,
-            };
-        }
-        prev_count_left = count_left;
-
-        let weight_right = sum - weight_left;
-        if weight_left < weight_right {
+        if partial_res.weight_left < partial_res.weight_right {
             min = split_target;
         } else {
             max = split_target;
+        }
+
+        if approx::abs_diff_eq!(min, max) {
+            // Special case for when a lot of weights share the same coordinate.
+            // We might not be able to respect the imbalance constraints.
+            allow_interrupts = false;
         }
     }
 }
@@ -336,13 +429,14 @@ fn rcb_recurse<const D: usize, W>(
         left,
         right,
         weight_left,
-        split_pos,
+        left_max_bound,
+        right_min_bound,
     } = par_rcb_split(items, coord, tolerance, min, max, sum);
 
     let mut bb_left = bb.clone();
-    bb_left.p_max[coord] = split_pos as f64;
+    bb_left.p_max[coord] = left_max_bound as f64;
     let mut bb_right = bb;
-    bb_right.p_min[coord] = split_pos as f64;
+    bb_right.p_min[coord] = right_min_bound as f64;
 
     rayon::join(
         || {
@@ -445,7 +539,7 @@ where
 pub trait RcbWeight
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + ToPrimitive,
+    Self: Sum + PartialOrd + ToPrimitive + FromPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
@@ -453,7 +547,7 @@ where
 impl<T> RcbWeight for T
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + ToPrimitive,
+    Self: Sum + PartialOrd + ToPrimitive + FromPrimitive,
     Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
 {
 }
@@ -761,7 +855,8 @@ mod tests {
                 left,
                 right,
                 weight_left,
-                split_pos,
+                left_max_bound: split_pos,
+                ..
             } = par_rcb_split(items, 0, 0.05, min, max, sum);
 
             prop_assert!(left.points[0].iter().all(|l| *l < split_pos));
