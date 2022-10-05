@@ -82,7 +82,7 @@ Options specific to *part-bench*:
 
 	Ranges are exclusive.
 
-*-b, --baseline* <name>
+*-b, --baseline* <name> ++
 *-s, --save-baseline* <name>
 	Compare against a named baseline.  If *--save-baseline* is specified, the
 	results of the benchmark will be saved and overwrite the previous ones.
