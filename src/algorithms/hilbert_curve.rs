@@ -491,6 +491,10 @@ impl std::error::Error for Error {}
 ///
 /// rawunprotected. *LUT-based 3D Hilbert curves*.
 /// <http://threadlocalmutex.com/?p=149>
+///
+/// Deveci, M. et al., 2016. Multi-Jagged: A Scalable Parallel Spatial
+/// Partitioning Algorithm. *IEEE Transactions on Parallel and Distributed
+/// Systems*, 27(3), pp. 803–817. <https://doi.org/10.1109/TPDS.2015.2412545>
 #[derive(Clone, Copy, Debug)]
 pub struct HilbertCurve {
     pub part_count: usize,
