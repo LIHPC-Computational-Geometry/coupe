@@ -32,7 +32,7 @@ autobenches = false
 [dependencies]
 approx = "0.5"
 itertools = "0.10"
-nalgebra = { version = "0.29", default-features = false, features = ["rand", "std"] }
+nalgebra = { version = "0.31", default-features = false, features = ["rand", "std"] }
 num-traits = "0.2"
 rayon = "1.3"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
@@ -40,8 +40,8 @@ rand = "0.8"
 sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.4"
 proptest = { version = "1.0.0", default-features = false, features = ["std", "timeout"] }
 tracing-subscriber = "0.3"
-tracing-chrome = "0.4"
+tracing-chrome = "0.6"
 tracing-tree = "0.2"
