@@ -1,31 +1,99 @@
-//! A mesh partitioning library that implements multithreaded, composable geometric algorithms.
+//! This package that implements multithreaded, composable partitioning algorithms.
 //!
-//! # Crate Layout
+//! It contains methods to solve:
+//! - [geometric partitioning](#geometric-partitioning)
+//! - [number partitioning](#number-partitioning)
+//! - [topological partitioning](#topological-partitioning)
 //!
 //! Coupe exposes a [`Partition`] trait, which is in turn implemented by
 //! algorithms.  See its documentation for more details.  The trait is generic around its input, which means algorithms
 //! can partition different type of collections (e.g. 2D and 3D meshes).
 //!
-//! # Available algorithms
+//! # Library Use
 //!
-//! ## Partitioner algorithms
+//! ```rust
+//! # fn main() -> Result<(), coupe::Error> {
+//! extern crate coupe;
+//! use coupe::Partition as _;
+//! use coupe::Point2D;
+//!
+//! // define coordinates
+//! let coordinates: [Point2D; 9] = [
+//!   // define some points
+//! #        Point2D::new(0.0, 0.0),
+//! #        Point2D::new(0.0, 1.0),
+//! #        Point2D::new(0.0, 2.0),
+//! #        Point2D::new(1.0, 0.0),
+//! #        Point2D::new(1.0, 1.0),
+//! #        Point2D::new(1.0, 2.0),
+//! #        Point2D::new(2.0, 0.0),
+//! #        Point2D::new(2.0, 1.0),
+//! #        Point2D::new(2.0, 2.0),
+//! ];
+//! // Define weights
+//! let weights: [f64; 9] = [1.0, 2.0, 3.0, 2.0, 3.0, 4.0, 3.0, 4.0, 5.0];
+//! // define graph
+//! let graph: sprs::CsMat<i64> = {
+//!   // define topology
+//! # let mut g = sprs::CsMat::empty(sprs::CSR, 9);
+//! # g.insert(0, 1, 1);
+//! # g.insert(0, 3, 1);
+//! # g.insert(1, 0, 1);
+//! # g.insert(1, 2, 1);
+//! # g.insert(1, 4, 1);
+//! # g.insert(2, 1, 1);
+//! # g.insert(2, 5, 1);
+//! # g.insert(3, 0, 1);
+//! # g.insert(3, 4, 1);
+//! # g.insert(3, 6, 1);
+//! # g.insert(4, 1, 1);
+//! # g.insert(4, 3, 1);
+//! # g.insert(4, 5, 1);
+//! # g.insert(4, 7, 1);
+//! # g.insert(5, 2, 1);
+//! # g.insert(5, 4, 1);
+//! # g.insert(5, 8, 1);
+//! # g.insert(6, 3, 1);
+//! # g.insert(6, 7, 1);
+//! # g.insert(7, 4, 1);
+//! # g.insert(7, 6, 1);
+//! # g.insert(7, 8, 1);
+//! # g.insert(8, 5, 1);
+//! # g.insert(8, 7, 1);
+//! # g
+//! };
+//!
+//! let mut partition = [0; 9];
+//!
+//! // generate a partition of 4 parts
+//! coupe::Rcb { iter_count: 2, ..Default::default() }
+//!     .partition(&mut partition, (coordinates, weights))?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Geometric Partitioning
 //!
 //! - Space filling curves:
 //!   + [Z-curve][ZCurve]
 //!   + [Hilbert curve][HilbertCurve]
-//! - [Recursive Coordinate Bisection][Rcb]
-//! - [Recursive Inertial Bisection][Rib]
-//! - [Multi jagged][MultiJagged]
-//! - Number partitioning:
+//! - Recursive bisections:
+//!   + [Recursive Coordinate Bisection][Rcb]
+//!   + [Recursive Inertial Bisection][Rib]
+//!   + [Multi jagged][MultiJagged]
+//! - Local optimisation:
+//!   + [K-means][KMeans]
+//!
+//! ## Number Partitioning
+//! - Direct:
 //!   + [Greedy][Greedy]
 //!   + [Karmarkar-Karp][KarmarkarKarp] and its [complete][CompleteKarmarkarKarp] version
-//!
-//! ## Partition improving algorithms
-//!
-//! - [K-means][KMeans]
-//! - Number partitioning:
+//! - Local optimisation:
 //!   + [VN-Best][VnBest]
 //!   + [VN-First][VnFirst]
+//!
+//! ## Topological Partitioning
+//!
 //! - [Fiduccia-Mattheyses][FiducciaMattheyses]
 //! - [Kernighan-Lin][KernighanLin]
 
@@ -45,8 +113,7 @@ pub mod topology;
 mod work_share;
 
 pub use crate::algorithms::*;
-pub use crate::geometry::BoundingBox;
-pub use crate::geometry::{Point2D, Point3D, PointND};
+pub use crate::geometry::{BoundingBox, Point2D, Point3D, PointND};
 pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
 

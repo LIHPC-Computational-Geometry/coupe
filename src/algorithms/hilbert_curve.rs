@@ -11,6 +11,7 @@
 //! The complexity of encoding a point is O(order)
 
 use crate::geometry::OrientedBoundingBox;
+use crate::nextafter::nextafter;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
@@ -201,7 +202,7 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
 
     // Map max to (2**order-1).
     while n <= width * f {
-        f = crate::nextafter(f, 0.0);
+        f = nextafter(f, 0.0);
     }
 
     move |v| {
@@ -582,13 +583,13 @@ mod tests {
         assert_eq!(mapping(7.0), 6);
         assert_eq!(mapping(8.0), 7);
 
-        assert_eq!(mapping(crate::nextafter(1.0, f64::INFINITY)), 1);
-        assert_eq!(mapping(crate::nextafter(2.0, f64::INFINITY)), 2);
-        assert_eq!(mapping(crate::nextafter(3.0, f64::INFINITY)), 3);
-        assert_eq!(mapping(crate::nextafter(4.0, f64::INFINITY)), 4);
-        assert_eq!(mapping(crate::nextafter(5.0, f64::INFINITY)), 5);
-        assert_eq!(mapping(crate::nextafter(6.0, f64::INFINITY)), 6);
-        assert_eq!(mapping(crate::nextafter(7.0, f64::INFINITY)), 7);
+        assert_eq!(mapping(nextafter(1.0, f64::INFINITY)), 1);
+        assert_eq!(mapping(nextafter(2.0, f64::INFINITY)), 2);
+        assert_eq!(mapping(nextafter(3.0, f64::INFINITY)), 3);
+        assert_eq!(mapping(nextafter(4.0, f64::INFINITY)), 4);
+        assert_eq!(mapping(nextafter(5.0, f64::INFINITY)), 5);
+        assert_eq!(mapping(nextafter(6.0, f64::INFINITY)), 6);
+        assert_eq!(mapping(nextafter(7.0, f64::INFINITY)), 7);
     }
 
     #[test]
