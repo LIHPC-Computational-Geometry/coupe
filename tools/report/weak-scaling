@@ -2,14 +2,14 @@
 #
 # Usage example:
 #
-#     ./tools/report/weak-scaling monkey.meshb spike,1000 -a random,2 -a fm,0.04
+#     echo "1 2 $(seq 4 4 63) $(seq 64 8 127) $(seq 128 16 256)" |
+#         ./tools/report/weak-scaling monkey.meshb spike,1000 -a random,2 -a fm,0.04
 
 set -e
 
 . "$(dirname "$0")"/common.sh
 cargo build -p coupe-tools --bins --release
 PATH="$TARGET_DIR/release:$PATH"
-TARGET_DIR=./target
 
 MESH_FILE=$1
 shift
@@ -19,10 +19,10 @@ shift
 
 tmp_mesh=$(echo 'maketemp(/dev/shm/weak-scaling.XXXXXX)' | m4)
 tmp_weights="$tmp_mesh".weights
-trap "rm -f $tmp_mesh $tmp_weights" 0 2 3 15
+trap 'rm -f $tmp_mesh $tmp_weights' 0 2 3 15
 
 bench_name=$(basename "$tmp_mesh" | tr '.' ';')
-for arg in $@
+for arg
 do
 	if [ "$arg" != "${arg#-}" ]
 	then continue
@@ -30,13 +30,10 @@ do
 	bench_name="$bench_name;$arg"
 done
 
-max_threads=$(grep -c ^processor /proc/cpuinfo)
-RAYON_NUM_THREADS=1
-
 mesh_dup() {
 	n=$1
 
-	say dedup "$MESH_FILE"
+	say mesh-dup "$MESH_FILE ($n times)"
 	rm "$tmp_mesh"
 	mesh-dup -n "$n" <"$MESH_FILE" >"$tmp_mesh"
 }
@@ -47,39 +44,26 @@ weight_gen() {
 }
 
 part_bench() {
-	say bench "$RAYON_NUM_THREADS threads"
+	thread_count=$1
+	shift
+
+	say part-bench "$thread_count threads"
 	part-bench --mesh "$tmp_mesh" \
 	           --weights "$tmp_weights" \
 	           --sample-size 10 \
 	           --edge-weights linear \
-	           $@
-
-	cd "$TARGET_DIR/criterion/$bench_name"
-
-	dir="refine=$RAYON_NUM_THREADS"
-	mkdir "$dir"
-	mv base new "$dir"
-	cp -r report "$dir"
-
-	cd - >/dev/null
+	           --efficiency="$thread_count" \
+	           "$@"
 }
 
-ln -sf "$(realpath "$MESH_FILE")" "$tmp_mesh"
-weight_gen
-
-while true
+[ -t 0 ] && echo "Reading thread counts from stdin..." 2>&1
+awk '{ for (i = 1; i <= NF; i++) { print $i } }' | while read -r thread_count
 do
-	part_bench $@
-
-	RAYON_NUM_THREADS=$(( $RAYON_NUM_THREADS * 2 ))
-	if [ $RAYON_NUM_THREADS -gt $max_threads ]
-	then
-		break
-	fi
-
-	mesh_dup "$RAYON_NUM_THREADS"
+	mesh_dup "$thread_count"
 	weight_gen
 
 	say sleep "Cooling CPUs down for 4s..."
 	sleep 4
+
+	part_bench "$thread_count" "$@"
 done
