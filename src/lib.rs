@@ -114,8 +114,8 @@ mod work_share;
 
 pub use crate::algorithms::*;
 pub use crate::geometry::{BoundingBox, Point2D, Point3D, PointND};
-pub use crate::real::Real;
 pub use crate::nextafter::nextafter;
+pub use crate::real::Real;
 
 pub use nalgebra;
 pub use num_traits;
