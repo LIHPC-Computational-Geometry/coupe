@@ -20,7 +20,7 @@ mesh-refine only works on 2D meshes composed exclusively of triangles and
 quadrilaterals.  It splits either of them into four equal parts at each
 iteration.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 # OPTIONS
@@ -30,7 +30,7 @@ FORMAT* for details.
 
 *-f, --format* <format>
 	Override the output format.  By default, the file format is inferred from
-	the file extension.  See *apply-part(1)*'s *OUTPUT FORMAT* for more info.
+	the file extension.  See *apply-part*(1)'s *OUTPUT FORMAT* for more info.
 
 *-n, --times* <n>
 	Iterate a given number of times.  By default, only once.

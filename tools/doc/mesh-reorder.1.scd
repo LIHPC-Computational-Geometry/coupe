@@ -20,7 +20,7 @@ If output.mesh is omitted or is -, it is written to standard output.
 The tool can be used in conjunction of *mesh-reorder* or *mesh-dup*, which both
 produce very typical element orderings and may disrupt algorithms.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 # OPTIONS
@@ -30,7 +30,7 @@ FORMAT* for details.
 
 *-f, --format* <format>
 	Override the output format.  By default, the file format is inferred from
-	the file extension.  See *apply-part(1)*'s *OUTPUT FORMAT* for more info.
+	the file extension.  See *apply-part*(1)'s *OUTPUT FORMAT* for more info.
 
 # SEE ALSO
 

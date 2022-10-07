@@ -15,7 +15,7 @@ mesh-svg renders a 2D mesh as a SVG, optimizing for output size.
 If input.mesh is omitted or is -, it is read from standard input.
 If output.svg is omitted or is -, it is written to standard output.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 # OPTIONS

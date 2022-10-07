@@ -18,7 +18,7 @@ If output.weights is omitted or is -, it is written to standard output.
 Unless *-i, --integers* is specified, the generated weights are floating-point
 numbers.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 See *WEIGHT FILE* for a description of the output format.
