@@ -16,7 +16,7 @@ part-info prints the following information:
 - the edge cut,
 - the lambda-1 cut.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 # OPTIONS

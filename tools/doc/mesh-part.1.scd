@@ -21,7 +21,7 @@ If output.part is omitted or is -, it is written to standard output.
 
 part-bench benchmarks the speed of the given algorithms and prints the results.
 
-Only some specific mesh formats are supported.  See *apply-part(1)*'s *INPUT
+Only some specific mesh formats are supported.  See *apply-part*(1)'s *INPUT
 FORMAT* for details.
 
 See *ALGORITHMS* for a list of supported algorithms.
