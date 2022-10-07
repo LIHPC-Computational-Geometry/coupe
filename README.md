@@ -49,7 +49,7 @@ dual licensed as above, without any additional terms or conditions.
 
 
 [67]: https://github.com/LIHPC-Computational-Geometry/coupe/pull/67
-[coupe]: https://docs.rs/coupe
+[coupe]: https://lihpc-computational-geometry.github.io/coupe
 [discussions]: https://github.com/LIHPC-Computational-Geometry/coupe/discussions
 [issues]: https://github.com/LIHPC-Computational-Geometry/coupe/issues
 [pulls]: https://github.com/LIHPC-Computational-Geometry/coupe/pulls
