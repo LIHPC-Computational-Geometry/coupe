@@ -30,7 +30,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --all --all-targets
+          args: --all --all-targets --locked
 
   test:
     name: Test Suite
@@ -51,12 +51,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-targets --no-run
+          args: --all --all-targets --no-run --locked
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all
+          args: --all --locked
 
   fmt:
     name: Rustfmt
@@ -90,7 +90,7 @@ jobs:
         with:
           command: clippy
           args: >
-            --all --all-targets --
+            --all --all-targets --locked --
             -D warnings
             -D clippy::cargo_common_metadata
             -D clippy::negative_feature_names
