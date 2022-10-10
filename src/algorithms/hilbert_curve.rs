@@ -36,7 +36,7 @@ fn partition_indexed<const D: usize>(
     let span = tracing::info_span!("computing split positions");
     let enter = span.enter();
 
-    let split_positions = weighted_quantiles(
+    let split_positions: Vec<u64> = weighted_quantiles(
         &hilbert_indices,
         weights,
         WeightedQuantileOpts {
@@ -44,7 +44,8 @@ fn partition_indexed<const D: usize>(
             split_tolerance: 0.01,
             ..Default::default()
         },
-    );
+    )
+    .collect();
 
     mem::drop(enter);
     let span = tracing::info_span!("apply part ids");

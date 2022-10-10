@@ -31,7 +31,7 @@ pub fn weighted_quantiles<P, W>(
     points: &[P],
     weights: &[W],
     opts: WeightedQuantileOpts<P, W>,
-) -> Vec<P>
+) -> impl Iterator<Item = P>
 where
     P: 'static + Copy + PartialOrd + Send + Sync,
     P: NumAssign + One,
@@ -194,5 +194,5 @@ where
             .collect();
     }
 
-    splits.into_iter().map(|split| split.position).collect()
+    splits.into_iter().map(|split| split.position)
 }
