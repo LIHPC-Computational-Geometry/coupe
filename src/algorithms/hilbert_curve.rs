@@ -48,6 +48,7 @@ where
         || *points.par_iter().max_by(crate::partial_cmp).unwrap(),
     );
 
+    #[derive(Clone)]
     struct Split<P> {
         position: P,
         min_bound: P,
@@ -96,65 +97,72 @@ where
                 Some(*weight_sum)
             });
 
-        for (p, left_weight) in (0..n - 1).zip(prefix_left_weights) {
-            if splits[p].settled {
-                continue;
-            }
-            let left_weight_ratio = left_weight.as_() / (p + 1) as f64;
-            let right_weight_ratio = (total_weight - left_weight).as_() / (n - p - 1) as f64;
-            if f64::abs(left_weight_ratio - right_weight_ratio) / total_weight.as_()
-                < SPLIT_TOLERANCE
-            {
-                splits[p].settled = true;
-                todo_split_count -= 1;
-                continue;
-            }
-            let expected_left_weight = (p + 1) as f64 * total_weight.as_() / n as f64;
-            if left_weight_ratio < right_weight_ratio {
-                splits[p].min_bound = splits[p].position;
-                let mut pw = left_weight;
-                for q in p + 1..n - 1 {
-                    pw += part_weights[q];
-                    if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
-                        splits[p].min_bound = splits[q].position;
-                        splits[p].max_bound = splits[q].position;
-                        break;
-                    } else if expected_left_weight < pw.as_() {
-                        if splits[q].position < splits[p].max_bound {
-                            splits[p].max_bound = splits[q].position;
+        splits = splits
+            .iter()
+            .cloned()
+            .zip(prefix_left_weights)
+            .enumerate()
+            .map(|(p, (mut split, left_weight))| {
+                if split.settled {
+                    return split;
+                }
+                let left_weight_ratio = left_weight.as_() / (p + 1) as f64;
+                let right_weight_ratio = (total_weight - left_weight).as_() / (n - p - 1) as f64;
+                if f64::abs(left_weight_ratio - right_weight_ratio) / total_weight.as_()
+                    < SPLIT_TOLERANCE
+                {
+                    split.settled = true;
+                    todo_split_count -= 1;
+                    return split;
+                }
+                let expected_left_weight = (p + 1) as f64 * total_weight.as_() / n as f64;
+                if left_weight_ratio < right_weight_ratio {
+                    split.min_bound = split.position;
+                    let mut pw = left_weight;
+                    for q in p + 1..n - 1 {
+                        pw += part_weights[q];
+                        if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
+                            split.min_bound = splits[q].position;
+                            split.max_bound = splits[q].position;
+                            break;
+                        } else if expected_left_weight < pw.as_() {
+                            if splits[q].position < split.max_bound {
+                                split.max_bound = splits[q].position;
+                            }
+                            break;
+                        } else if pw.as_() < expected_left_weight {
+                            split.min_bound = splits[q].position;
                         }
-                        break;
-                    } else if pw.as_() < expected_left_weight {
-                        splits[p].min_bound = splits[q].position;
+                    }
+                } else {
+                    split.max_bound = split.position;
+                    let mut pw = left_weight;
+                    for q in (0..p).rev() {
+                        pw -= part_weights[q + 1];
+                        if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
+                            split.min_bound = splits[q].position;
+                            split.max_bound = splits[q].position;
+                            break;
+                        } else if pw.as_() < expected_left_weight {
+                            if split.min_bound < splits[q].position {
+                                split.min_bound = splits[q].position;
+                            }
+                            break;
+                        } else if expected_left_weight < pw.as_() {
+                            split.max_bound = splits[q].position;
+                        }
                     }
                 }
-            } else {
-                splits[p].max_bound = splits[p].position;
-                let mut pw = left_weight;
-                for q in (0..p).rev() {
-                    pw -= part_weights[q + 1];
-                    if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
-                        splits[p].min_bound = splits[q].position;
-                        splits[p].max_bound = splits[q].position;
-                        break;
-                    } else if pw.as_() < expected_left_weight {
-                        if splits[p].min_bound < splits[q].position {
-                            splits[p].min_bound = splits[q].position;
-                        }
-                        break;
-                    } else if expected_left_weight < pw.as_() {
-                        splits[p].max_bound = splits[q].position;
-                    }
+                let new_position = (split.min_bound + split.max_bound) / _2_p;
+                if split.position == new_position {
+                    split.settled = true;
+                    todo_split_count -= 1;
+                    return split;
                 }
-            }
-            let new_position = (splits[p].min_bound + splits[p].max_bound) / _2_p;
-            if splits[p].position == new_position {
-                splits[p].settled = true;
-                todo_split_count -= 1;
-                continue;
-            }
-            splits[p].position = new_position;
-        }
+                split.position = new_position;
+                split
+            })
+            .collect();
     }
 
     splits.into_iter().map(|split| split.position).collect()
