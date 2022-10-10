@@ -1,6 +1,8 @@
 use super::Error;
 use crate::geometry::OrientedBoundingBox;
 use crate::geometry::PointND;
+use crate::weighted_quantiles::weighted_quantiles;
+use crate::weighted_quantiles::WeightedQuantileOpts;
 use crate::BoundingBox;
 use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
@@ -9,14 +11,13 @@ use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::ToTypenum;
+use num_traits::AsPrimitive;
+use num_traits::NumAssign;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::cmp;
 use std::iter::Sum;
 use std::mem::MaybeUninit;
-use std::ops::Add;
-use std::ops::AddAssign;
-use std::ops::Sub;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
@@ -81,27 +82,6 @@ where
     }
 }
 
-fn array_unzip_mut<'a, F, T, U, V, const N: usize>(
-    input: &'a mut [T; N],
-    mut map: F,
-) -> ([U; N], [V; N])
-where
-    F: FnMut(&'a mut T) -> (U, V),
-    U: 'a,
-    V: 'a,
-{
-    unsafe {
-        let mut output1: [MaybeUninit<U>; N] = MaybeUninit::uninit().assume_init();
-        let mut output2: [MaybeUninit<V>; N] = MaybeUninit::uninit().assume_init();
-        for ((u, v), t) in output1.iter_mut().zip(&mut output2).zip(input) {
-            let (new_u, new_v) = map(t);
-            u.write(new_u);
-            v.write(new_v);
-        }
-        (array_assume_init(output1), array_assume_init(output2))
-    }
-}
-
 struct Items<'a, const D: usize, W> {
     points: [&'a mut [f32]; D],
     weights: &'a mut [W],
@@ -122,20 +102,14 @@ struct SplitResult<'a, const D: usize, W> {
 /// strictly lower than `items.point[pivot][coord]` and the others.
 fn reorder_split<const D: usize, W>(
     mut items: Items<'_, D, W>,
-    pivot: usize,
+    pivot: f32,
     coord: usize,
 ) -> (Items<'_, D, W>, Items<'_, D, W>) {
-    for ps in &mut items.points {
-        ps.swap(0, pivot);
-    }
-    items.weights.swap(0, pivot);
-    items.parts.swap(0, pivot);
-
-    let (pivot, mut points) = array_unzip_mut(&mut items.points, |p| p.split_at_mut(1));
-    let pivot = pivot[coord][0];
-    let (_, weights) = items.weights.split_at_mut(1);
-    let (_, parts) = items.parts.split_at_mut(1);
-
+    let Items {
+        points,
+        weights,
+        parts,
+    } = &mut items;
     let mut l = 0;
     let mut r = points[0].len();
     loop {
@@ -151,7 +125,7 @@ fn reorder_split<const D: usize, W>(
                 break;
             }
             r -= 1;
-            for p in &mut points {
+            for p in &mut *points {
                 p.swap(l, r);
             }
             weights.swap(l, r);
@@ -160,11 +134,6 @@ fn reorder_split<const D: usize, W>(
         }
     }
 
-    for p in &mut items.points {
-        p.swap(0, l);
-    }
-    items.weights.swap(0, l);
-    items.parts.swap(0, l);
     let (points_left, points_right) = array_unzip(items.points, |p| p.split_at_mut(l));
     let (weights_left, weights_right) = items.weights.split_at_mut(l);
     let (parts_left, parts_right) = items.parts.split_at_mut(l);
@@ -186,118 +155,37 @@ fn par_rcb_split<const D: usize, W>(
     items: Items<'_, D, W>,
     coord: usize,
     tolerance: f64,
-    mut min: f32,
-    mut max: f32,
+    min: f32,
+    max: f32,
     sum: W,
 ) -> SplitResult<'_, D, W>
 where
     W: RcbWeight,
+    usize: AsPrimitive<W>,
 {
     let span = tracing::info_span!("par_rcb_split");
     let _enter = span.enter();
 
-    let mut prev_count_left = usize::MAX;
-    loop {
-        let split_target = (min + max) / 2.0;
+    let split = weighted_quantiles::<f32, W>(
+        &*items.points[coord],
+        &*items.weights,
+        WeightedQuantileOpts {
+            n: 2,
+            split_tolerance: tolerance,
+            min: Some(min),
+            max: Some(max),
+            total_weight: Some(sum),
+        },
+    )
+    .next()
+    .unwrap();
 
-        // count_left: the number of points that are on the left of split_target
-        // weight_left: the weight of all those points
-        // nearest_idx: the index in `items` of the point that is 1/ on the
-        //    right side of split_target and 2/ the nearest to split_target
-        let (count_left, weight_left, nearest_idx, nearest_distance) = items.points[coord]
-            .par_iter()
-            .with_min_len(4096)
-            .zip(&*items.weights)
-            .enumerate()
-            .fold(
-                || (0, W::default(), None, f32::INFINITY),
-                |(count, weight_left, mut nearest_idx, mut nearest_distance),
-                 (idx, (point, weight))| {
-                    let distance = point - split_target;
-                    if distance < 0.0 {
-                        (
-                            count + 1,
-                            weight_left + *weight,
-                            nearest_idx,
-                            nearest_distance,
-                        )
-                    } else {
-                        if distance < nearest_distance {
-                            nearest_distance = distance;
-                            nearest_idx = Some(idx);
-                        }
-                        (count, weight_left, nearest_idx, nearest_distance)
-                    }
-                },
-            )
-            .reduce(
-                || (0, W::default(), None, f32::INFINITY),
-                |(count0, weight0, nearest_idx0, nearest_distance0),
-                 (count1, weight1, nearest_idx1, nearest_distance1)| {
-                    let (nearest_idx, nearest_distance) = if nearest_distance0 < nearest_distance1 {
-                        (nearest_idx0, nearest_distance0)
-                    } else {
-                        (nearest_idx1, nearest_distance1)
-                    };
-                    (
-                        count0 + count1,
-                        weight0 + weight1,
-                        nearest_idx,
-                        nearest_distance,
-                    )
-                },
-            );
-
-        let nearest_idx = match nearest_idx {
-            Some(v) => v,
-            // Both following cases happen when all points are of the left side
-            // of the split_target.  This is the case when min and max are set
-            // too loosely, so we let it happen once. If this happens twice,
-            // then `prev_count_left` will be the equal to `count_left`.
-            None if prev_count_left == count_left => {
-                return SplitResult {
-                    left: items,
-                    right: Items {
-                        points: array_init(|_| &mut [][..]),
-                        weights: &mut [],
-                        parts: &mut [],
-                    },
-                    weight_left: sum,
-                    split_pos: max,
-                };
-            }
-            None => {
-                max = split_target;
-                prev_count_left = count_left;
-                continue;
-            }
-        };
-
-        let imbalance = {
-            let ideal_weight_left = sum.to_f64().unwrap() / 2.0;
-            let weight_left = weight_left.to_f64().unwrap();
-            f64::abs((weight_left - ideal_weight_left) / ideal_weight_left)
-        };
-        if count_left == prev_count_left // there is no point between min and max
-            || max <= split_target + nearest_distance // or between split_target and max
-            || imbalance <= tolerance
-        {
-            let (left, right) = reorder_split(items, nearest_idx, coord);
-            return SplitResult {
-                left,
-                right,
-                weight_left,
-                split_pos: split_target,
-            };
-        }
-        prev_count_left = count_left;
-
-        let weight_right = sum - weight_left;
-        if weight_left < weight_right {
-            min = split_target;
-        } else {
-            max = split_target;
-        }
+    let (left, right) = reorder_split(items, split.position, coord);
+    SplitResult {
+        left,
+        right,
+        weight_left: split.weight_left,
+        split_pos: split.position,
     }
 }
 
@@ -311,6 +199,7 @@ fn rcb_recurse<const D: usize, W>(
     bb: BoundingBox<D>,
 ) where
     W: RcbWeight,
+    usize: AsPrimitive<W>,
 {
     if items.parts.is_empty() {
         return;
@@ -382,6 +271,7 @@ where
     P::Iter: rayon::iter::IndexedParallelIterator + Clone,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
+    usize: AsPrimitive<W::Item>,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let points = points.into_par_iter();
@@ -445,16 +335,16 @@ where
 pub trait RcbWeight
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + ToPrimitive,
-    Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
+    Self: Sum + PartialOrd + ToPrimitive + NumAssign + AsPrimitive<f64>,
+    usize: AsPrimitive<Self>,
 {
 }
 
 impl<T> RcbWeight for T
 where
     Self: Copy + std::fmt::Debug + Default + Send + Sync,
-    Self: Sum + PartialOrd + ToPrimitive,
-    Self: Add<Output = Self> + Sub<Output = Self> + AddAssign,
+    Self: Sum + PartialOrd + ToPrimitive + NumAssign + AsPrimitive<f64>,
+    usize: AsPrimitive<Self>,
 {
 }
 
@@ -530,6 +420,7 @@ where
     P::Iter: rayon::iter::IndexedParallelIterator + Clone,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
+    usize: AsPrimitive<W::Item>,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
@@ -572,6 +463,7 @@ where
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
+    usize: AsPrimitive<W::Item>,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     let obb = match OrientedBoundingBox::from_points(points) {
@@ -648,6 +540,7 @@ where
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
+    usize: AsPrimitive<W::Item>,
     W::Iter: rayon::iter::IndexedParallelIterator,
 {
     type Metadata = ();
