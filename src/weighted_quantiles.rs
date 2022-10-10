@@ -6,11 +6,32 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use std::iter::Sum;
 
+#[derive(Default)]
+pub struct WeightedQuantileOpts<P, W> {
+    /// Number of parts.
+    pub n: usize,
+
+    pub split_tolerance: f64,
+
+    /// Way to provide the smallest element, to avoid unnecessary computation.
+    pub min: Option<P>,
+
+    /// Way to provide the largest element, to avoid unnecessary computation.
+    pub max: Option<P>,
+
+    /// Way to provide the weight of all elements combined.
+    pub total_weight: Option<W>,
+}
+
 /// Divide `points` into `n` parts of similar weights.
 ///
 /// The result is an array of `n` elements, the ith element is the the ???est
 /// value of the ith part.
-pub fn weighted_quantiles<P, W>(points: &[P], weights: &[W], n: usize) -> Vec<P>
+pub fn weighted_quantiles<P, W>(
+    points: &[P],
+    weights: &[W],
+    opts: WeightedQuantileOpts<P, W>,
+) -> Vec<P>
 where
     P: 'static + Copy + PartialOrd + Send + Sync,
     P: NumAssign + One,
@@ -19,18 +40,35 @@ where
     W: NumAssign + Sum + AsPrimitive<f64>,
     usize: AsPrimitive<W>,
 {
-    debug_assert!(n > 0);
+    debug_assert!(opts.n > 0);
+    debug_assert!(!points.is_empty());
 
-    const SPLIT_TOLERANCE: f64 = 0.05;
     let _2_p = {
         let _1_p = P::one();
         _1_p + _1_p
     };
 
-    let (min, max) = rayon::join(
-        || *points.par_iter().min_by(crate::partial_cmp).unwrap(),
-        || *points.par_iter().max_by(crate::partial_cmp).unwrap(),
-    );
+    let n = opts.n;
+    let split_tolerance = opts.split_tolerance;
+    let mut min = points[0];
+    let mut max = points[0];
+    rayon::in_place_scope(|s| {
+        if let Some(v) = opts.min {
+            min = v;
+        } else {
+            s.spawn(|_| {
+                min = *points.par_iter().min_by(crate::partial_cmp).unwrap();
+            })
+        }
+        if let Some(v) = opts.max {
+            max = v;
+        } else {
+            s.spawn(|_| {
+                max = *points.par_iter().max_by(crate::partial_cmp).unwrap();
+            })
+        }
+    });
+    let mut total_weight = opts.total_weight;
 
     #[derive(Clone)]
     struct Split<P> {
@@ -73,7 +111,14 @@ where
             })
             .unwrap();
 
-        let total_weight: W = part_weights.iter().cloned().sum();
+        let total_weight = match total_weight {
+            Some(w) => w,
+            None => {
+                let w = part_weights.iter().cloned().sum();
+                total_weight = Some(w);
+                w
+            }
+        };
         let prefix_left_weights = part_weights
             .iter()
             .scan(W::zero(), |weight_sum, part_weight| {
@@ -93,7 +138,7 @@ where
                 let left_weight_ratio = left_weight.as_() / (p + 1) as f64;
                 let right_weight_ratio = (total_weight - left_weight).as_() / (n - p - 1) as f64;
                 if f64::abs(left_weight_ratio - right_weight_ratio) / total_weight.as_()
-                    < SPLIT_TOLERANCE
+                    < split_tolerance
                 {
                     split.settled = true;
                     todo_split_count -= 1;

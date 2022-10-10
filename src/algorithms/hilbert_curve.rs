@@ -12,6 +12,7 @@
 
 use crate::geometry::OrientedBoundingBox;
 use crate::weighted_quantiles::weighted_quantiles;
+use crate::weighted_quantiles::WeightedQuantileOpts;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
@@ -35,7 +36,15 @@ fn partition_indexed<const D: usize>(
     let span = tracing::info_span!("computing split positions");
     let enter = span.enter();
 
-    let split_positions = weighted_quantiles(&hilbert_indices, weights, part_count);
+    let split_positions = weighted_quantiles(
+        &hilbert_indices,
+        weights,
+        WeightedQuantileOpts {
+            n: part_count,
+            split_tolerance: 0.01,
+            ..Default::default()
+        },
+    );
 
     mem::drop(enter);
     let span = tracing::info_span!("apply part ids");
