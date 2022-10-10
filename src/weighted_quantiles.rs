@@ -6,6 +6,11 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use std::iter::Sum;
 
+pub struct WeightedQuantile<P, W> {
+    pub position: P,
+    pub weight_left: W,
+}
+
 #[derive(Default)]
 pub struct WeightedQuantileOpts<P, W> {
     /// Number of parts.
@@ -23,6 +28,32 @@ pub struct WeightedQuantileOpts<P, W> {
     pub total_weight: Option<W>,
 }
 
+#[derive(Clone)]
+struct Split<P, W> {
+    position: P,
+    min_bound: P,
+    max_bound: P,
+    weight_left: W,
+    settled: bool,
+}
+
+impl<P, W> Split<P, W> {
+    pub fn settled(self, weight_left: W) -> Self {
+        Self {
+            settled: true,
+            weight_left,
+            ..self
+        }
+    }
+
+    pub fn into_weighted_quantile(self) -> WeightedQuantile<P, W> {
+        WeightedQuantile {
+            position: self.position,
+            weight_left: self.weight_left,
+        }
+    }
+}
+
 /// Divide `points` into `n` parts of similar weights.
 ///
 /// The result is an array of `n` elements, the ith element is the the ???est
@@ -31,7 +62,7 @@ pub fn weighted_quantiles<P, W>(
     points: &[P],
     weights: &[W],
     opts: WeightedQuantileOpts<P, W>,
-) -> impl Iterator<Item = P>
+) -> impl Iterator<Item = WeightedQuantile<P, W>>
 where
     P: 'static + Copy + PartialOrd + Send + Sync,
     P: NumAssign + One,
@@ -70,19 +101,12 @@ where
     });
     let mut total_weight = opts.total_weight;
 
-    #[derive(Clone)]
-    struct Split<P> {
-        position: P,
-        min_bound: P,
-        max_bound: P,
-        settled: bool,
-    }
-
-    let mut splits: Vec<Split<P>> = (1..n)
+    let mut splits: Vec<Split<P, W>> = (1..n)
         .map(|i| Split {
             position: min + AsPrimitive::<P>::as_(i) * (max - min) / AsPrimitive::<P>::as_(n),
             min_bound: min,
             max_bound: max,
+            weight_left: W::zero(), // will be set once the split is settled
             settled: false,
         })
         .collect();
@@ -131,23 +155,22 @@ where
             .cloned()
             .zip(prefix_left_weights)
             .enumerate()
-            .map(|(p, (mut split, left_weight))| {
+            .map(|(p, (mut split, weight_left))| {
                 if split.settled {
                     return split;
                 }
-                let left_weight_ratio = left_weight.as_() / (p + 1) as f64;
-                let right_weight_ratio = (total_weight - left_weight).as_() / (n - p - 1) as f64;
+                let left_weight_ratio = weight_left.as_() / (p + 1) as f64;
+                let right_weight_ratio = (total_weight - weight_left).as_() / (n - p - 1) as f64;
                 if f64::abs(left_weight_ratio - right_weight_ratio) / total_weight.as_()
                     < split_tolerance
                 {
-                    split.settled = true;
                     todo_split_count -= 1;
-                    return split;
+                    return split.settled(weight_left);
                 }
                 let expected_left_weight = (p + 1) as f64 * total_weight.as_() / n as f64;
                 if left_weight_ratio < right_weight_ratio {
                     split.min_bound = split.position;
-                    let mut pw = left_weight;
+                    let mut pw = weight_left;
                     for q in p + 1..n - 1 {
                         pw += part_weights[q];
                         if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
@@ -165,7 +188,7 @@ where
                     }
                 } else {
                     split.max_bound = split.position;
-                    let mut pw = left_weight;
+                    let mut pw = weight_left;
                     for q in (0..p).rev() {
                         pw -= part_weights[q + 1];
                         if approx::abs_diff_eq!(pw.as_(), expected_left_weight) {
@@ -184,9 +207,8 @@ where
                 }
                 let new_position = (split.min_bound + split.max_bound) / _2_p;
                 if split.position == new_position {
-                    split.settled = true;
                     todo_split_count -= 1;
-                    return split;
+                    return split.settled(weight_left);
                 }
                 split.position = new_position;
                 split
@@ -194,5 +216,5 @@ where
             .collect();
     }
 
-    splits.into_iter().map(|split| split.position)
+    splits.into_iter().map(Split::into_weighted_quantile)
 }

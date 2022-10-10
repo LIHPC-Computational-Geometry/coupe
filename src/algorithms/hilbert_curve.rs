@@ -45,6 +45,7 @@ fn partition_indexed<const D: usize>(
             ..Default::default()
         },
     )
+    .map(|split| split.position)
     .collect();
 
     mem::drop(enter);
