@@ -42,6 +42,7 @@ pub mod imbalance;
 mod nextafter;
 mod real;
 pub mod topology;
+mod weighted_quantiles;
 mod work_share;
 
 pub use crate::algorithms::*;
