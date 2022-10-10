@@ -166,18 +166,19 @@ where
     let span = tracing::info_span!("par_rcb_split");
     let _enter = span.enter();
 
+    let overcut = usize::clamp(items.parts.len() / 1024, 2, 256);
     let split = weighted_quantiles::<f32, W>(
         &*items.points[coord],
         &*items.weights,
         WeightedQuantileOpts {
-            n: 2,
+            n: overcut,
             split_tolerance: tolerance,
             min: Some(min),
             max: Some(max),
             total_weight: Some(sum),
         },
     )
-    .next()
+    .nth(overcut / 2 - 1)
     .unwrap();
 
     let (left, right) = reorder_split(items, split.position, coord);
