@@ -23,6 +23,7 @@
 # flamegraphs and efficiency graphs
 perf.data
 perf.data.old
+callgrind.out.*
 *.svg
 *.png
 *.csv
