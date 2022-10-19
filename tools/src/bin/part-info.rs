@@ -3,22 +3,69 @@ use anyhow::Result;
 use coupe::num_traits::FromPrimitive;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
+use coupe::topology::lambda_cut;
 use coupe_tools::set_edge_weights;
 use coupe_tools::EdgeWeightDistribution;
 use mesh_io::Mesh;
+use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
+use std::collections::HashSet;
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io;
 
 const USAGE: &str = "Usage: part-info [options]";
 
-fn imbalance<T>(part_count: usize, part_ids: &[usize], weights: &[Vec<T>]) -> Vec<f64>
+struct CriterionStats<T> {
+    total_weight: T,
+    imbalance: f64,
+    max_part_weight: T,
+    max_part_weight_count: usize,
+    min_part_weight: T,
+    min_part_weight_count: usize,
+}
+
+impl<T> fmt::Display for CriterionStats<T>
 where
-    T: Copy + Send + Sync,
-    T: FromPrimitive + ToPrimitive + Zero,
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, " - Total weight: {:12.2}", self.total_weight)?;
+        writeln!(f, " - Imbalance:    {:12.2}%", self.imbalance * 100.0)?;
+        let count_str = |count: usize| {
+            if count <= 1 {
+                String::new()
+            } else {
+                format!(" ({} duplicates)", count)
+            }
+        };
+        writeln!(
+            f,
+            " - Max part:     {:12.2}{}",
+            self.max_part_weight,
+            count_str(self.max_part_weight_count),
+        )?;
+        writeln!(
+            f,
+            " - Min part:     {:12.2}{}",
+            self.min_part_weight,
+            count_str(self.min_part_weight_count),
+        )?;
+        Ok(())
+    }
+}
+
+fn weight_stats<T>(
+    part_count: usize,
+    part_ids: &[usize],
+    weights: &[Vec<T>],
+) -> Vec<Box<dyn fmt::Display + Send>>
+where
+    T: Copy + fmt::Display + Send + Sync + 'static,
+    T: FromPrimitive + ToPrimitive + Zero + PartialOrd,
     T: std::ops::Div<Output = T> + std::ops::Sub<Output = T> + std::iter::Sum,
 {
     let criterion_count = match weights.first() {
@@ -29,33 +76,87 @@ where
         .into_par_iter()
         .map(|criterion| {
             let total_weight: T = weights.par_iter().map(|weight| weight[criterion]).sum();
+            let (min_part_weight, min_part_weight_count, max_part_weight, max_part_weight_count) =
+                (0..part_count)
+                    .into_par_iter()
+                    .map(|part| {
+                        let part_weight: T = part_ids
+                            .par_iter()
+                            .zip(weights)
+                            .filter(|(p, _w)| **p == part)
+                            .map(|(_p, w)| w[criterion])
+                            .sum();
+                        (part_weight, 1, part_weight, 1)
+                    })
+                    .reduce_with(
+                        |(min1, min_count1, max1, max_count1),
+                         (min2, min_count2, max2, max_count2)| {
+                            let min;
+                            let min_count;
+                            let max;
+                            let max_count;
+                            if min1 < min2 {
+                                min = min1;
+                                min_count = min_count1;
+                            } else if min2 < min1 {
+                                min = min2;
+                                min_count = min_count2;
+                            } else {
+                                min = min1;
+                                min_count = min_count1 + min_count2;
+                            }
+                            if max1 < max2 {
+                                max = max2;
+                                max_count = max_count2;
+                            } else if max2 < max1 {
+                                max = max1;
+                                max_count = max_count1;
+                            } else {
+                                max = max1;
+                                max_count = max_count1 + max_count2;
+                            }
+                            (min, min_count, max, max_count)
+                        },
+                    )
+                    .unwrap();
+
             let ideal_part_weight = total_weight.to_f64().unwrap() / part_count as f64;
-            if ideal_part_weight == 0.0 {
-                // Avoid divisions by zero.
-                return 0.0;
-            }
-            let imbalance = (0..part_count)
-                .into_par_iter()
-                .map(|part| {
-                    let part_weight: T = part_ids
-                        .iter()
-                        .zip(weights)
-                        .filter(|(p, _w)| **p == part)
-                        .map(|(_p, w)| w[criterion])
-                        .sum();
-                    let part_weight = part_weight.to_f64().unwrap();
-                    (part_weight - ideal_part_weight) / ideal_part_weight
-                })
-                .max_by(|part_weight0, part_weight1| {
-                    f64::partial_cmp(part_weight0, part_weight1).unwrap()
-                })
-                .unwrap();
+            let imbalance = if ideal_part_weight != 0.0 {
+                (max_part_weight.to_f64().unwrap() - ideal_part_weight) / ideal_part_weight
+            } else {
+                0.0
+            };
             // Floating-point sums are not accurate enough and in some cases
             // the sum of the weights of the largest part ends up smaller
             // than the total weights divided by the number of parts.
-            f64::max(0.0, imbalance)
+            let imbalance = f64::max(0.0, imbalance);
+
+            let res: Box<dyn fmt::Display + Send> = Box::new(CriterionStats {
+                total_weight,
+                imbalance,
+                max_part_weight,
+                max_part_weight_count,
+                min_part_weight,
+                min_part_weight_count,
+            });
+
+            res
         })
         .collect()
+}
+
+fn empty_part_count(part_ids: &[usize], part_count: usize) -> usize {
+    part_count
+        - part_ids
+            .par_iter()
+            .fold(HashSet::<usize>::default, |mut uniq, part_id| {
+                uniq.insert(*part_id);
+                uniq
+            })
+            .reduce(HashSet::<usize>::default, |uniq1, uniq2| {
+                HashSet::union(&uniq1, &uniq2).cloned().collect()
+            })
+            .len()
 }
 
 fn main() -> Result<()> {
@@ -124,11 +225,16 @@ fn main() -> Result<()> {
                 .opt_get("n")?
                 .unwrap_or_else(|| 1 + *parts.iter().max().unwrap_or(&0));
 
-            let imbs = match &weights {
-                mesh_io::weight::Array::Integers(v) => imbalance(part_count, &parts, v),
-                mesh_io::weight::Array::Floats(v) => imbalance(part_count, &parts, v),
+            println!("Parts: {part_count}");
+            println!("Empty parts: {}", empty_part_count(&parts, part_count));
+
+            let stats = match &weights {
+                mesh_io::weight::Array::Integers(v) => weight_stats(part_count, &parts, v),
+                mesh_io::weight::Array::Floats(v) => weight_stats(part_count, &parts, v),
             };
-            println!("imbalances: {:?}", imbs);
+            for (i, stat) in stats.into_iter().enumerate() {
+                print!("Criterion #{i}:\n{stat}");
+            }
             Ok(parts)
         },
     );
@@ -136,21 +242,22 @@ fn main() -> Result<()> {
     let parts = parts?;
 
     println!(
-        "edge cut: {}",
+        "Edge cut size: {}",
         coupe::topology::edge_cut(adjacency.view(), &parts),
     );
-    match &weights {
-        mesh_io::weight::Array::Integers(v) => {
-            let lambda_cut =
-                coupe::topology::lambda_cut(adjacency.view(), &parts, v.par_iter().map(|c| c[0]));
-            println!("lambda cut: {}", lambda_cut);
-        }
-        mesh_io::weight::Array::Floats(v) => {
-            let lambda_cut =
-                coupe::topology::lambda_cut(adjacency.view(), &parts, v.par_iter().map(|c| c[0]));
-            println!("lambda cut: {}", lambda_cut);
-        }
-    }
+    let lambda_cut: Box<dyn fmt::Display> = match &weights {
+        mesh_io::weight::Array::Integers(v) => Box::new(lambda_cut(
+            adjacency.view(),
+            &parts,
+            v.par_iter().map(|c| c[0]),
+        )),
+        mesh_io::weight::Array::Floats(v) => Box::new(lambda_cut(
+            adjacency.view(),
+            &parts,
+            v.par_iter().map(|c| c[0]),
+        )),
+    };
+    println!("Lambda cut size: {}", lambda_cut);
 
     Ok(())
 }
