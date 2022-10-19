@@ -37,6 +37,7 @@
 )]
 
 mod algorithms;
+mod average;
 mod cartesian;
 mod defer;
 mod geometry;
@@ -47,6 +48,7 @@ mod topology;
 mod work_share;
 
 pub use crate::algorithms::*;
+pub use crate::average::Average;
 pub use crate::cartesian::*;
 pub use crate::geometry::BoundingBox;
 pub use crate::geometry::{Point2D, Point3D, PointND};

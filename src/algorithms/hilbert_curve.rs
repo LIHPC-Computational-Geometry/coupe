@@ -11,12 +11,12 @@
 //! The complexity of encoding a point is O(order)
 
 use crate::geometry::OrientedBoundingBox;
+use crate::Average;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
 use num_traits::AsPrimitive;
 use num_traits::NumAssign;
-use num_traits::One;
 use rayon::prelude::*;
 use std::fmt;
 use std::iter::Sum;
@@ -29,7 +29,7 @@ use std::mem;
 fn weighted_quantiles<P, W>(points: &[P], weights: &[W], n: usize) -> Vec<P>
 where
     P: 'static + Copy + PartialOrd + Send + Sync,
-    P: NumAssign + One,
+    P: NumAssign + Average,
     usize: AsPrimitive<P>,
     W: Send + Sync,
     W: NumAssign + Sum + AsPrimitive<f64>,
@@ -38,10 +38,6 @@ where
     debug_assert!(n > 0);
 
     const SPLIT_TOLERANCE: f64 = 0.05;
-    let _2_p = {
-        let _1_p = P::one();
-        _1_p + _1_p
-    };
 
     let (min, max) = rayon::join(
         || *points.par_iter().min_by(crate::partial_cmp).unwrap(),
@@ -153,7 +149,7 @@ where
                         }
                     }
                 }
-                let new_position = (split.min_bound + split.max_bound) / _2_p;
+                let new_position = P::avg(split.min_bound, split.max_bound);
                 if split.position == new_position {
                     split.settled = true;
                     todo_split_count -= 1;
