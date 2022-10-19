@@ -207,7 +207,7 @@ fn segment_to_segment(min: f64, max: f64, order: usize) -> impl Fn(f64) -> u64 {
     let n = (1_u64 << order) as f64;
     let mut f = n / width;
 
-    // Map max to (2**order-1).
+    // Map max to (2**order-1) and avoid u64 overflow.
     while n <= width * f {
         f = crate::nextafter(f, 0.0);
     }
@@ -522,9 +522,10 @@ where
         part_ids: &mut [usize],
         (points, weights): (&[Point2D], W),
     ) -> Result<Self::Metadata, Self::Error> {
-        if self.order >= 64 {
+        const MAX_ORDER: u32 = 32;
+        if self.order > MAX_ORDER {
             return Err(Error::InvalidOrder {
-                max: 63,
+                max: MAX_ORDER,
                 actual: self.order,
             });
         }
@@ -555,9 +556,10 @@ where
         part_ids: &mut [usize],
         (points, weights): (&[Point3D], W),
     ) -> Result<Self::Metadata, Self::Error> {
-        if self.order >= 64 {
+        const MAX_ORDER: u32 = 21;
+        if self.order > MAX_ORDER {
             return Err(Error::InvalidOrder {
-                max: 63,
+                max: MAX_ORDER,
                 actual: self.order,
             });
         }
