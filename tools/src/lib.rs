@@ -814,6 +814,7 @@ pub fn write_mesh(
     Ok(())
 }
 
+#[cfg(any(feature = "metis", feature = "scotch"))]
 fn zoom_in<I, O, W>(inputs: I) -> Vec<O>
 where
     I: IntoIterator,
