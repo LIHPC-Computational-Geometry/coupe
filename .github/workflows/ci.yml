@@ -12,26 +12,6 @@ env:
   BINDGEN_EXTRA_CLANG_ARGS: "-I/usr/include/scotch" # ubuntu package use <scotch/scotch.h>
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        rust:
-          - stable
-    steps:
-      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --all-targets --locked
-
   test:
     name: Test Suite
     runs-on: ubuntu-22.04
