@@ -251,7 +251,7 @@ where
                 weights,
                 left_weight,
                 iter_count - 1,
-                (coord + 1) % 2,
+                (coord + 1) % 3,
             )
         },
         || {
@@ -261,7 +261,7 @@ where
                 weights,
                 right_weight,
                 iter_count - 1,
-                (coord + 1) % 2,
+                (coord + 1) % 3,
             )
         },
     );
