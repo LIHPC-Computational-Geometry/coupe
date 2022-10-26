@@ -98,7 +98,7 @@ impl Grid<2> {
             weights,
             total_weight,
             iter_count,
-            0,
+            1,
         );
         partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
@@ -126,7 +126,7 @@ impl Grid<3> {
             weights,
             total_weight,
             iter_count,
-            0,
+            1,
         );
         partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
