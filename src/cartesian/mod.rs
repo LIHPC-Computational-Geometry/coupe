@@ -4,6 +4,10 @@ use std::ops::Range;
 
 use num_traits::AsPrimitive;
 use num_traits::Num;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
 
 mod rcb;
 
@@ -87,7 +91,7 @@ impl Grid<2> {
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
         f64: AsPrimitive<W>,
     {
-        let total_weight: W = weights.iter().cloned().sum();
+        let total_weight: W = weights.par_iter().cloned().sum();
         let iters = rcb::recurse_2d(
             self,
             self.into_subgrid(),
@@ -96,7 +100,7 @@ impl Grid<2> {
             iter_count,
             0,
         );
-        partition.iter_mut().enumerate().for_each(|(i, p)| {
+        partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
             *p = iters.part_of(pos, 0);
         });
@@ -115,7 +119,7 @@ impl Grid<3> {
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
         f64: AsPrimitive<W>,
     {
-        let total_weight: W = weights.iter().cloned().sum();
+        let total_weight: W = weights.par_iter().cloned().sum();
         let iters = rcb::recurse_3d(
             self,
             self.into_subgrid(),
@@ -124,7 +128,7 @@ impl Grid<3> {
             iter_count,
             0,
         );
-        partition.iter_mut().enumerate().for_each(|(i, p)| {
+        partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
             *p = iters.part_of(pos, 0);
         });
