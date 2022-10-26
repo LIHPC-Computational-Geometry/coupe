@@ -185,9 +185,11 @@ dependencies = [
 name = "coupe"
 version = "0.1.0"
 dependencies = [
+ "affinity",
  "approx",
  "criterion",
  "itertools",
+ "ittapi",
  "nalgebra",
  "num-traits",
  "proptest",
