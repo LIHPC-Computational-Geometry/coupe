@@ -45,10 +45,16 @@ rayon = "1.3"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 rand = "0.8"
 sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
+ittapi = "0.3"
 
 [dev-dependencies]
+affinity = { version = "0.1", default-features = false }
 criterion = "0.3"
 proptest = { version = "1.0.0", default-features = false, features = ["std", "timeout"] }
 tracing-subscriber = "0.3"
 tracing-chrome = "0.4"
 tracing-tree = "0.2"
+
+[[bench]]
+name = "rcb_cartesian"
+harness = false

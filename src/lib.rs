@@ -37,15 +37,18 @@
 )]
 
 mod algorithms;
+mod cartesian;
 mod defer;
 mod geometry;
 pub mod imbalance;
 mod nextafter;
+mod rayon_utils;
 mod real;
 pub mod topology;
 mod work_share;
 
 pub use crate::algorithms::*;
+pub use crate::cartesian::*;
 pub use crate::geometry::BoundingBox;
 pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::nextafter::nextafter;
