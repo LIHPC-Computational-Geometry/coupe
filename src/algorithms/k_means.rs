@@ -244,8 +244,8 @@ fn balanced_k_means_iter<const D: usize>(
             .iter()
             .zip(points.iter().cloned())
             .into_group_map()
-            .into_iter()
-            .map(|(_assignment, points)| max_distance(&points))
+            .into_values()
+            .map(|points| max_distance(&points))
             .sum::<f64>()
             / centers.len() as f64;
 
