@@ -446,7 +446,6 @@ fn reorder_split<const D: usize, W>(
         && std::mem::size_of::<&AtomicUsize>() == 8
         && items.parts.len() >= 2 * AVX2_REGISTER_BYTES
     {
-        eprintln!("using avx512");
         return reorder_split_avx512(items, pivot, coord);
     }
 
