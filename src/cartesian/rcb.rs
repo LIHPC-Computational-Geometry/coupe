@@ -150,23 +150,27 @@ where
     let right_weight = total_weight - left_weight;
 
     let (left_grid, right_grid) = subgrid.split_at(coord, split_position);
-    let (left, right) = (
-        recurse_2d(
-            grid,
-            left_grid,
-            weights,
-            left_weight,
-            iter_count - 1,
-            (coord + 1) % 2,
-        ),
-        recurse_2d(
-            grid,
-            right_grid,
-            weights,
-            right_weight,
-            iter_count - 1,
-            (coord + 1) % 2,
-        ),
+    let (left, right) = rayon::join(
+        || {
+            recurse_2d(
+                grid,
+                left_grid,
+                weights,
+                left_weight,
+                iter_count - 1,
+                (coord + 1) % 2,
+            )
+        },
+        || {
+            recurse_2d(
+                grid,
+                right_grid,
+                weights,
+                right_weight,
+                iter_count - 1,
+                (coord + 1) % 2,
+            )
+        },
     );
 
     IterationResult::Split {
