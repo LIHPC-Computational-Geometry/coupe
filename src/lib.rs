@@ -43,7 +43,7 @@ mod geometry;
 pub mod imbalance;
 mod nextafter;
 mod real;
-pub mod topology;
+mod topology;
 mod work_share;
 
 pub use crate::algorithms::*;
@@ -52,6 +52,7 @@ pub use crate::geometry::BoundingBox;
 pub use crate::geometry::{Point2D, Point3D, PointND};
 pub use crate::nextafter::nextafter;
 pub use crate::real::Real;
+pub use crate::topology::Topology;
 
 pub use nalgebra;
 pub use num_traits;

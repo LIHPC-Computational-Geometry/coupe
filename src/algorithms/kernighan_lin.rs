@@ -3,6 +3,7 @@
 //! At each iteration, two nodes of different partition will be swapped, decreasing the overall cutsize
 //! of the partition. The swap is performed in such a way that the added partition imbalanced is controlled.
 
+use crate::topology::Topology;
 use itertools::Itertools;
 use sprs::CsMatView;
 
@@ -50,7 +51,7 @@ fn kernighan_lin_2_impl(
         unimplemented!();
     }
 
-    let mut cut_size = crate::topology::edge_cut(adjacency, initial_partition);
+    let mut cut_size = adjacency.edge_cut(initial_partition);
     tracing::info!("Initial cut size: {}", cut_size);
     let mut new_cut_size = cut_size;
 
@@ -139,10 +140,7 @@ fn kernighan_lin_2_impl(
             initial_partition.swap(max_pos_1, max_pos_2);
 
             // save cut size
-            cut_saves.push(crate::topology::edge_cut(
-                adjacency.view(),
-                initial_partition,
-            ));
+            cut_saves.push(adjacency.edge_cut(initial_partition));
         }
 
         // lookup for best cutsize

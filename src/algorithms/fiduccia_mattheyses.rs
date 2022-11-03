@@ -1,4 +1,5 @@
 use super::Error;
+use crate::topology::Topology;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -66,7 +67,7 @@ where
         None => *part_weights.iter().max_by(crate::partial_cmp).unwrap(),
     };
 
-    let mut best_edge_cut = crate::topology::edge_cut(adjacency, partition);
+    let mut best_edge_cut = adjacency.edge_cut(partition);
     tracing::info!("Initial edge cut: {}", best_edge_cut);
 
     let max_possible_gain = (0..partition.len())
@@ -186,10 +187,7 @@ where
             tracing::info!(moved_vertex, initial_part, target_part, "moved vertex");
 
             current_edge_cut -= move_gain;
-            debug_assert_eq!(
-                current_edge_cut,
-                crate::topology::edge_cut(adjacency, partition),
-            );
+            debug_assert_eq!(current_edge_cut, adjacency.edge_cut(partition));
             if current_edge_cut < best_edge_cut {
                 best_edge_cut = current_edge_cut;
                 move_with_best_edge_cut = Some(move_num);
