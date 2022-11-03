@@ -5,6 +5,7 @@ use coupe::num_traits::FromPrimitive;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
 use coupe::sprs::CsMatView;
+use coupe::Topology;
 use coupe_tools::set_edge_weights;
 use coupe_tools::EdgeWeightDistribution;
 use mesh_io::Mesh;
@@ -184,7 +185,7 @@ where
             T::from_f64(sqrt_sum).unwrap()
         }
     });
-    coupe::topology::lambda_cut(adjacency, parts, weights)
+    adjacency.lambda_cut(parts, weights)
 }
 
 fn main() -> Result<()> {
@@ -269,10 +270,7 @@ fn main() -> Result<()> {
     let adjacency = adjacency?;
     let parts = parts?;
 
-    println!(
-        "Edge cut size: {}",
-        coupe::topology::edge_cut(adjacency.view(), &parts),
-    );
+    println!("Edge cut size: {}", adjacency.view().edge_cut(&parts));
     let lambda_cut: Box<dyn fmt::Display> = match &weights {
         mesh_io::weight::Array::Integers(v) => {
             Box::new(lambda_cut(adjacency.view(), &parts, edge_weights, v))
