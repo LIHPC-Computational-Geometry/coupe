@@ -339,8 +339,24 @@ fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
     };
 
     let zorder = unsafe {
-        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
-            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "x86_64")] {
+                std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+                    | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
+            } else if #[cfg(target_arch = "x86")] {
+                std::arch::x86::_pdep_u32(x as u32, 0x5555_5555 << 1) as u64
+                    | ((std::arch::x86::_pdep_u32((x >> 16) as u32, 0x5555_5555 << 1) as u64) << 32)
+                    | std::arch::x86::_pdep_u32(y as u32, 0x5555_5555) as u64
+                    | ((std::arch::x86::_pdep_u32((y >> 16) as u32, 0x5555_5555) as u64) << 32)
+            } else {
+                let mut res = 0;
+                for i in 0..32 {
+                    res |= (y & (1 << i)) << i;
+                    res |= (x & (1 << i)) << (i + 1);
+                }
+                res
+            }
+        }
     };
 
     let mut config: u16 = 0;
@@ -397,9 +413,28 @@ fn encode_3d(x: u64, y: u64, z: u64, order: usize) -> u64 {
     ];
 
     let zorder = unsafe {
-        std::arch::x86_64::_pdep_u64(x, 0x9249_2492_4924_9249 << 2)
-            | std::arch::x86_64::_pdep_u64(y, 0x9249_2492_4924_9249 << 1)
-            | std::arch::x86_64::_pdep_u64(z, 0x9249_2492_4924_9249)
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "x86_64")] {
+                std::arch::x86_64::_pdep_u64(x, 0x9249_2492_4924_9249 << 2)
+                    | std::arch::x86_64::_pdep_u64(y, 0x9249_2492_4924_9249 << 1)
+                    | std::arch::x86_64::_pdep_u64(z, 0x9249_2492_4924_9249)
+            } else if #[cfg(target_arch = "x86")] {
+                std::arch::x86_64::_pdep_u32(x as u32, 0x9249_2492 << 2) as u64
+                    | ((std::arch::x86_64::_pdep_u32((x >> 21) as u32, 0x4924_9249 << 2) as u64) << 32)
+                    | std::arch::x86_64::_pdep_u32(y as u32, 0x9249_2492 << 1) as u64
+                    | ((std::arch::x86_64::_pdep_u32((y >> 21) as u32, 0x4924_9249 << 1) as u64) << 32)
+                    | std::arch::x86_64::_pdep_u32(z as u32, 0x9249_2492) as u64
+                    | ((std::arch::x86_64::_pdep_u32((z >> 21) as u32, 0x4924_9249) as u64) << 32)
+            } else {
+                let mut res = 0;
+                for i in 0..22 {
+                    res |= (z & (1 << i)) << (2 * i);
+                    res |= (y & (1 << i)) << (2 * i + 1);
+                    res |= (x & (1 << i)) << (2 * i + 2);
+                }
+                res
+            }
+        }
     };
 
     let mut config = 0;
