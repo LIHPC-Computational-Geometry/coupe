@@ -1,6 +1,7 @@
 use super::Error;
 use crate::defer::defer;
 use crate::partial_cmp;
+use crate::topology::Topology;
 use crate::work_share::work_share;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
@@ -9,7 +10,6 @@ use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice;
-use sprs::CsMatView;
 use std::mem;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
@@ -57,20 +57,20 @@ impl Metadata {
     }
 }
 
-fn arc_swap<W>(
+fn arc_swap<W, T>(
     partition: &mut [usize],
     weights: &[W],
-    adjacency: CsMatView<'_, i64>,
+    adjacency: T,
     part_count: usize,
     max_imbalance: Option<f64>,
 ) -> Metadata
 where
     W: AsWeight,
+    T: Topology<i64> + Sync,
 {
     debug_assert!(!partition.is_empty());
     debug_assert_eq!(partition.len(), weights.len());
-    debug_assert_eq!(partition.len(), adjacency.rows());
-    debug_assert_eq!(partition.len(), adjacency.cols());
+    debug_assert_eq!(partition.len(), adjacency.len());
 
     let compute_part_weights = || {
         let span = tracing::info_span!("compute part_weights and max_part_weight");
@@ -132,19 +132,18 @@ where
             metadata.move_attempts += 1;
 
             let initial_part = partition[vertex].load(Ordering::Relaxed);
-            let neighbors = adjacency.outer_view(vertex).unwrap();
 
             let (target_part, gain) = (0..part_count)
                 .filter(|target_part| *target_part != initial_part)
                 .map(|target_part| {
-                    let gain: i64 = neighbors
-                        .iter()
+                    let gain: i64 = adjacency
+                        .neighbors(vertex)
                         .map(|(neighbor, edge_weight)| {
                             let part = partition[neighbor].load(Ordering::Relaxed);
                             if part == initial_part {
-                                -*edge_weight
+                                -edge_weight
                             } else if part == target_part {
-                                *edge_weight
+                                edge_weight
                             } else {
                                 0
                             }
@@ -179,8 +178,8 @@ where
                 let locks = &locks;
                 move || locks[vertex].store(false, Ordering::Release)
             });
-            let raced = neighbors
-                .iter()
+            let raced = adjacency
+                .neighbors(vertex)
                 .any(|(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire));
             if raced {
                 metadata.race_count += 1;
@@ -197,21 +196,19 @@ where
             break vertex;
         };
 
-        for (neighbor, _edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
+        for (neighbor, _edge_weight) in adjacency.neighbors(moved_vertex) {
             let neighbor_part = partition[neighbor].load(Ordering::Relaxed);
             let neighbor_gain: i64 = (0..part_count)
                 .filter(|target_part| *target_part != neighbor_part)
                 .map(|target_part| {
                     adjacency
-                        .outer_view(neighbor)
-                        .unwrap()
-                        .iter()
+                        .neighbors(neighbor)
                         .map(|(neighbor2, edge_weight)| {
                             let part = partition[neighbor2].load(Ordering::Relaxed);
                             if part == neighbor_part {
-                                -*edge_weight
+                                -edge_weight
                             } else if part == target_part {
-                                *edge_weight
+                                edge_weight
                             } else {
                                 0
                             }
@@ -256,11 +253,9 @@ where
                 let mut metadata = Metadata::default();
                 for (initial_part, vertex) in chunk.iter().zip(items_per_thread * chunk_idx..) {
                     let initial_part = initial_part.load(Ordering::Relaxed);
-                    let on_cut = adjacency.outer_view(vertex).unwrap().iter().any(
-                        |(neighbor, _edge_weight)| {
-                            partition[neighbor].load(Ordering::Relaxed) != initial_part
-                        },
-                    );
+                    let on_cut = adjacency.neighbors(vertex).any(|(neighbor, _edge_weight)| {
+                        partition[neighbor].load(Ordering::Relaxed) != initial_part
+                    });
                     if !on_cut {
                         continue;
                     }
@@ -343,9 +338,10 @@ pub struct ArcSwap {
     pub max_imbalance: Option<f64>,
 }
 
-impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for ArcSwap
+impl<'a, T, W> crate::Partition<(T, &'a [W])> for ArcSwap
 where
     W: AsWeight,
+    T: Topology<i64> + Sync,
 {
     type Metadata = Metadata;
     type Error = Error;
@@ -353,7 +349,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<'_, i64>, &'a [W]),
+        (adjacency, weights): (T, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(Metadata::default());
@@ -364,16 +360,10 @@ where
                 actual: weights.len(),
             });
         }
-        if part_ids.len() != adjacency.rows() {
+        if part_ids.len() != adjacency.len() {
             return Err(Error::InputLenMismatch {
                 expected: part_ids.len(),
-                actual: adjacency.rows(),
-            });
-        }
-        if part_ids.len() != adjacency.cols() {
-            return Err(Error::InputLenMismatch {
-                expected: part_ids.len(),
-                actual: adjacency.cols(),
+                actual: adjacency.len(),
             });
         }
         let part_count = 1 + *part_ids.par_iter().max().unwrap_or(&0);
