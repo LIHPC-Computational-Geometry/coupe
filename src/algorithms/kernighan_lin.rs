@@ -5,17 +5,18 @@
 
 use crate::topology::Topology;
 use itertools::Itertools;
-use sprs::CsMatView;
 
-fn kernighan_lin(
+fn kernighan_lin<T>(
     part_ids: &mut [usize],
     weights: &[f64],
-    adjacency: CsMatView<'_, f64>,
+    adjacency: T,
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     max_imbalance_per_flip: Option<f64>,
     max_bad_move_in_a_row: usize,
-) {
+) where
+    T: Topology<f64> + Sync,
+{
     // To adapt Kernighan-Lin to a partition of more than 2 parts,
     // we apply the algorithm to each pair of adjacent parts (two parts
     // are adjacent if there exists an element in one part that is linked to
@@ -32,15 +33,17 @@ fn kernighan_lin(
     );
 }
 
-fn kernighan_lin_2_impl(
+fn kernighan_lin_2_impl<T>(
     initial_partition: &mut [usize],
     weights: &[f64],
-    adjacency: CsMatView<'_, f64>,
+    adjacency: T,
     max_passes: Option<usize>,
     max_flips_per_pass: Option<usize>,
     _max_imbalance_per_flip: Option<f64>,
     max_bad_move_in_a_row: usize,
-) {
+) where
+    T: Topology<f64> + Sync,
+{
     let unique_ids = initial_partition
         .iter()
         .cloned()
@@ -79,7 +82,7 @@ fn kernighan_lin_2_impl(
         {
             // construct gains
             for (idx, gain) in gains.iter_mut().enumerate() {
-                for (j, w) in adjacency.outer_view(idx).unwrap().iter() {
+                for (j, w) in adjacency.neighbors(idx) {
                     if initial_partition[idx] == initial_partition[j] {
                         *gain -= w;
                     } else {
@@ -102,7 +105,7 @@ fn kernighan_lin_2_impl(
                 .unwrap();
 
             // update gain of neighbors
-            for (j, w) in adjacency.outer_view(max_pos_1).unwrap().iter() {
+            for (j, w) in adjacency.neighbors(max_pos_1) {
                 if initial_partition[max_pos_1] == initial_partition[j] {
                     gains[j] += 2. * w;
                 } else {
@@ -258,14 +261,17 @@ pub struct KernighanLin {
     pub max_bad_move_in_a_row: usize,
 }
 
-impl<'a> crate::Partition<(CsMatView<'a, f64>, &'a [f64])> for KernighanLin {
+impl<'a, T> crate::Partition<(T, &'a [f64])> for KernighanLin
+where
+    T: Topology<f64> + Sync,
+{
     type Metadata = ();
     type Error = std::convert::Infallible;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<'_, f64>, &'a [f64]),
+        (adjacency, weights): (T, &'a [f64]),
     ) -> Result<Self::Metadata, Self::Error> {
         kernighan_lin(
             part_ids,
