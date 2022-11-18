@@ -30,7 +30,7 @@ repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 autobenches = false
 
 [features]
-default = []
+default = ["sprs"]
 
 # Enable the nightly `stdsimd` feature and AVX512-accelerated algorithms.
 # Requires rust nightly.
@@ -44,7 +44,7 @@ num-traits = "0.2"
 rayon = "1.3"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 rand = "0.8"
-sprs = { version = "0.11", default-features = false, features = ["multi_thread"] }
+sprs = { version = "0.11", optional = true, default-features = false, features = ["multi_thread"] }
 ittapi = "0.3"
 
 [dev-dependencies]
