@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::iter::Sum;
 use std::ops::Mul;
 
+#[cfg(feature = "sprs")]
 mod sprs;
 
 /// `Topology` is implemented for types that represent mesh topology.
