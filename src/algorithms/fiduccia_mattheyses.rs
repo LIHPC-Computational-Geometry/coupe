@@ -5,7 +5,6 @@ use num_traits::ToPrimitive;
 use num_traits::Zero;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
-use sprs::CsMatView;
 use std::collections::HashSet;
 use std::iter::Sum;
 use std::ops::AddAssign;
@@ -35,10 +34,10 @@ struct Move {
     initial_part: usize,
 }
 
-fn fiduccia_mattheyses<W>(
+fn fiduccia_mattheyses<W, T>(
     partition: &mut [usize],
     weights: &[W],
-    adjacency: CsMatView<'_, i64>,
+    adjacency: T,
     max_passes: usize,
     max_moves_per_pass: usize,
     max_imbalance: Option<f64>,
@@ -46,11 +45,11 @@ fn fiduccia_mattheyses<W>(
 ) -> Metadata
 where
     W: FmWeight,
+    T: Topology<i64> + Sync,
 {
     debug_assert!(!partition.is_empty());
     debug_assert_eq!(partition.len(), weights.len());
-    debug_assert_eq!(partition.len(), adjacency.rows());
-    debug_assert_eq!(partition.len(), adjacency.cols());
+    debug_assert_eq!(partition.len(), adjacency.len());
 
     debug_assert!(*partition.iter().max().unwrap() < 2);
 
@@ -73,9 +72,7 @@ where
     let max_possible_gain = (0..partition.len())
         .map(|vertex| {
             adjacency
-                .outer_view(vertex)
-                .unwrap()
-                .iter()
+                .neighbors(vertex)
                 .fold(0, |acc, (_, edge_weight)| acc + edge_weight)
         })
         .max()
@@ -89,7 +86,7 @@ where
     // Maps a gain value to its index in gain_to_vertex.
     let gain_table_idx = |gain: i64| (gain + max_possible_gain) as usize;
     // Either Some(gain) or None if the vertex is locked.
-    let mut vertex_to_gain = vec![None; adjacency.outer_dims()].into_boxed_slice();
+    let mut vertex_to_gain = vec![None; adjacency.len()].into_boxed_slice();
 
     let mut moves_per_pass = Vec::new();
     let mut rewinded_moves_per_pass = Vec::new();
@@ -115,14 +112,12 @@ where
         }
         for (vertex, initial_part) in partition.iter().enumerate() {
             let gain = adjacency
-                .outer_view(vertex)
-                .unwrap()
-                .iter()
+                .neighbors(vertex)
                 .map(|(neighbor, edge_weight)| {
                     if partition[neighbor] == *initial_part {
-                        -*edge_weight
+                        -edge_weight
                     } else {
-                        *edge_weight
+                        edge_weight
                     }
                 })
                 .sum();
@@ -193,7 +188,7 @@ where
                 move_with_best_edge_cut = Some(move_num);
             }
 
-            for (neighbor, edge_weight) in adjacency.outer_view(moved_vertex).unwrap().iter() {
+            for (neighbor, edge_weight) in adjacency.neighbors(moved_vertex) {
                 let outdated_gain = match vertex_to_gain[neighbor] {
                     Some(v) => v,
                     None => continue,
@@ -355,8 +350,9 @@ pub struct FiducciaMattheyses {
     pub max_bad_move_in_a_row: usize,
 }
 
-impl<'a, W> crate::Partition<(CsMatView<'a, i64>, &'a [W])> for FiducciaMattheyses
+impl<'a, T, W> crate::Partition<(T, &'a [W])> for FiducciaMattheyses
 where
+    T: Topology<i64> + Sync,
     W: FmWeight,
 {
     type Metadata = Metadata;
@@ -365,7 +361,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (CsMatView<'_, i64>, &'a [W]),
+        (adjacency, weights): (T, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(Metadata::default());
@@ -376,16 +372,10 @@ where
                 actual: weights.len(),
             });
         }
-        if part_ids.len() != adjacency.rows() {
+        if part_ids.len() != adjacency.len() {
             return Err(Error::InputLenMismatch {
                 expected: part_ids.len(),
-                actual: adjacency.rows(),
-            });
-        }
-        if part_ids.len() != adjacency.cols() {
-            return Err(Error::InputLenMismatch {
-                expected: part_ids.len(),
-                actual: adjacency.cols(),
+                actual: adjacency.len(),
             });
         }
         if 1 < *part_ids.iter().max().unwrap_or(&0) {
