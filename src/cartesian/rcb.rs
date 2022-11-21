@@ -1,14 +1,13 @@
 use super::Grid;
 use super::SubGrid;
 use crate::rayon_utils::IndexedParallelIteratorExt;
-
-use std::iter::Sum;
-
 use num_traits::AsPrimitive;
 use num_traits::Num;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
+use std::iter::Sum;
 
 #[derive(Debug)]
 pub enum IterationResult {
@@ -51,11 +50,8 @@ struct WeightedMedian<W> {
     left_weight: W,
 }
 
-fn weighted_median<FW, IW, W>(weights: FW, total_weight: W) -> WeightedMedian<W>
+fn weighted_median<W>(weights: &[W], total_weight: W) -> WeightedMedian<W>
 where
-    FW: Fn() -> IW,
-    IW: IntoParallelIterator<Item = W>,
-    IW::Iter: IndexedParallelIterator,
     W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
     f64: AsPrimitive<W>,
 {
@@ -63,15 +59,13 @@ where
     let min_part_weight: W = (ideal_part_weight * (1.0 - TOLERANCE)).as_();
     let max_part_weight: W = (ideal_part_weight * (1.0 + TOLERANCE)).as_();
     let mut min = 0;
-    let mut max = weights().into_par_iter().len();
+    let mut max = weights.len();
     let mut left_weight = W::zero();
     loop {
         let chunk_size = usize::max(1, (max - min) / rayon::current_num_threads());
-        let chunk_weights: Vec<(usize, W)> = weights()
-            .into_par_iter()
-            .skip(min)
-            .take(max - min)
-            .fold_chunks(chunk_size, W::zero, |sum, w| sum + w)
+        let chunk_weights: Vec<(usize, W)> = weights[min..max]
+            .par_iter()
+            .fold_chunks(chunk_size, W::zero, |sum, w| sum + *w)
             .enumerate()
             .collect();
         let prefix_chunk_weights = chunk_weights.into_iter().scan(
@@ -122,29 +116,34 @@ where
         return IterationResult::Whole;
     }
 
-    let split = if coord == 0 {
-        let w = || {
-            subgrid.axis(0).into_par_iter().map(|x| {
+    let axis_weights: Vec<W> = if coord == 0 {
+        subgrid
+            .axis(0)
+            .into_par_iter()
+            .map(|x| {
                 let s: W = subgrid
                     .axis(1)
                     .map(|y| weights[grid.index_of([x, y])])
                     .sum();
                 s
             })
-        };
-        weighted_median(w, total_weight)
+            .collect()
     } else {
-        let w = || {
-            subgrid.axis(1).into_par_iter().map(|y| {
+        subgrid
+            .axis(1)
+            .into_par_iter()
+            .map(|y| {
                 let s: W = subgrid
                     .axis(0)
                     .map(|x| weights[grid.index_of([x, y])])
                     .sum();
                 s
             })
-        };
-        weighted_median(w, total_weight)
+            .collect()
     };
+
+    let split = weighted_median(&axis_weights, total_weight);
+
     let split_position = split.position + subgrid.offset[coord];
     let left_weight = split.left_weight;
     let right_weight = total_weight - left_weight;
@@ -196,9 +195,11 @@ where
         return IterationResult::Whole;
     }
 
-    let split = if coord == 0 {
-        let w = || {
-            subgrid.axis(0).into_par_iter().map(|x| {
+    let axis_weights: Vec<W> = if coord == 0 {
+        subgrid
+            .axis(0)
+            .into_par_iter()
+            .map(|x| {
                 let s: W = subgrid
                     .axis(1)
                     .flat_map(|y| {
@@ -209,11 +210,12 @@ where
                     .sum();
                 s
             })
-        };
-        weighted_median(w, total_weight)
+            .collect()
     } else if coord == 1 {
-        let w = || {
-            subgrid.axis(1).into_par_iter().map(|y| {
+        subgrid
+            .axis(1)
+            .into_par_iter()
+            .map(|y| {
                 let s: W = subgrid
                     .axis(2)
                     .flat_map(|z| {
@@ -224,11 +226,12 @@ where
                     .sum();
                 s
             })
-        };
-        weighted_median(w, total_weight)
+            .collect()
     } else {
-        let w = || {
-            subgrid.axis(2).into_par_iter().map(|z| {
+        subgrid
+            .axis(2)
+            .into_par_iter()
+            .map(|z| {
                 let s: W = subgrid
                     .axis(0)
                     .flat_map(|x| {
@@ -239,9 +242,11 @@ where
                     .sum();
                 s
             })
-        };
-        weighted_median(w, total_weight)
+            .collect()
     };
+
+    let split = weighted_median(&axis_weights, total_weight);
+
     let split_position = split.position + subgrid.offset[coord];
     let left_weight = split.left_weight;
     let right_weight = total_weight - left_weight;
