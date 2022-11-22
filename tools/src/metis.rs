@@ -11,8 +11,9 @@ pub struct Recursive {
 }
 
 impl<const D: usize> ToRunner<D> for Recursive {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
-        let (ncon, mut weights) = match &problem.weights {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
+        let weights = problem.weights();
+        let (ncon, mut weights) = match &*weights {
             weight::Array::Integers(is) => {
                 let ncon = is.first().map_or(1, Vec::len) as Idx;
                 let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
@@ -25,7 +26,8 @@ impl<const D: usize> ToRunner<D> for Recursive {
             }
         };
 
-        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
+        let adjacency = problem.adjacency();
+        let (xadj, adjncy, adjwgt) = adjacency.view().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
         let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
@@ -57,8 +59,9 @@ pub struct KWay {
 }
 
 impl<const D: usize> ToRunner<D> for KWay {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
-        let (ncon, mut weights) = match &problem.weights {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
+        let weights = problem.weights();
+        let (ncon, mut weights) = match &*weights {
             weight::Array::Integers(is) => {
                 let ncon = is.first().map_or(1, Vec::len) as Idx;
                 let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
@@ -71,7 +74,8 @@ impl<const D: usize> ToRunner<D> for KWay {
             }
         };
 
-        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
+        let adjacency = problem.adjacency();
+        let (xadj, adjncy, adjwgt) = adjacency.view().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
         let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));

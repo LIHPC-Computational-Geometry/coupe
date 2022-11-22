@@ -33,7 +33,7 @@ where
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
     let algorithm_specs = matches.opt_strs("a");
-    let algorithms: Vec<_> = algorithm_specs
+    let mut algorithms: Vec<_> = algorithm_specs
         .iter()
         .map(|algorithm_spec| {
             coupe_tools::parse_algorithm::<D>(algorithm_spec)
@@ -48,16 +48,22 @@ where
 
     let intel_domain = coupe_tools::ittapi::domain("algorithm-chain");
 
-    for (algorithm_spec, mut algorithm) in algorithm_specs.iter().zip(algorithms) {
-        let name = format!("{algorithm_spec}.to_runner");
-        let task = coupe_tools::ittapi::begin(&intel_domain, &name);
+    let runners: Vec<_> = algorithms
+        .iter_mut()
+        .zip(&algorithm_specs)
+        .map(|(algorithm, algorithm_spec)| {
+            let name = format!("{algorithm_spec}.to_runner");
+            let _task = coupe_tools::ittapi::begin(&intel_domain, &name);
 
-        let mut algorithm = algorithm.to_runner(&problem);
+            algorithm.to_runner(&problem)
+        })
+        .collect();
+    std::mem::drop(problem); // free memory from mesh
 
-        drop(task);
+    for (algorithm_spec, mut runner) in algorithm_specs.iter().zip(runners) {
         let task = coupe_tools::ittapi::begin(&intel_domain, algorithm_spec);
 
-        let metadata = algorithm(&mut partition)
+        let metadata = runner(&mut partition)
             .with_context(|| format!("failed to apply algorithm {:?}", algorithm_spec))?;
 
         drop(task);

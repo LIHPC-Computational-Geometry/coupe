@@ -12,8 +12,9 @@ pub struct Standard {
 }
 
 impl<const D: usize> ToRunner<D> for Standard {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> super::Runner<'a> {
-        let weights = match &problem.weights {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> super::Runner<'a> {
+        let weights = problem.weights();
+        let weights = match &*weights {
             weight::Array::Integers(is) => {
                 if is.first().map_or(1, Vec::len) != 1 {
                     return runner_error("SCOTCH cannot do multi-criteria partitioning");
@@ -28,7 +29,8 @@ impl<const D: usize> ToRunner<D> for Standard {
             }
         };
 
-        let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
+        let adjacency = problem.adjacency();
+        let (xadj, adjncy, adjwgt) = adjacency.view().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
         let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
         let adjwgt = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
