@@ -42,7 +42,6 @@ mod defer;
 mod geometry;
 pub mod imbalance;
 mod nextafter;
-mod rayon_utils;
 mod real;
 pub mod topology;
 mod work_share;
