@@ -183,7 +183,7 @@ impl<const D: usize> BoundingBox<D> {
 /// Oriented bounding box.
 ///
 /// Similar to a [BoundingBox] except it is not necessarily parallel to the
-/// axises.
+/// axes.
 #[derive(Debug, Clone)]
 pub(crate) struct OrientedBoundingBox<const D: usize> {
     aabb: BoundingBox<D>,
