@@ -1,6 +1,5 @@
 use super::Grid;
 use super::SubGrid;
-use crate::rayon_utils::IndexedParallelIteratorExt;
 use num_traits::AsPrimitive;
 use num_traits::Num;
 use rayon::iter::IndexedParallelIterator;
