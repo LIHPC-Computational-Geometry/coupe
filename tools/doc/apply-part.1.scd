@@ -34,11 +34,11 @@ Only some specific mesh formats are supported.  See *INPUT FORMAT* for details.
 *-m, --mesh* <path>
 	Use the given mesh file as template.
 
-*-p --partition* <path>
+*-p, --partition* <path>
 	Use the given partition file.  This file is expected to come from
 	*mesh-part*(1) with the same mesh.
 
-*-w --weights* <path>
+*-w, --weights* <path>
 	Use the given weight file.  This file is expected to come from
 	*weight-gen*(1) with the same mesh.
 

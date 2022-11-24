@@ -31,14 +31,14 @@ FORMAT* for details.
 *-m, --mesh* <path>
 	Required.  A path to the mesh that has been partitionned.
 
-*-n --parts* <path>
+*-n, --parts* <path>
 	The expected number of parts.  By default, part-info will take the actual
 	number of parts (which can be lower).
 
-*-p --partition* <path>
+*-p, --partition* <path>
 	Required.  A path to the partition file.
 
-*-w --weights* <path>
+*-w, --weights* <path>
 	Required.  A path to the weight file used to partition the mesh.
 
 # SEE ALSO
