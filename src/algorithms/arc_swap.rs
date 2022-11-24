@@ -330,7 +330,33 @@ where
 /// smaller moves. It also does not need to build up a gain table, which greatly
 /// speeds up the execution time.
 ///
-/// See the documentation of [`FiducciaMattheyses`][fm] for an example.
+/// # Example
+///
+/// ```
+/// # fn main() -> Result<(), coupe::Error> {
+/// use coupe::Partition as _;
+/// use coupe::Grid;
+///
+/// //    swap
+/// // 0  1  0  1
+/// // +--+--+--+
+/// // |  |  |  |
+/// // +--+--+--+
+/// // 0  0  1  1
+///
+/// let width = std::num::NonZeroUsize::new(4).unwrap();
+/// let height = std::num::NonZeroUsize::new(2).unwrap();
+/// let grid = Grid::new_2d(width, height);
+///
+/// let weights = [1.0; 8];
+/// let mut partition = [0, 0, 1, 1, 0, 1, 0, 1];
+///
+/// coupe::ArcSwap { max_imbalance: Some(0.25) }
+///     .partition(&mut partition, (grid, &weights))?;
+///
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// [fm]: crate::FiducciaMattheyses
 #[derive(Debug, Clone, Copy, Default)]
