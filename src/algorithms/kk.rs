@@ -191,3 +191,24 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest!(
+        #[test]
+        fn test_kk_bipart(
+            weights in (2..200_usize).prop_flat_map(|weight_count| {
+                prop::collection::vec(0..1_000_000_u64, weight_count)
+            })
+        ) {
+            let mut partition = vec![0; weights.len()];
+            let mut partition_bipart = vec![0; weights.len()];
+            kk(&mut partition, weights.iter().cloned(), 2);
+            kk_bipart(&mut partition_bipart, weights.iter().cloned());
+            prop_assert_eq!(partition, partition_bipart);
+        }
+    );
+}
