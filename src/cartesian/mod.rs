@@ -1,11 +1,13 @@
 use crate::topology::Topology;
 use num_traits::AsPrimitive;
 use num_traits::Num;
+use num_traits::One;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use std::iter::Sum;
+use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 
@@ -163,14 +165,18 @@ impl<const D: usize> SubGrid<D> {
 }
 
 #[derive(Debug)]
-pub struct GridNeighbors<const D: usize> {
+pub struct GridNeighbors<const D: usize, E> {
     grid: Grid<D>,
     vertex: [usize; D],
     i: usize,
+    _marker: PhantomData<E>,
 }
 
-impl<const D: usize> Iterator for GridNeighbors<D> {
-    type Item = (usize, usize);
+impl<const D: usize, E> Iterator for GridNeighbors<D, E>
+where
+    E: One,
+{
+    type Item = (usize, E);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -194,13 +200,16 @@ impl<const D: usize> Iterator for GridNeighbors<D> {
             }
 
             let neighbor_idx = self.grid.index_of(neighbor);
-            return Some((neighbor_idx, 1));
+            return Some((neighbor_idx, E::one()));
         }
     }
 }
 
-impl<const D: usize> Topology<usize> for Grid<D> {
-    type Neighbors<'a> = GridNeighbors<D> where Self: 'a;
+impl<const D: usize, E> Topology<E> for Grid<D>
+where
+    E: One,
+{
+    type Neighbors<'a> = GridNeighbors<D, E> where Self: 'a;
 
     fn len(&self) -> usize {
         self.len()
@@ -211,6 +220,7 @@ impl<const D: usize> Topology<usize> for Grid<D> {
             grid: *self,
             vertex: self.position_of(vertex),
             i: 0,
+            _marker: PhantomData,
         }
     }
 }
@@ -222,7 +232,9 @@ mod tests {
     #[test]
     fn test_grid_neighbors() {
         fn neighbors<const D: usize>(g: Grid<D>, vertex: usize) -> Vec<usize> {
-            let mut ns: Vec<usize> = g.neighbors(vertex).map(|(n, _)| n).collect();
+            let mut ns: Vec<usize> = Topology::<usize>::neighbors(&g, vertex)
+                .map(|(n, _)| n)
+                .collect();
             ns.sort();
             ns
         }
@@ -307,8 +319,8 @@ mod tests {
         //     6 -- 7 -- 8    B -- B == A
         //
         let partition = [0, 0, 1, 0, 1, 0, 1, 1, 0];
-        assert_eq!(g.edge_cut(&partition), 7);
-        assert_eq!(g.lambda_cut(&partition, weights), 8);
+        assert_eq!(Topology::<usize>::edge_cut(&g, &partition), 7);
+        assert_eq!(Topology::<usize>::lambda_cut(&g, &partition, weights), 8);
 
         // Grid ids and partition:
         //
@@ -319,7 +331,7 @@ mod tests {
         //     6 -- 7 -- 8    B -- B == C
         //
         let partition = [0, 0, 0, 1, 2, 2, 1, 1, 2];
-        assert_eq!(g.edge_cut(&partition), 6);
-        assert_eq!(g.lambda_cut(&partition, weights), 10);
+        assert_eq!(Topology::<usize>::edge_cut(&g, &partition), 6);
+        assert_eq!(Topology::<usize>::lambda_cut(&g, &partition, weights), 10);
     }
 }
