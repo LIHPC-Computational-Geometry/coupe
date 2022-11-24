@@ -465,17 +465,22 @@ impl std::error::Error for Error {}
 ///     Point2D::new(10., 10.),
 ///     Point2D::new(9., 9.),
 /// ];
-/// let weights = [1.0; 8];
-/// let mut partition = [0; 8];
+/// let weights = vec![1.0; 8];
+/// let mut partition = vec![0; 8];
 ///
 /// // generate a partition of 4 parts
-/// coupe::HilbertCurve { part_count: 4, order: 5 }
+/// coupe::HilbertCurve { part_count: 4, ..Default::default() }
 ///     .partition(&mut partition, (points, weights))?;
 ///
 /// assert_eq!(partition[0], partition[1]);
 /// assert_eq!(partition[2], partition[3]);
 /// assert_eq!(partition[4], partition[5]);
 /// assert_eq!(partition[6], partition[7]);
+///
+/// # partition.sort();
+/// # partition.dedup();
+/// # assert_eq!(partition.len(), 4);
+///
 /// # Ok(())
 /// # }
 /// ```
@@ -602,18 +607,15 @@ mod tests {
     }
 
     #[test]
-    fn test_hilbert_curve_1() {
+    fn test_encode_2d() {
         let points = vec![(0, 0), (1, 1), (1, 0), (0, 1)];
-        let indices = points
+
+        let indices: Vec<_> = points
             .into_iter()
             .map(|(x, y)| encode_2d(x, y, 1))
-            .collect::<Vec<_>>();
-
+            .collect();
         assert_eq!(indices, vec![0, 2, 3, 1]);
-    }
 
-    #[test]
-    fn test_hilbert_curve_2() {
         let points = vec![
             (0, 0),
             (1, 0),
@@ -634,11 +636,76 @@ mod tests {
         ];
 
         let expected: Vec<_> = (0..16).collect();
-        let indices = points
+        let indices: Vec<_> = points
             .into_iter()
             .map(|(x, y)| encode_2d(x, y, 2))
-            .collect::<Vec<_>>();
-
+            .collect();
         assert_eq!(indices, expected);
+    }
+
+    #[test]
+    fn test_encode_2d_slow() {
+        const ORDER: usize = 6; // encode_2d_slow requires ORDER==6.
+        for x in 0..(1 << 6) {
+            for y in 0..(1 << 6) {
+                let fast_encode = encode_2d(x, y, ORDER);
+                let slow_encode = {
+                    let zorder = unsafe {
+                        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+                            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
+                    };
+                    let config = 0;
+                    encode_2d_slow(zorder, ORDER, config).0
+                };
+                assert_eq!(fast_encode, slow_encode);
+            }
+        }
+    }
+
+    #[test]
+    fn test_hilbert_3d() {
+        use crate::Partition;
+
+        let points: &[Point3D] = &[
+            Point3D::new(0.0, 0.0, 0.0),
+            Point3D::new(1.1, 1.1, 1.1),
+            Point3D::new(9.9, 0.0, 0.0),
+            Point3D::new(8.8, 1.1, 1.1),
+            Point3D::new(0.0, 9.9, 0.0),
+            Point3D::new(1.1, 8.8, 1.1),
+            Point3D::new(9.9, 9.9, 0.0),
+            Point3D::new(8.8, 8.8, 1.1),
+            Point3D::new(0.0, 0.0, 9.9),
+            Point3D::new(1.1, 1.1, 8.8),
+            Point3D::new(9.9, 0.0, 9.9),
+            Point3D::new(8.8, 1.1, 8.8),
+            Point3D::new(0.0, 9.9, 9.9),
+            Point3D::new(1.1, 8.8, 8.8),
+            Point3D::new(9.9, 9.9, 9.9),
+            Point3D::new(8.8, 8.8, 8.8),
+        ];
+        let weights = [1.0; 16];
+        let mut partition = vec![0; 16];
+
+        // generate a partition of 4 parts
+        crate::HilbertCurve {
+            part_count: 8,
+            order: 21,
+        }
+        .partition(&mut partition, (points, weights))
+        .unwrap();
+
+        assert_eq!(partition[0], partition[1]);
+        assert_eq!(partition[2], partition[3]);
+        assert_eq!(partition[4], partition[5]);
+        assert_eq!(partition[6], partition[7]);
+        assert_eq!(partition[8], partition[9]);
+        assert_eq!(partition[10], partition[11]);
+        assert_eq!(partition[12], partition[13]);
+        assert_eq!(partition[14], partition[15]);
+
+        partition.sort();
+        partition.dedup();
+        assert_eq!(partition.len(), 8);
     }
 }
