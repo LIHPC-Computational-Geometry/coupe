@@ -49,7 +49,7 @@ See *PARTITION FILE* for a description of the output format of mesh-part.
 *-m, --mesh* <path>
 	Required.  Partition the given mesh file.
 
-*-w --weights* <path>
+*-w, --weights* <path>
 	Use the given weight file.  This file is expected to come from
 	*weight-gen*(1) with the same mesh.
 
