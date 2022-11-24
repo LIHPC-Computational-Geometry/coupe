@@ -44,7 +44,7 @@ where
         || *points.par_iter().max_by(crate::partial_cmp).unwrap(),
     );
 
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq)]
     struct Split<P> {
         position: P,
         min_bound: P,
@@ -54,15 +54,16 @@ where
 
     let mut splits: Vec<Split<P>> = (1..n)
         .map(|i| Split {
-            position: min + AsPrimitive::<P>::as_(i) * (max - min) / AsPrimitive::<P>::as_(n),
+            position: min + (max - min) / AsPrimitive::<P>::as_(n) * AsPrimitive::<P>::as_(i),
             min_bound: min,
             max_bound: max,
             settled: false,
         })
         .collect();
+    splits.dedup();
 
     // Number of splits that need to be settled.
-    let mut todo_split_count = n - 1;
+    let mut todo_split_count = splits.len();
 
     while todo_split_count > 0 {
         let part_weights = points
