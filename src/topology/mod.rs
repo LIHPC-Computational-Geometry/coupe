@@ -22,7 +22,7 @@ pub trait Topology<E> {
     /// The number of elements in the mesh.
     fn len(&self) -> usize;
 
-    /// Whether the topology has no element.
+    /// Whether the topology has no elements.
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
