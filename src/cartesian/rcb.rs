@@ -69,9 +69,9 @@ where
         let prefix_chunk_weights = chunk_weights.into_iter().enumerate().scan(
             W::zero(),
             move |prefix_sum, (chunk_idx, chunk_weight)| {
-                *prefix_sum = *prefix_sum + chunk_weight;
                 let chunk_start = min + chunk_idx * chunk_size;
                 let prefix_chunk_weight = left_weight + *prefix_sum;
+                *prefix_sum = *prefix_sum + chunk_weight;
                 Some((chunk_start, prefix_chunk_weight))
             },
         );
