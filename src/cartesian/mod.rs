@@ -13,12 +13,40 @@ use std::ops::Range;
 
 mod rcb;
 
+/// Representation of a cartesian mesh.
+///
+/// Coupe can partition grids (also called cartesian meshes) faster and
+/// consuming less memory than unstructured meshes.
+///
+/// # Example
+///
+/// You can feed grids to topologic algorithms, thanks to the [`Topology`]
+/// trait. You can also partition them directly with, eg., RCB:
+///
+/// ```
+/// # use coupe::Grid;
+/// // Define a 2-by-2 grid.
+/// let side = std::num::NonZeroUsize::new(2).unwrap();
+/// let grid = Grid::new_2d(side, side);
+///
+/// // All cells have the same weight.
+/// let mut partition = [0; 4];
+/// let weights = [1.0; 4];
+///
+/// // Run 2 iterations of RCB.
+/// grid.rcb(&mut partition, &weights, 2);
+///
+/// // There are 4 parts, their order is unspecified.
+/// partition.sort();
+/// assert_eq!(partition, [0, 1, 2, 3]);
+/// ```
 #[derive(Copy, Clone, Debug)]
 pub struct Grid<const D: usize> {
     size: [NonZeroUsize; D],
 }
 
 impl<const D: usize> Grid<D> {
+    /// The subgrid that spans over all of the given grid.
     fn into_subgrid(self) -> SubGrid<D> {
         SubGrid {
             size: self.size.map(usize::from),
@@ -26,10 +54,12 @@ impl<const D: usize> Grid<D> {
         }
     }
 
+    /// The number of cells in the grid.
     fn len(&self) -> usize {
         self.size.iter().cloned().map(usize::from).product()
     }
 
+    /// The spacial position of a cell, given its memory index.
     fn position_of(&self, mut i: usize) -> [usize; D] {
         let mut pos = [0; D];
         match D {
@@ -55,6 +85,7 @@ impl<const D: usize> Grid<D> {
         pos
     }
 
+    /// The memory index of a cell, given its spacial position.
     fn index_of(&self, pos: [usize; D]) -> usize {
         match D {
             2 => {
@@ -86,12 +117,16 @@ impl<const D: usize> Grid<D> {
 }
 
 impl Grid<2> {
+    /// Define a new 2D grid.
     pub fn new_2d(width: NonZeroUsize, height: NonZeroUsize) -> Self {
         Self {
             size: [width, height],
         }
     }
 
+    /// Run RCB on the 2D grid.
+    ///
+    /// Weights and partition indices are row major.
     pub fn rcb<W>(self, partition: &mut [usize], weights: &[W], iter_count: usize)
     where
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
@@ -114,12 +149,16 @@ impl Grid<2> {
 }
 
 impl Grid<3> {
+    /// Define a new 3D grid.
     pub fn new_3d(width: NonZeroUsize, height: NonZeroUsize, depth: NonZeroUsize) -> Self {
         Self {
             size: [width, height, depth],
         }
     }
 
+    /// Run RCB on the 3D grid.
+    ///
+    /// Weights and partition indices are row-then-column major.
     pub fn rcb<W>(self, partition: &mut [usize], weights: &[W], iter_count: usize)
     where
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
@@ -141,6 +180,7 @@ impl Grid<3> {
     }
 }
 
+/// A specific, rectangular region of a grid.
 #[derive(Copy, Clone, Debug)]
 struct SubGrid<const D: usize> {
     size: [usize; D],
@@ -148,12 +188,25 @@ struct SubGrid<const D: usize> {
 }
 
 impl<const D: usize> SubGrid<D> {
+    /// The set of indices for the given axis.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if `coord` is `D` or larger.
     fn axis(&self, coord: usize) -> Range<usize> {
         let size = self.size[coord];
         let offset = self.offset[coord];
         offset..offset + size
     }
 
+    /// Split the subgrid into two along an axis.
+    ///
+    /// # Panics
+    ///
+    /// This function panics in the following cases:
+    ///
+    /// - `coord` is `D` or larger, or
+    /// - `at` is not in `self.axis(coord)`.
     fn split_at(self, coord: usize, at: usize) -> (SubGrid<D>, SubGrid<D>) {
         let mut low = self;
         let mut high = self;
@@ -164,6 +217,9 @@ impl<const D: usize> SubGrid<D> {
     }
 }
 
+/// An iterator over the neighbors of a grid cell.
+///
+/// This type is returned by [`Grid::neighbors`].
 #[derive(Debug)]
 pub struct GridNeighbors<const D: usize, E> {
     grid: Grid<D>,
