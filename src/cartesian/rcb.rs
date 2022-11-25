@@ -279,3 +279,84 @@ where
         right: Box::new(right),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::num::NonZeroUsize;
+
+    proptest!(
+        #[test]
+        fn test_weighted_median(
+            weights in (2..200_usize).prop_flat_map(|weight_count| {
+                prop::collection::vec(0..1_000_000_u32, weight_count)
+            })
+        ) {
+            let total_weight: u32 = weights.iter().sum();
+            let WeightedMedian { position, left_weight } = weighted_median(&weights, total_weight);
+
+            let expected_left_weight: u32 = weights[..position].iter().sum();
+            prop_assert_eq!(left_weight, expected_left_weight);
+
+            // Cannot test max_imbalance because we might not be able to find a
+            // split that respects it.
+        }
+    );
+
+    #[test]
+    fn test_3d() {
+        let side = NonZeroUsize::new(4).unwrap();
+        let grid = Grid::new_3d(side, side, side);
+        let weights = [1.0; 64];
+        let mut partition = vec![0; 64];
+
+        grid.rcb(&mut partition, &weights, 3);
+
+        fn assert_block(grid: Grid<3>, partition: &[usize], off: [usize; 3]) {
+            let [x, y, z] = off;
+            eprintln!("Testing block {off:?}");
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x + 1, y, z])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x, y + 1, z])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x + 1, y + 1, z])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x, y, z + 1])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x + 1, y, z + 1])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x, y + 1, z + 1])]
+            );
+            assert_eq!(
+                partition[grid.index_of(off)],
+                partition[grid.index_of([x + 1, y + 1, z + 1])]
+            );
+        }
+
+        assert_block(grid, &partition, [0, 0, 0]);
+        assert_block(grid, &partition, [2, 0, 0]);
+        assert_block(grid, &partition, [0, 2, 0]);
+        assert_block(grid, &partition, [2, 2, 0]);
+        assert_block(grid, &partition, [0, 0, 2]);
+        assert_block(grid, &partition, [2, 0, 2]);
+        assert_block(grid, &partition, [0, 2, 2]);
+        assert_block(grid, &partition, [2, 2, 2]);
+
+        partition.sort();
+        partition.dedup();
+        assert_eq!(partition.len(), 8);
+    }
+}
