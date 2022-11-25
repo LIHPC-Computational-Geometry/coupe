@@ -61,7 +61,7 @@ where
             if imbalance < new_imbalance {
                 // The move does not decrease the partition imbalance.
                 part_loads[p] += weights[i];
-                part_loads[q] = part_loads[p] - weights[i];
+                part_loads[q] = part_loads[q] - weights[i];
                 continue;
             }
             imbalance = new_imbalance;
