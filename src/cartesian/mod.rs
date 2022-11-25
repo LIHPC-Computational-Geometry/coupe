@@ -334,4 +334,16 @@ mod tests {
         assert_eq!(Topology::<usize>::edge_cut(&g, &partition), 6);
         assert_eq!(Topology::<usize>::lambda_cut(&g, &partition, weights), 10);
     }
+
+    #[test]
+    fn test_split_at() {
+        let side = NonZeroUsize::new(6).unwrap();
+        let grid = Grid::new_2d(side, side);
+        let subgrid = grid.into_subgrid();
+        let (low, high) = subgrid.split_at(0, 3);
+        assert_eq!(low.size, [3, 6]);
+        assert_eq!(high.size, [3, 6]);
+        assert_eq!(low.offset, [0, 0]);
+        assert_eq!(high.offset, [3, 0]);
+    }
 }
