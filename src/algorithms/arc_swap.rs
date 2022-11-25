@@ -361,6 +361,13 @@ where
 /// [fm]: crate::FiducciaMattheyses
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ArcSwap {
+    /// Restrict moves made by ArcSwap such that the imbalance of the output
+    /// partition is smaller than this value.
+    ///
+    /// - if `Some(value)`, ArcSwap reduces the edge cut as much as possible
+    ///   while keeping imbalance below `value`.
+    /// - if `None`, ArcSwap does not increase the imbalance of the input
+    ///   partition (same behavior as `Some(imbalance(input_partition))`).
     pub max_imbalance: Option<f64>,
 }
 
