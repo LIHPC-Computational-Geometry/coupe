@@ -230,7 +230,7 @@ mod tests {
             (weights, mut partition) in
                 (2..2000usize).prop_flat_map(|num_weights| {
                     (prop::collection::vec(0..1_000_000_u64, num_weights),
-                        prop::collection::vec(0..1usize, num_weights))
+                        prop::collection::vec(0..2_usize, num_weights))
                 })
         ) {
             let imb_ini = imbalance::max_imbalance(2, &partition, weights.par_iter().cloned());
