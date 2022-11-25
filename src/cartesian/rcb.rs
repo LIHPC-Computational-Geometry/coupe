@@ -62,12 +62,11 @@ where
     let mut left_weight = W::zero();
     loop {
         let chunk_size = usize::max(1, (max - min) / rayon::current_num_threads());
-        let chunk_weights: Vec<(usize, W)> = weights[min..max]
+        let chunk_weights: Vec<W> = weights[min..max]
             .par_iter()
             .fold_chunks(chunk_size, W::zero, |sum, w| sum + *w)
-            .enumerate()
             .collect();
-        let prefix_chunk_weights = chunk_weights.into_iter().scan(
+        let prefix_chunk_weights = chunk_weights.into_iter().enumerate().scan(
             W::zero(),
             move |prefix_sum, (chunk_idx, chunk_weight)| {
                 *prefix_sum = *prefix_sum + chunk_weight;
@@ -76,16 +75,16 @@ where
                 Some((chunk_start, prefix_chunk_weight))
             },
         );
-        for (i, prefix_chunk_weight) in prefix_chunk_weights {
+        for (position, prefix_chunk_weight) in prefix_chunk_weights {
             if prefix_chunk_weight < min_part_weight {
-                min = i;
+                min = position;
                 left_weight = prefix_chunk_weight;
             } else if max_part_weight < prefix_chunk_weight {
-                max = i;
+                max = position;
                 break;
             } else {
                 return WeightedMedian {
-                    position: i,
+                    position,
                     left_weight: prefix_chunk_weight,
                 };
             }
