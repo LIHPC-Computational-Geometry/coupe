@@ -22,3 +22,19 @@ macro_rules! impl_int {
 
 impl_int!(i64);
 impl_int!(u64);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_int() {
+        assert_eq!(i64::avg(i64::MAX, i64::MAX - 2), i64::MAX - 1);
+        assert_eq!(u64::avg(u64::MAX, u64::MAX - 2), u64::MAX - 1);
+    }
+
+    #[test]
+    fn test_float() {
+        assert_eq!(f64::avg(1e308, 1e307), 5.5e307);
+    }
+}
