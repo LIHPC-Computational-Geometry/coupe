@@ -3,6 +3,7 @@ use crate::defer::defer;
 use crate::partial_cmp;
 use crate::topology::Topology;
 use crate::work_share::work_share;
+use crate::Partition;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -369,7 +370,7 @@ pub struct ArcSwap {
     pub max_imbalance: Option<f64>,
 }
 
-impl<'a, T, W> crate::Partition<(T, &'a [W])> for ArcSwap
+impl<'a, T, W> Partition<(T, &'a [W])> for ArcSwap
 where
     W: AsWeight,
     T: Topology<i64> + Sync,
@@ -407,4 +408,134 @@ where
             self.max_imbalance,
         ))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Grid;
+    use proptest::prelude::*;
+    use std::num::NonZeroUsize;
+
+    proptest!(
+        #[test]
+        fn test_arcswap_no_max_imb(
+            (width, height, part_count, mut partition, weights) in
+                (2..40_usize, 2..40_usize, 2..10_usize)
+                    .prop_flat_map(|(width, height, part_count)| (
+                        Just(width),
+                        Just(height),
+                        Just(part_count),
+                        prop::collection::vec(0..part_count, width * height),
+                        prop::collection::vec(0.0..10.0_f64, width * height),
+                    ))
+        ) {
+            prop_assume!({
+                // Ensure the input partition is valid.
+                let mut partition = partition.clone();
+                partition.sort();
+                partition.dedup();
+                partition.len() == part_count
+            });
+
+            let width = NonZeroUsize::new(width).unwrap();
+            let height = NonZeroUsize::new(height).unwrap();
+            let grid = Grid::new_2d(width, height);
+
+            let old_edge_cut: i64 = grid.edge_cut(&partition);
+            let old_imbalance =
+                crate::imbalance::imbalance(part_count, &partition, weights.par_iter().cloned());
+
+            let metadata = ArcSwap { max_imbalance: None }
+                .partition(&mut partition, (grid, &weights));
+            prop_assert!(metadata.is_ok());
+            let metadata = metadata.unwrap();
+
+            let new_edge_cut: i64 = grid.edge_cut(&partition);
+            let new_imbalance =
+                crate::imbalance::imbalance(part_count, &partition, weights.par_iter().cloned());
+
+            // Decreased edge cut.
+            prop_assert_eq!(
+                metadata.edge_cut_gain,
+                old_edge_cut - new_edge_cut,
+                "incorrect metadata\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+            prop_assert!(
+                metadata.edge_cut_gain >= 0,
+                "worsened edge cut\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+
+            // Imbalance is preserved (TODO fix 1.001* errors).
+            prop_assert!(
+                new_imbalance <= 1.000_000_1 * old_imbalance,
+                "worsened imbalance\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+        }
+    );
+
+    proptest!(
+        #[test]
+        fn test_arcswap_with_max_imb(
+            (width, height, part_count, mut partition, weights, max_imbalance) in
+                (2..40_usize, 2..40_usize, 2..10_usize, 0.0..1.0_f64)
+                    .prop_flat_map(|(width, height, part_count, max_imbalance)| (
+                        Just(width),
+                        Just(height),
+                        Just(part_count),
+                        prop::collection::vec(0..part_count, width * height),
+                        prop::collection::vec(0.0..10.0_f64, width * height),
+                        Just(max_imbalance),
+                    ))
+        ) {
+            prop_assume!({
+                // Ensure the input partition is valid.
+                let mut partition = partition.clone();
+                partition.sort();
+                partition.dedup();
+                partition.len() == part_count
+            });
+
+            let width = NonZeroUsize::new(width).unwrap();
+            let height = NonZeroUsize::new(height).unwrap();
+            let grid = Grid::new_2d(width, height);
+
+            let old_edge_cut: i64 = grid.edge_cut(&partition);
+            let old_imbalance =
+                crate::imbalance::imbalance(part_count, &partition, weights.par_iter().cloned());
+
+            let max_imbalance = old_imbalance + (1.0 - old_imbalance) * max_imbalance;
+            let metadata = ArcSwap { max_imbalance: Some(max_imbalance) }
+                .partition(&mut partition, (grid, &weights));
+            prop_assert!(metadata.is_ok());
+            let metadata = metadata.unwrap();
+
+            let new_edge_cut: i64 = grid.edge_cut(&partition);
+            let new_imbalance =
+                crate::imbalance::imbalance(part_count, &partition, weights.par_iter().cloned());
+
+            // Decreased edge cut.
+            prop_assert_eq!(
+                metadata.edge_cut_gain,
+                old_edge_cut - new_edge_cut,
+                "incorrect metadata\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+            prop_assert!(
+                metadata.edge_cut_gain >= 0,
+                "worsened edge cut\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+
+            // Imbalance is below threshold (TODO fix 1.001* errors).
+            prop_assert!(
+                new_imbalance <= 1.000_000_1 * max_imbalance,
+                "worsened imbalance\nnew_partition: {:?}\nmetadata: {:?}\nold_imb: {}\nnew_imb: {}\nold_ec: {}\nnew_ec: {}",
+                partition, metadata, old_imbalance, new_imbalance, old_edge_cut, new_edge_cut
+            );
+        }
+    );
 }
