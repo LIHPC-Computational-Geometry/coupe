@@ -679,15 +679,7 @@ where
     });
     let mut weights: Vec<_> = weights.collect();
 
-    let atomic_partition = unsafe {
-        // Rust does not seem to have a strict aliasing rule like C does, so the
-        // transmute here looks safe, but we still need to ensure partition is
-        // properly aligned for atomic types. While this should always be the
-        // case, better safe than sorry.
-        let (before, partition, after) = partition.align_to_mut::<AtomicUsize>();
-        assert!(before.is_empty() && after.is_empty());
-        &*partition
-    };
+    let atomic_partition = crate::as_atomic(partition);
     let mut atomic_partition: Vec<&AtomicUsize> = atomic_partition.par_iter().collect();
     let sum = weights.par_iter().cloned().sum();
     let bb = match BoundingBox::from_points(points) {
