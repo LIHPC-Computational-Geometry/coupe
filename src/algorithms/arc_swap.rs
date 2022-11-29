@@ -10,9 +10,7 @@ use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use rayon::slice::ParallelSlice;
-use std::mem;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 /// Diagnostic data for a [ArcSwap] run.
@@ -112,7 +110,7 @@ where
     let span = tracing::info_span!("doing moves");
     let _enter = span.enter();
 
-    let partition = unsafe { mem::transmute::<&mut [usize], &[AtomicUsize]>(partition) };
+    let partition = crate::as_atomic(partition);
 
     // This function makes move attempts until either
     // - `cut` is empty, or

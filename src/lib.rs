@@ -62,6 +62,8 @@ pub use rayon;
 pub use sprs;
 
 use std::cmp::Ordering;
+use std::mem;
+use std::sync::atomic::AtomicUsize;
 
 /// The `Partition` trait allows for partitioning data.
 ///
@@ -97,5 +99,29 @@ where
         Ordering::Less
     } else {
         Ordering::Greater
+    }
+}
+
+/// Transmute a mutable slice of [`usize`] into an immutable slice of
+/// [`AtomicUsize`].
+///
+/// # Panics
+///
+/// Panics on platforms wher `usize` and `AtomicUsize` do not have the same
+/// byte representation (size and alignment).
+fn as_atomic(p: &mut [usize]) -> &[AtomicUsize] {
+    assert_eq!(mem::size_of::<usize>(), mem::size_of::<AtomicUsize>());
+    assert_eq!(mem::align_of::<usize>(), mem::align_of::<AtomicUsize>());
+
+    unsafe {
+        // While we could use [slice::align_to], their doc says:
+        //
+        // > The method may make the middle slice the greatest length possible
+        // > for a given type and input slice, but only your algorithm’s
+        // > performance should depend on that, not its correctness.
+        //
+        // So we have to use [mem::transmute] to ensure all the slice is
+        // converted.
+        mem::transmute::<&mut [usize], &[AtomicUsize]>(p)
     }
 }
