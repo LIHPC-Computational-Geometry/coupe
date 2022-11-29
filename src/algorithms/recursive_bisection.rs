@@ -1113,28 +1113,4 @@ mod tests {
         assert_eq!(p3.count(), 2);
         assert_eq!(p4.count(), 2);
     }
-
-    //#[test] // Disabled by default because of its need for a random source.
-    fn _test_rcb_rand() {
-        use std::collections::HashMap;
-
-        let points: Vec<Point2D> = (0..40000)
-            .map(|_| Point2D::from([rand::random(), rand::random()]))
-            .collect();
-        let weights: Vec<f64> = (0..points.len()).map(|_| rand::random()).collect();
-
-        let mut partition = vec![0; points.len()];
-        rcb(&mut partition, points, weights.par_iter().cloned(), 3, 0.05).unwrap();
-
-        let mut loads: HashMap<usize, f64> = HashMap::new();
-        let mut sizes: HashMap<usize, usize> = HashMap::new();
-        for (weight_id, part) in partition.iter().enumerate() {
-            let weight = weights[weight_id];
-            *loads.entry(*part).or_default() += weight;
-            *sizes.entry(*part).or_default() += 1;
-        }
-        for ((part, load), size) in loads.iter().zip(sizes.values()) {
-            println!("{part:?} -> {size}:{load:.1}");
-        }
-    }
 }
