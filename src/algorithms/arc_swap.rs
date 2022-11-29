@@ -129,6 +129,25 @@ where
             };
             metadata.move_attempts += 1;
 
+            let locked = locks[vertex]
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_err();
+            if locked {
+                metadata.locked_count += 1;
+                continue;
+            }
+            let _lock_guard = defer({
+                let locks = &locks;
+                move || locks[vertex].store(false, Ordering::Release)
+            });
+            let raced = adjacency
+                .neighbors(vertex)
+                .any(|(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire));
+            if raced {
+                metadata.race_count += 1;
+                continue;
+            }
+
             let initial_part = partition[vertex].load(Ordering::Relaxed);
 
             let (target_part, gain) = (0..part_count)
@@ -162,25 +181,6 @@ where
             let target_part_weight = weight + part_weights[target_part];
             if max_part_weights[target_part] < target_part_weight {
                 metadata.bad_balance_count += 1;
-                continue;
-            }
-
-            let locked = locks[vertex]
-                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                .is_err();
-            if locked {
-                metadata.locked_count += 1;
-                continue;
-            }
-            let _lock_guard = defer({
-                let locks = &locks;
-                move || locks[vertex].store(false, Ordering::Release)
-            });
-            let raced = adjacency
-                .neighbors(vertex)
-                .any(|(neighbor, _edge_weight)| locks[neighbor].load(Ordering::Acquire));
-            if raced {
-                metadata.race_count += 1;
                 continue;
             }
 
