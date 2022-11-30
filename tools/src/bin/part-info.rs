@@ -72,6 +72,10 @@ where
     T: FromPrimitive + ToPrimitive + Zero + PartialOrd,
     T: std::ops::Div<Output = T> + std::ops::Sub<Output = T> + std::iter::Sum,
 {
+    if part_count == 0 {
+        // Avoid divisions by zero.
+        return Vec::new();
+    }
     let criterion_count = match weights.first() {
         Some(w) => w.len(),
         None => return Vec::new(),
