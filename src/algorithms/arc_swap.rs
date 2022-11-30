@@ -507,6 +507,8 @@ mod tests {
             let old_imbalance =
                 crate::imbalance::imbalance(part_count, &partition, weights.par_iter().cloned());
 
+            prop_assume!(old_imbalance < 1.0);
+
             let max_imbalance = old_imbalance + (1.0 - old_imbalance) * max_imbalance;
             let metadata = ArcSwap { max_imbalance: Some(max_imbalance) }
                 .partition(&mut partition, (grid, &weights));
