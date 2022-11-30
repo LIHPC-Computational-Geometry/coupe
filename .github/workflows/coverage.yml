@@ -17,7 +17,7 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
-        run: cargo +nightly llvm-cov --doctests --lcov --no-default-features --workspace --output-path lcov.info
+        run: ./coverage.sh
         # no default because we lack scotch and metis
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
