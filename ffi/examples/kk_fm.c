@@ -34,18 +34,6 @@ main()
 	 *      +---+---+       +---+---+
 	 *     0    3    6     1    2    3
 	 */
-	double point_array[POINT_COUNT][DIMENSION] = {
-		{0.0, 0.0},
-		{0.0, 1.0},
-		{0.0, 2.0},
-		{1.0, 0.0},
-		{1.0, 1.0},
-		{1.0, 2.0},
-		{2.0, 0.0},
-		{2.0, 1.0},
-		{2.0, 2.0},
-	};
-
 	int weight_array[POINT_COUNT] = { 1, 2, 3, 2, 3, 4, 3, 4, 5 };
 	coupe_data *weights = coupe_data_array(POINT_COUNT, COUPE_INT, weight_array);
 	if (weights == NULL) {
