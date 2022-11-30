@@ -4,7 +4,6 @@ use mesh_io::Mesh;
 use std::ffi::c_int;
 use std::fs;
 use std::io;
-use std::mem;
 use std::os::unix::io::FromRawFd as _;
 use std::os::unix::io::IntoRawFd as _;
 use std::ptr;
@@ -62,7 +61,7 @@ pub unsafe extern "C" fn mio_partition_write(fd: c_int, size: u64, partition: *c
 #[no_mangle]
 pub unsafe extern "C" fn mio_partition_free(size: u64, partition: *mut u64) {
     let size = size as usize;
-    mem::drop(Vec::from_raw_parts(partition, size, size));
+    drop(Vec::from_raw_parts(partition, size, size));
 }
 
 #[no_mangle]
@@ -77,15 +76,13 @@ pub unsafe extern "C" fn mio_weights_read(fd: c_int) -> *mut mesh_io::weight::Ar
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_weights_count(weights: *mut mesh_io::weight::Array) -> u64 {
+pub unsafe extern "C" fn mio_weights_count(weights: *const mesh_io::weight::Array) -> u64 {
     assert!(!weights.is_null());
 
-    let weights = Box::from_raw(weights);
-    let len = match weights.as_ref() {
+    let len = match &*weights {
         mesh_io::weight::Array::Integers(is) => is.len(),
         mesh_io::weight::Array::Floats(fs) => fs.len(),
     };
-    mem::forget(weights);
 
     len.try_into().unwrap()
 }
@@ -93,18 +90,18 @@ pub unsafe extern "C" fn mio_weights_count(weights: *mut mesh_io::weight::Array)
 #[no_mangle]
 pub unsafe extern "C" fn mio_weights_first_criterion(
     criterion: *mut f64,
-    weights: *mut mesh_io::weight::Array,
+    weights: *const mesh_io::weight::Array,
 ) {
     assert!(!weights.is_null());
 
-    let weights = Box::from_raw(weights);
-    let len = match weights.as_ref() {
+    let weights = &*weights;
+    let len = match weights {
         mesh_io::weight::Array::Integers(is) => is.len(),
         mesh_io::weight::Array::Floats(fs) => fs.len(),
     };
     let criterion = std::slice::from_raw_parts_mut(criterion, len);
 
-    match weights.as_ref() {
+    match weights {
         mesh_io::weight::Array::Integers(is) => {
             for (c, w) in criterion.iter_mut().zip(is) {
                 *c = w[0] as f64;
@@ -116,14 +113,12 @@ pub unsafe extern "C" fn mio_weights_first_criterion(
             }
         }
     }
-
-    mem::forget(weights);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn mio_weights_free(weights: *mut mesh_io::weight::Array) {
     if !weights.is_null() {
-        mem::drop(Box::from_raw(weights));
+        drop(Box::from_raw(weights));
     }
 }
 
@@ -141,51 +136,35 @@ pub unsafe extern "C" fn mio_mesh_read(fd: c_int) -> *mut Mesh {
 #[no_mangle]
 pub unsafe extern "C" fn mio_mesh_free(medit: *mut Mesh) {
     if !medit.is_null() {
-        mem::drop(Box::from_raw(medit));
+        drop(Box::from_raw(medit));
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_mesh_dimension(medit: *mut Mesh) -> c_int {
+pub unsafe extern "C" fn mio_mesh_dimension(medit: *const Mesh) -> c_int {
     assert!(!medit.is_null());
-
-    let medit = Box::from_raw(medit);
-    let dimension = medit.dimension();
-    mem::forget(medit);
-
+    let dimension = (*medit).dimension();
     dimension.try_into().unwrap()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_mesh_node_count(medit: *mut Mesh) -> u64 {
+pub unsafe extern "C" fn mio_mesh_node_count(medit: *const Mesh) -> u64 {
     assert!(!medit.is_null());
-
-    let medit = Box::from_raw(medit);
-    let count = medit.node_count();
-    mem::forget(medit);
-
+    let count = (*medit).node_count();
     count.try_into().unwrap()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_mesh_coordinates(medit: *mut Mesh, node_idx: usize) -> *const f64 {
+pub unsafe extern "C" fn mio_mesh_coordinates(medit: *const Mesh, node_idx: usize) -> *const f64 {
     assert!(!medit.is_null());
-
-    let medit = Box::from_raw(medit);
-    let node = medit.node(node_idx).as_ptr();
-    mem::forget(medit);
-
+    let node = (*medit).node(node_idx).as_ptr();
     node
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mio_mesh_element_count(medit: *mut Mesh) -> u64 {
+pub unsafe extern "C" fn mio_mesh_element_count(medit: *const Mesh) -> u64 {
     assert!(!medit.is_null());
-
-    let medit = Box::from_raw(medit);
-    let count = medit.element_count();
-    mem::forget(medit);
-
+    let count = (*medit).element_count();
     count.try_into().unwrap()
 }
 
@@ -199,18 +178,15 @@ pub struct MeditElement {
 #[no_mangle]
 pub unsafe extern "C" fn mio_mesh_element(
     element: *mut MeditElement,
-    medit: *mut Mesh,
+    medit: *const Mesh,
     element_idx: usize,
 ) {
     assert!(!medit.is_null());
-
-    let medit = Box::from_raw(medit);
-    if let Some((el_type, el_nodes, _el_ref)) = medit.elements().nth(element_idx) {
+    if let Some((el_type, el_nodes, _el_ref)) = (*medit).elements().nth(element_idx) {
         *element = MeditElement {
             dimension: el_type.dimension().try_into().unwrap(),
             node_count: el_nodes.len().try_into().unwrap(),
             nodes: el_nodes.as_ptr(),
         };
     }
-    mem::forget(medit);
 }

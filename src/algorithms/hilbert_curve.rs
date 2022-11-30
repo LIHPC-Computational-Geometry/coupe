@@ -20,7 +20,6 @@ use num_traits::NumAssign;
 use rayon::prelude::*;
 use std::fmt;
 use std::iter::Sum;
-use std::mem;
 
 /// Divide `points` into `n` parts of similar weights.
 ///
@@ -177,13 +176,13 @@ fn partition_indexed<const D: usize>(
 
     let hilbert_indices: Vec<u64> = points.par_iter().map(index_fn).collect();
 
-    mem::drop(enter);
+    drop(enter);
     let span = tracing::info_span!("computing split positions");
     let enter = span.enter();
 
     let split_positions = weighted_quantiles(&hilbert_indices, weights, part_count);
 
-    mem::drop(enter);
+    drop(enter);
     let span = tracing::info_span!("apply part ids");
     let _enter = span.enter();
 
