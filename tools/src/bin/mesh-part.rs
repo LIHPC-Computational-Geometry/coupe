@@ -12,7 +12,6 @@ use mesh_io::Mesh;
 use std::env;
 use std::fs;
 use std::io;
-use std::mem::drop;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;

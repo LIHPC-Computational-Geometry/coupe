@@ -16,7 +16,6 @@ use coupe::Point2D;
 use coupe::PointND;
 use coupe::Real;
 use std::ffi::c_void;
-use std::mem;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
 use std::ptr;
@@ -114,7 +113,7 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
 pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
     if !data.is_null() {
         let data = Box::from_raw(data);
-        mem::drop(data);
+        drop(data);
     }
 }
 
@@ -165,7 +164,7 @@ pub enum Adjncy<'a> {
 pub unsafe extern "C" fn coupe_adjncy_free(adjncy: *mut Adjncy) {
     if !adjncy.is_null() {
         let adjncy = Box::from_raw(adjncy);
-        mem::drop(adjncy);
+        drop(adjncy);
     }
 }
 

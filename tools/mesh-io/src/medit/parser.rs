@@ -5,7 +5,6 @@ use std::cell;
 use std::error;
 use std::fmt;
 use std::io;
-use std::mem;
 use std::num;
 use std::str;
 
@@ -225,7 +224,7 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
             lineno: *lineno.borrow(),
         });
     }
-    mem::drop(header); // drop the borrow on token
+    drop(header); // drop the borrow on token
 
     let _version_number = read(T)
         .map_err(with_lineno(*lineno.borrow()))?
@@ -242,7 +241,7 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
             lineno: *lineno.borrow(),
         });
     }
-    mem::drop(dimension_keyword); // drop the borrow on token
+    drop(dimension_keyword); // drop the borrow on token
 
     let dimension = read(T)
         .map_err(with_lineno(*lineno.borrow()))?
@@ -260,7 +259,7 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
         match section.as_str() {
             "end" => break,
             "vertices" => {
-                mem::drop(section); // drop the borrow on token
+                drop(section); // drop the borrow on token
 
                 let num_vertices = read(T)
                     .map_err(with_lineno(*lineno.borrow()))?
@@ -303,7 +302,7 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
             }
             element_type if element_type.parse::<ElementType>().is_ok() => {
                 let element_type = element_type.parse::<ElementType>().unwrap();
-                mem::drop(section); // drop the borrow on token
+                drop(section); // drop the borrow on token
 
                 let prev_lineno = *lineno.borrow();
                 let num_entries = loop {
@@ -350,7 +349,7 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
                 mesh.topology.push((element_type, vertices, refs));
             }
             "corners" | "ridges" | "requiredvertices" => {
-                mem::drop(section); // drop the borrow on token
+                drop(section); // drop the borrow on token
                 let num_entries = read(T)
                     .map_err(with_lineno(*lineno.borrow()))?
                     .parse::<usize>()
