@@ -50,9 +50,20 @@ where
     let weights = weights.into_par_iter();
     debug_assert_eq!(partition.len(), weights.len());
 
+    if num_parts == 0 {
+        // Avoid a division by zero.
+        return 0.0;
+    }
+
     let part_loads = compute_parts_load(partition, num_parts, weights);
     let total_weight: W::Item = part_loads.iter().cloned().sum();
+
     let ideal_part_weight = total_weight.to_f64().unwrap() / num_parts.to_f64().unwrap();
+    if ideal_part_weight == 0.0 {
+        // Avoid divisions by zero.
+        return 0.0;
+    }
+
     part_loads
         .into_iter()
         .map(|part_weight| {
