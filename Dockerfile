@@ -8,7 +8,7 @@ WORKDIR /builder
 
 COPY . .
 
-RUN apt-get update -y && apt-get install -y libclang-dev libmetis-dev libscotch-dev
+RUN apt-get update -y && apt-get install -y --no-install-recommends libclang-dev libmetis-dev libscotch-dev
 
 ARG BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include/scotch"
 
