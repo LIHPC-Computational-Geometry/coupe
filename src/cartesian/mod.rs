@@ -6,6 +6,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
+use std::fmt;
 use std::iter::Sum;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -141,6 +142,7 @@ impl Grid<2> {
             iter_count,
             1,
         );
+        println!("{}", iters.fmt_svg(self, 1));
         partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
             *p = iters.part_of(pos, 1);
@@ -277,6 +279,117 @@ where
             vertex: self.position_of(vertex),
             i: 0,
             _marker: PhantomData,
+        }
+    }
+}
+
+fn transpose<T>(p: [T; 2]) -> [T; 2] {
+    let [a, b] = p;
+    [b, a]
+}
+
+#[derive(Debug)]
+pub enum SplitTree {
+    Whole,
+    Split {
+        position: usize,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+}
+
+impl SplitTree {
+    fn part_of<const D: usize>(&self, pos: [usize; D], mut start_coord: usize) -> usize {
+        let mut it = self;
+        let mut part_id = 0;
+        while let Self::Split {
+            position,
+            left,
+            right,
+        } = it
+        {
+            if pos[start_coord] < *position {
+                part_id *= 2;
+                it = left;
+            } else {
+                part_id = 2 * part_id + 1;
+                it = right;
+            }
+            start_coord = (start_coord + 1) % D;
+        }
+        part_id
+    }
+
+    pub fn fmt_svg(&self, grid: Grid<2>, start_coord: usize) -> impl fmt::Display + '_ {
+        struct ShowSvg<'a> {
+            tree: &'a SplitTree,
+            grid: Grid<2>,
+            start_coord: usize,
+        }
+
+        fn print_splits(
+            f: &mut fmt::Formatter<'_>,
+            g: Grid<2>,
+            sg: SubGrid<2>,
+            tree: &SplitTree,
+            coord: usize,
+            iter: usize,
+        ) -> fmt::Result {
+            let SplitTree::Split { position, left, right } = tree
+            else { return Ok(()) };
+
+            // Recurse before so that lines from first iterations are shown
+            // above lines from the next ones.
+            let (sg_left, sg_right) = sg.split_at(coord, *position);
+            print_splits(f, g, sg_left, left, (coord + 1) % 2, iter + 1)?;
+            print_splits(f, g, sg_right, right, (coord + 1) % 2, iter + 1)?;
+
+            let Range { start, end } = sg.axis(1 - coord);
+            let mut p1 = [*position, start];
+            let mut p2 = [*position, end];
+            if coord == 1 {
+                p1 = transpose(p1);
+                p2 = transpose(p2);
+            }
+            let color = match iter % 10 {
+                0 => "maroon",
+                1 => "green",
+                2 => "red",
+                3 => "lime",
+                4 => "purple",
+                5 => "olive",
+                6 => "fuchsia",
+                7 => "yellow",
+                8 => "navy",
+                _ => "blue",
+            };
+            writeln!(
+                f,
+                r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}"/>"#,
+                p1[0], p1[1], p2[0], p2[1], color,
+            )
+        }
+
+        impl fmt::Display for ShowSvg<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let [gwidth, gheight] = self.grid.size;
+                let sg = self.grid.into_subgrid();
+
+                writeln!(
+                    f,
+                    r#"<svg viewBox="0 0 {gwidth} {gheight}" xmlns="http://www.w3.org/2000/svg">"#
+                )?;
+
+                print_splits(f, self.grid, sg, self.tree, self.start_coord, 0)?;
+
+                writeln!(f, "</svg>")
+            }
+        }
+
+        ShowSvg {
+            tree: self,
+            grid,
+            start_coord,
         }
     }
 }
