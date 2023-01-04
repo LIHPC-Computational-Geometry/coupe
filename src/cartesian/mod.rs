@@ -6,6 +6,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
+use std::collections::HashMap;
 use std::fmt;
 use std::iter::Sum;
 use std::marker::PhantomData;
@@ -382,6 +383,10 @@ impl SplitTree {
 
                 print_splits(f, self.grid, sg, self.tree, self.start_coord, 0)?;
 
+                for [x, y] in self.tree.joints_2d(self.grid, self.start_coord) {
+                    writeln!(f, r#"<circle cx="{x}" cy="{y}" r="2" fill="black"/>"#)?;
+                }
+
                 writeln!(f, "</svg>")
             }
         }
@@ -391,6 +396,40 @@ impl SplitTree {
             grid,
             start_coord,
         }
+    }
+
+    pub fn joints_2d(&self, grid: Grid<2>, start_coord: usize) -> impl Iterator<Item = [usize; 2]> {
+        fn aux(
+            joints: &mut HashMap<[usize; 2], usize>,
+            tree: &SplitTree,
+            sg: SubGrid<2>,
+            coord: usize,
+        ) {
+            let SplitTree::Split { position, left, right } = tree
+            else { return };
+
+            let Range { start, end } = sg.axis(1 - coord);
+            let mut p1 = [*position, start];
+            let mut p2 = [*position, end];
+            if coord == 1 {
+                p1 = transpose(p1);
+                p2 = transpose(p2);
+            }
+
+            *joints.entry(p1).or_default() += 1;
+            *joints.entry(p2).or_default() += 1;
+
+            let (sg_left, sg_right) = sg.split_at(coord, *position);
+            aux(joints, left, sg_left, (coord + 1) % 2);
+            aux(joints, right, sg_right, (coord + 1) % 2);
+        }
+
+        let mut joints = HashMap::new();
+
+        aux(&mut joints, self, grid.into_subgrid(), start_coord);
+        joints.retain(|_, occ| *occ > 1);
+
+        joints.into_keys()
     }
 }
 
