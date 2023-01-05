@@ -133,7 +133,7 @@ impl Grid<2> {
     where
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
         f64: AsPrimitive<W>,
-        W: std::ops::AddAssign,
+        W: num_traits::NumAssign,
     {
         let total_weight: W = weights.par_iter().cloned().sum();
         let iters = rcb::recurse_2d(
@@ -166,11 +166,11 @@ impl Grid<2> {
                 .unwrap()
         };
         let check_move_imb = |part_loads: &mut [W], src: usize, dst: usize, weight: W| {
-            part_loads[src] = part_loads[src] - weight;
-            part_loads[dst] = part_loads[dst] + weight;
+            part_loads[src] -= weight;
+            part_loads[dst] += weight;
             let new_imbalance = compute_imbalance(&part_loads);
-            part_loads[src] = part_loads[src] + weight;
-            part_loads[dst] = part_loads[dst] - weight;
+            part_loads[src] += weight;
+            part_loads[dst] -= weight;
             new_imbalance
         };
         let imbalance = compute_imbalance(&part_loads);
