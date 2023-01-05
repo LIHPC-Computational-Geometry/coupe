@@ -426,7 +426,7 @@ where
             part_count: require(parse(args.next()))?,
             order: optional(parse(args.next()), 12)?,
         }),
-        "kmeans" => Box::new(coupe::KMeans::default()),
+        "kmeans" => Box::<coupe::KMeans>::default(),
         "arcswap" => {
             let max_imbalance = parse(args.next()).transpose()?;
             Box::new(coupe::ArcSwap { max_imbalance })
