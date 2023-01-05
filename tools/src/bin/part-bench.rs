@@ -287,7 +287,7 @@ fn main() -> Result<()> {
     let weight_file = matches
         .opt_str("w")
         .context("missing required option 'weights'")?;
-    let weights = fs::File::open(&weight_file).context("failed to open weight file")?;
+    let weights = fs::File::open(weight_file).context("failed to open weight file")?;
     let weights = io::BufReader::new(weights);
 
     build_global_pool();

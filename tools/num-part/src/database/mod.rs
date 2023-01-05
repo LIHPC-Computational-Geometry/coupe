@@ -34,8 +34,8 @@ fn upgrade_schema(database: &mut rusqlite::Connection) -> Result<()> {
         "Upgrading database from version {} to version {}",
         db_version, my_version
     );
-    for v in db_version..my_version {
-        tx.execute_batch(MIGRATIONS[v as usize])
+    for (v, migration) in MIGRATIONS[db_version..my_version].iter().enumerate() {
+        tx.execute_batch(migration)
             .with_context(|| format!("failed to execute migration #{}", v))?;
     }
 
