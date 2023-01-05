@@ -1,6 +1,6 @@
 use super::Grid;
-use super::SubGrid;
 use super::SplitTree;
+use super::SubGrid;
 use num_traits::AsPrimitive;
 use num_traits::Num;
 use rayon::iter::IndexedParallelIterator;
