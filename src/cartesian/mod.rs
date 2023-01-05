@@ -483,7 +483,6 @@ impl SplitTree {
 
         fn print_splits(
             f: &mut fmt::Formatter<'_>,
-            g: Grid<2>,
             sg: SubGrid<2>,
             tree: &SplitTree,
             coord: usize,
@@ -495,8 +494,8 @@ impl SplitTree {
             // Recurse before so that lines from first iterations are shown
             // above lines from the next ones.
             let (sg_left, sg_right) = sg.split_at(coord, *position);
-            print_splits(f, g, sg_left, left, (coord + 1) % 2, iter + 1)?;
-            print_splits(f, g, sg_right, right, (coord + 1) % 2, iter + 1)?;
+            print_splits(f, sg_left, left, (coord + 1) % 2, iter + 1)?;
+            print_splits(f, sg_right, right, (coord + 1) % 2, iter + 1)?;
 
             let Range { start, end } = sg.axis(1 - coord);
             let mut p1 = [*position, start];
@@ -534,7 +533,7 @@ impl SplitTree {
                     r#"<svg viewBox="0 0 {gwidth} {gheight}" xmlns="http://www.w3.org/2000/svg">"#
                 )?;
 
-                print_splits(f, self.grid, sg, self.tree, self.start_coord, 0)?;
+                print_splits(f, sg, self.tree, self.start_coord, 0)?;
 
                 for [x, y] in self.tree.joints_2d(self.grid, self.start_coord) {
                     writeln!(f, r#"<circle cx="{x}" cy="{y}" r="2" fill="black"/>"#)?;
