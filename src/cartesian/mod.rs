@@ -143,7 +143,7 @@ impl Grid<2> {
         );
         partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
-            *p = iters.part_of(pos, 0);
+            *p = iters.part_of(pos, 1);
         });
     }
 }
@@ -175,7 +175,7 @@ impl Grid<3> {
         );
         partition.par_iter_mut().enumerate().for_each(|(i, p)| {
             let pos = self.position_of(i);
-            *p = iters.part_of(pos, 0);
+            *p = iters.part_of(pos, 1);
         });
     }
 }
