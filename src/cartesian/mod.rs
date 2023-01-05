@@ -168,7 +168,7 @@ impl Grid<2> {
         let check_move_imb = |part_loads: &mut [W], src: usize, dst: usize, weight: W| {
             part_loads[src] -= weight;
             part_loads[dst] += weight;
-            let new_imbalance = compute_imbalance(&part_loads);
+            let new_imbalance = compute_imbalance(part_loads);
             part_loads[src] += weight;
             part_loads[dst] -= weight;
             new_imbalance
