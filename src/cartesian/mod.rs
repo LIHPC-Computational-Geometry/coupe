@@ -6,7 +6,9 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter::Sum;
 use std::marker::PhantomData;
@@ -179,7 +181,7 @@ impl Grid<2> {
         let segs = iters.segments_2d(self, 1);
 
         // Testing horizontal segments for imbalance.
-        for seg in &segs.c[0] {
+        for seg in segs.moves(0) {
             if seg.at != 0 {
                 // Test if we can move segment down.
                 let moved_cells = (seg.start..seg.end).map(|x| [x, seg.at - 1]);
@@ -213,7 +215,7 @@ impl Grid<2> {
         }
 
         // Testing vertical segments for imbalance.
-        for seg in &segs.c[1] {
+        for seg in segs.moves(1) {
             if seg.at != 0 {
                 // Test if we can move segment left.
                 let moved_cells = (seg.start..seg.end).map(|y| [seg.at - 1, y]);
@@ -247,7 +249,7 @@ impl Grid<2> {
         }
 
         // Testing horizontal segments for lambda cut.
-        for seg in &segs.c[0] {
+        for seg in segs.moves(0) {
             if seg.at >= 2 {
                 // Test if we can move segment down.
                 let a = (seg.start..seg.end).map(|x| [x, seg.at]);
@@ -275,7 +277,7 @@ impl Grid<2> {
         }
 
         // Testing vertical segments for lambda cut.
-        for seg in &segs.c[1] {
+        for seg in segs.moves(1) {
             if seg.at >= 2 {
                 // Test if we can move segment down.
                 let a = (seg.start..seg.end).map(|y| [seg.at, y]);
@@ -631,7 +633,7 @@ impl SplitTree {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Segment {
     start: usize,
     end: usize,
@@ -656,6 +658,22 @@ impl Segment {
             },
         ))
     }
+
+    pub fn p_start_2d(&self, coord: usize) -> [usize; 2] {
+        if coord == 0 {
+            [self.at, self.start]
+        } else {
+            [self.start, self.at]
+        }
+    }
+
+    pub fn p_end_2d(&self, coord: usize) -> [usize; 2] {
+        if coord == 0 {
+            [self.at, self.end]
+        } else {
+            [self.end, self.at]
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -664,11 +682,74 @@ pub struct Segments<const D: usize> {
     grid: Grid<D>,
 }
 
-//impl Segments<2> {
-//    pub fn moves(&self) -> impl Iterator<Item = Segment> {
-//        // TODO
-//    }
-//}
+impl Segments<2> {
+    pub fn moves(&self, coord: usize) -> impl IntoIterator<Item = Segment> {
+        let mut occs: BTreeMap<[usize; 2], Vec<&Segment>> = BTreeMap::new();
+
+        for seg in &self.c[coord] {
+            let p1 = seg.p_start_2d(coord);
+            let p2 = seg.p_end_2d(coord);
+            occs.entry(p1).or_default().push(seg);
+            occs.entry(p2).or_default().push(seg);
+        }
+
+        occs.retain(|_, segs| segs.len() > 1);
+
+        let mut moves = self.c[coord].clone();
+
+        while let Some((joint, segs)) = occs.pop_first() {
+            debug_assert_eq!(segs.len(), 2);
+            let seg1 = segs[0];
+            let seg2 = segs[1];
+
+            let mut multi_seg = VecDeque::new();
+
+            if seg1.p_end_2d(coord) == joint {
+                // seg1 is before seg2
+                multi_seg.push_back(seg1);
+                multi_seg.push_back(seg2);
+            } else {
+                // seg1 is after seg2
+                multi_seg.push_back(seg2);
+                multi_seg.push_back(seg1);
+            }
+
+            loop {
+                // Add segments to the left of the multi-segment.
+                let joint = multi_seg.front().unwrap().p_start_2d(coord);
+                let Some(segs) = occs.remove(&joint) else { break };
+                let seg = *segs
+                    .iter()
+                    .find(|seg| seg.p_end_2d(coord) == joint)
+                    .unwrap();
+                multi_seg.push_front(seg);
+            }
+            loop {
+                // Add segments to the right of the multi-segment.
+                let joint = multi_seg.back().unwrap().p_end_2d(coord);
+                let Some(segs) = occs.remove(&joint) else { break };
+                let seg = *segs
+                    .iter()
+                    .find(|seg| seg.p_start_2d(coord) == joint)
+                    .unwrap();
+                multi_seg.push_back(seg);
+            }
+
+            for i in 0..multi_seg.len() {
+                // i+1 because "moves" already contains individual segments.
+                for j in i + 1..multi_seg.len() {
+                    moves.push(Segment {
+                        start: multi_seg[i].start,
+                        end: multi_seg[j].end,
+                        at: multi_seg[i].at,
+                    });
+                }
+            }
+        }
+
+        moves
+    }
+}
 
 #[cfg(test)]
 mod tests {
