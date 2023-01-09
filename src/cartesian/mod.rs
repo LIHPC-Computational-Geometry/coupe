@@ -180,136 +180,162 @@ impl Grid<2> {
         println!("{}", iters.fmt_svg(self, 1));
         let segs = iters.segments_2d(self, 1);
 
-        // Testing horizontal segments for imbalance.
-        for seg in segs.moves(0) {
-            if seg.at != 0 {
-                // Test if we can move segment down.
-                let moved_cells = (seg.start..seg.end).map(|x| [x, seg.at - 1]);
+        loop {
+            #[derive(Debug)]
+            enum Orientation {
+                Horizontal,
+                Vertical,
+            }
 
-                let src_part = partition[self.index_of([seg.start, seg.at - 1])];
-                let dst_part = partition[self.index_of([seg.start, seg.at])];
-                debug_assert_ne!(src_part, dst_part);
+            eprintln!("\nNew pass");
+            let mut best_lambda_move = (Orientation::Horizontal, 0.0, segs.c[0][0]);
 
-                let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
-                let new_imbalance =
-                    check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                let gain = (imbalance - new_imbalance).as_();
-                if gain > 0.0 {
-                    eprintln!("Found imb horiz move: {seg:?} gain={gain}");
+            // Testing horizontal segments for imbalance.
+            for seg in segs.moves(0) {
+                if seg.at != 0 {
+                    // Test if we can move segment down.
+                    let moved_cells = (seg.start..seg.end).map(|x| [x, seg.at - 1]);
+
+                    let src_part = partition[self.index_of([seg.start, seg.at - 1])];
+                    let dst_part = partition[self.index_of([seg.start, seg.at])];
+                    debug_assert_ne!(src_part, dst_part);
+
+                    let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
+                    let new_imbalance =
+                        check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
+                    let gain = (imbalance - new_imbalance).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found imb horiz move: {seg:?} gain={gain}");
+                    }
+                }
+                if seg.at + 1 >= usize::from(self.size[1]) {
+                    // Test if we can move segment up.
+                    let moved_cells = (seg.start..seg.end).map(|x| [x, seg.at]);
+
+                    let src_part = partition[self.index_of([seg.start, seg.at])];
+                    let dst_part = partition[self.index_of([seg.start, seg.at - 1])];
+                    debug_assert_ne!(src_part, dst_part);
+
+                    let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
+                    let new_imbalance =
+                        check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
+                    let gain = (imbalance - new_imbalance).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found imb horiz move: {seg:?}, gain={gain}");
+                    }
                 }
             }
-            if seg.at + 1 >= usize::from(self.size[1]) {
-                // Test if we can move segment up.
-                let moved_cells = (seg.start..seg.end).map(|x| [x, seg.at]);
 
-                let src_part = partition[self.index_of([seg.start, seg.at])];
-                let dst_part = partition[self.index_of([seg.start, seg.at - 1])];
-                debug_assert_ne!(src_part, dst_part);
+            // Testing vertical segments for imbalance.
+            for seg in segs.moves(1) {
+                if seg.at != 0 {
+                    // Test if we can move segment left.
+                    let moved_cells = (seg.start..seg.end).map(|y| [seg.at - 1, y]);
 
-                let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
-                let new_imbalance =
-                    check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                let gain = (imbalance - new_imbalance).as_();
-                if gain > 0.0 {
-                    eprintln!("Found imb horiz move: {seg:?}, gain={gain}");
+                    let src_part = partition[self.index_of([seg.at - 1, seg.start])];
+                    let dst_part = partition[self.index_of([seg.at, seg.start])];
+                    debug_assert_ne!(src_part, dst_part);
+
+                    let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
+                    let new_imbalance =
+                        check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
+                    let gain = (imbalance - new_imbalance).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                    }
+                }
+                if seg.at + 1 >= usize::from(self.size[0]) {
+                    // Test if we can move segment right.
+                    let moved_cells = (seg.start..seg.end).map(|y| [seg.at, y]);
+
+                    let src_part = partition[self.index_of([seg.at, seg.start])];
+                    let dst_part = partition[self.index_of([seg.at - 1, seg.start])];
+                    debug_assert_ne!(src_part, dst_part);
+
+                    let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
+                    let new_imbalance =
+                        check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
+                    let gain = (imbalance - new_imbalance).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                    }
                 }
             }
-        }
 
-        // Testing vertical segments for imbalance.
-        for seg in segs.moves(1) {
-            if seg.at != 0 {
-                // Test if we can move segment left.
-                let moved_cells = (seg.start..seg.end).map(|y| [seg.at - 1, y]);
+            // Testing horizontal segments for lambda cut.
+            for seg in segs.moves(0) {
+                if seg.at >= 2 {
+                    // Test if we can move segment down.
+                    let a = (seg.start..seg.end).map(|x| [x, seg.at]);
+                    let b = (seg.start..seg.end).map(|x| [x, seg.at - 2]);
 
-                let src_part = partition[self.index_of([seg.at - 1, seg.start])];
-                let dst_part = partition[self.index_of([seg.at, seg.start])];
-                debug_assert_ne!(src_part, dst_part);
+                    let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
+                    let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
 
-                let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
-                let new_imbalance =
-                    check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                let gain = (imbalance - new_imbalance).as_();
-                if gain > 0.0 {
-                    eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                    let gain = (a_weight - b_weight).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.1 {
+                            best_lambda_move = (Orientation::Horizontal, gain, seg);
+                        }
+                    }
+                }
+                if seg.at + 2 >= usize::from(self.size[1]) {
+                    // Test if we can move segment up.
+                    let a = (seg.start..seg.end).map(|x| [x, seg.at - 1]);
+                    let b = (seg.start..seg.end).map(|x| [x, seg.at + 1]);
+
+                    let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
+                    let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
+
+                    let gain = (a_weight - b_weight).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.1 {
+                            best_lambda_move = (Orientation::Horizontal, gain, seg);
+                        }
+                    }
                 }
             }
-            if seg.at + 1 >= usize::from(self.size[0]) {
-                // Test if we can move segment right.
-                let moved_cells = (seg.start..seg.end).map(|y| [seg.at, y]);
 
-                let src_part = partition[self.index_of([seg.at, seg.start])];
-                let dst_part = partition[self.index_of([seg.at - 1, seg.start])];
-                debug_assert_ne!(src_part, dst_part);
+            // Testing vertical segments for lambda cut.
+            for seg in segs.moves(1) {
+                if seg.at >= 2 {
+                    // Test if we can move segment down.
+                    let a = (seg.start..seg.end).map(|y| [seg.at, y]);
+                    let b = (seg.start..seg.end).map(|y| [seg.at - 2, y]);
 
-                let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
-                let new_imbalance =
-                    check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                let gain = (imbalance - new_imbalance).as_();
-                if gain > 0.0 {
-                    eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                    let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
+                    let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
+
+                    let gain = (a_weight - b_weight).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.1 {
+                            best_lambda_move = (Orientation::Vertical, gain, seg);
+                        }
+                    }
+                }
+                if seg.at + 2 >= usize::from(self.size[0]) {
+                    // Test if we can move segment up.
+                    let a = (seg.start..seg.end).map(|y| [seg.at - 1, y]);
+                    let b = (seg.start..seg.end).map(|y| [seg.at + 1, y]);
+
+                    let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
+                    let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
+
+                    let gain = (a_weight - b_weight).as_();
+                    if gain > 0.0 {
+                        eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.1 {
+                            best_lambda_move = (Orientation::Vertical, gain, seg);
+                        }
+                    }
                 }
             }
-        }
 
-        // Testing horizontal segments for lambda cut.
-        for seg in segs.moves(0) {
-            if seg.at >= 2 {
-                // Test if we can move segment down.
-                let a = (seg.start..seg.end).map(|x| [x, seg.at]);
-                let b = (seg.start..seg.end).map(|x| [x, seg.at - 2]);
-
-                let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
-                let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
-
-                let gain = (a_weight - b_weight).as_();
-                if gain > 0.0 {
-                    eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
-                }
-            }
-            if seg.at + 2 >= usize::from(self.size[1]) {
-                // Test if we can move segment up.
-                let a = (seg.start..seg.end).map(|x| [x, seg.at - 1]);
-                let b = (seg.start..seg.end).map(|x| [x, seg.at + 1]);
-
-                let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
-                let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
-
-                let gain = (a_weight - b_weight).as_();
-                if gain > 0.0 {
-                    eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
-                }
-            }
-        }
-
-        // Testing vertical segments for lambda cut.
-        for seg in segs.moves(1) {
-            if seg.at >= 2 {
-                // Test if we can move segment down.
-                let a = (seg.start..seg.end).map(|y| [seg.at, y]);
-                let b = (seg.start..seg.end).map(|y| [seg.at - 2, y]);
-
-                let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
-                let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
-
-                let gain = (a_weight - b_weight).as_();
-                if gain > 0.0 {
-                    eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
-                }
-            }
-            if seg.at + 2 >= usize::from(self.size[0]) {
-                // Test if we can move segment up.
-                let a = (seg.start..seg.end).map(|y| [seg.at - 1, y]);
-                let b = (seg.start..seg.end).map(|y| [seg.at + 1, y]);
-
-                let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
-                let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
-
-                let gain = (a_weight - b_weight).as_();
-                if gain > 0.0 {
-                    eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
-                }
-            }
+            eprintln!("Best lambda move: {best_lambda_move:?}");
+            break;
         }
     }
 }
@@ -641,7 +667,7 @@ impl SplitTree {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Segment {
     start: usize,
     end: usize,
