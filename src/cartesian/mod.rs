@@ -193,8 +193,9 @@ impl Grid<2> {
                 let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
                 let new_imbalance =
                     check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                if new_imbalance < imbalance {
-                    eprintln!("Found imb horiz move: {seg:?}");
+                let gain = (imbalance - new_imbalance).as_();
+                if gain > 0.0 {
+                    eprintln!("Found imb horiz move: {seg:?} gain={gain}");
                 }
             }
             if seg.at + 1 >= usize::from(self.size[1]) {
@@ -208,8 +209,9 @@ impl Grid<2> {
                 let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
                 let new_imbalance =
                     check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                if new_imbalance < imbalance {
-                    eprintln!("Found imb horiz move: {seg:?}");
+                let gain = (imbalance - new_imbalance).as_();
+                if gain > 0.0 {
+                    eprintln!("Found imb horiz move: {seg:?}, gain={gain}");
                 }
             }
         }
@@ -227,8 +229,9 @@ impl Grid<2> {
                 let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
                 let new_imbalance =
                     check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                if new_imbalance < imbalance {
-                    eprintln!("Found imb verti move: {seg:?}");
+                let gain = (imbalance - new_imbalance).as_();
+                if gain > 0.0 {
+                    eprintln!("Found imb verti move: {seg:?}, gain={gain}");
                 }
             }
             if seg.at + 1 >= usize::from(self.size[0]) {
@@ -242,8 +245,9 @@ impl Grid<2> {
                 let moved_weight = moved_cells.map(|pos| weights[self.index_of(pos)]).sum();
                 let new_imbalance =
                     check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
-                if new_imbalance < imbalance {
-                    eprintln!("Found imb verti move: {seg:?}");
+                let gain = (imbalance - new_imbalance).as_();
+                if gain > 0.0 {
+                    eprintln!("Found imb verti move: {seg:?}, gain={gain}");
                 }
             }
         }
@@ -258,8 +262,9 @@ impl Grid<2> {
                 let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
                 let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
 
-                if b_weight < a_weight {
-                    eprintln!("Found lambda horiz move: {seg:?}");
+                let gain = (a_weight - b_weight).as_();
+                if gain > 0.0 {
+                    eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
                 }
             }
             if seg.at + 2 >= usize::from(self.size[1]) {
@@ -270,8 +275,9 @@ impl Grid<2> {
                 let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
                 let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
 
-                if b_weight < a_weight {
-                    eprintln!("Found lambda horiz move: {seg:?}");
+                let gain = (a_weight - b_weight).as_();
+                if gain > 0.0 {
+                    eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
                 }
             }
         }
@@ -286,8 +292,9 @@ impl Grid<2> {
                 let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
                 let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
 
-                if b_weight < a_weight {
-                    eprintln!("Found lambda verti move: {seg:?}");
+                let gain = (a_weight - b_weight).as_();
+                if gain > 0.0 {
+                    eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
                 }
             }
             if seg.at + 2 >= usize::from(self.size[0]) {
@@ -298,8 +305,9 @@ impl Grid<2> {
                 let a_weight: W = a.map(|pos| weights[self.index_of(pos)]).sum();
                 let b_weight: W = b.map(|pos| weights[self.index_of(pos)]).sum();
 
-                if b_weight < a_weight {
-                    eprintln!("Found lambda verti move: {seg:?}");
+                let gain = (a_weight - b_weight).as_();
+                if gain > 0.0 {
+                    eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
                 }
             }
         }
