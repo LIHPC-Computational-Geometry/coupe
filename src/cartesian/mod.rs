@@ -178,17 +178,36 @@ impl Grid<2> {
         let imbalance = compute_imbalance(&part_loads);
 
         println!("{}", iters.fmt_svg(self, 1));
-        let segs = iters.segments_2d(self, 1);
+        let mut segs = iters.segments_2d(self, 1);
 
         loop {
+            #[derive(Copy, Clone, Debug)]
+            enum Direction {
+                Lower,
+                Higher,
+            }
+
+            #[derive(Copy, Clone, Debug)]
+            enum Axis {
+                X = 0,
+                Y = 1,
+            }
+
             #[derive(Debug)]
-            enum Orientation {
-                Horizontal,
-                Vertical,
+            struct Move {
+                orientation: Axis,
+                gain: f64,
+                seg: Segment,
+                direction: Direction,
             }
 
             eprintln!("\nNew pass");
-            let mut best_lambda_move = (Orientation::Horizontal, 0.0, segs.c[0][0]);
+            let mut best_lambda_move = Move {
+                orientation: Axis::X,
+                gain: 0.0,
+                seg: segs.c[0][0],
+                direction: Direction::Lower,
+            };
 
             // Testing horizontal segments for imbalance.
             for seg in segs.moves(0) {
@@ -205,7 +224,7 @@ impl Grid<2> {
                         check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
                     let gain = (imbalance - new_imbalance).as_();
                     if gain > 0.0 {
-                        eprintln!("Found imb horiz move: {seg:?} gain={gain}");
+                        eprintln!("  Found imb horiz move: {seg:?} gain={gain}");
                     }
                 }
                 if seg.at + 1 >= usize::from(self.size[1]) {
@@ -221,7 +240,7 @@ impl Grid<2> {
                         check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
                     let gain = (imbalance - new_imbalance).as_();
                     if gain > 0.0 {
-                        eprintln!("Found imb horiz move: {seg:?}, gain={gain}");
+                        eprintln!("  Found imb horiz move: {seg:?}, gain={gain}");
                     }
                 }
             }
@@ -241,7 +260,7 @@ impl Grid<2> {
                         check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
                     let gain = (imbalance - new_imbalance).as_();
                     if gain > 0.0 {
-                        eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                        eprintln!("  Found imb verti move: {seg:?}, gain={gain}");
                     }
                 }
                 if seg.at + 1 >= usize::from(self.size[0]) {
@@ -257,7 +276,7 @@ impl Grid<2> {
                         check_move_imb(&mut part_loads, src_part, dst_part, moved_weight);
                     let gain = (imbalance - new_imbalance).as_();
                     if gain > 0.0 {
-                        eprintln!("Found imb verti move: {seg:?}, gain={gain}");
+                        eprintln!("  Found imb verti move: {seg:?}, gain={gain}");
                     }
                 }
             }
@@ -274,9 +293,14 @@ impl Grid<2> {
 
                     let gain = (a_weight - b_weight).as_();
                     if gain > 0.0 {
-                        eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
-                        if gain > best_lambda_move.1 {
-                            best_lambda_move = (Orientation::Horizontal, gain, seg);
+                        eprintln!("  Found lambda horiz move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.gain {
+                            best_lambda_move = Move {
+                                orientation: Axis::X,
+                                gain,
+                                seg,
+                                direction: Direction::Lower,
+                            };
                         }
                     }
                 }
@@ -290,9 +314,14 @@ impl Grid<2> {
 
                     let gain = (a_weight - b_weight).as_();
                     if gain > 0.0 {
-                        eprintln!("Found lambda horiz move: {seg:?}, gain={gain}");
-                        if gain > best_lambda_move.1 {
-                            best_lambda_move = (Orientation::Horizontal, gain, seg);
+                        eprintln!("  Found lambda horiz move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.gain {
+                            best_lambda_move = Move {
+                                orientation: Axis::X,
+                                gain,
+                                seg,
+                                direction: Direction::Higher,
+                            };
                         }
                     }
                 }
@@ -310,9 +339,14 @@ impl Grid<2> {
 
                     let gain = (a_weight - b_weight).as_();
                     if gain > 0.0 {
-                        eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
-                        if gain > best_lambda_move.1 {
-                            best_lambda_move = (Orientation::Vertical, gain, seg);
+                        eprintln!("  Found lambda verti move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.gain {
+                            best_lambda_move = Move {
+                                orientation: Axis::Y,
+                                gain,
+                                seg,
+                                direction: Direction::Lower,
+                            };
                         }
                     }
                 }
@@ -326,16 +360,61 @@ impl Grid<2> {
 
                     let gain = (a_weight - b_weight).as_();
                     if gain > 0.0 {
-                        eprintln!("Found lambda verti move: {seg:?}, gain={gain}");
-                        if gain > best_lambda_move.1 {
-                            best_lambda_move = (Orientation::Vertical, gain, seg);
+                        eprintln!("  Found lambda verti move: {seg:?}, gain={gain}");
+                        if gain > best_lambda_move.gain {
+                            best_lambda_move = Move {
+                                orientation: Axis::Y,
+                                gain,
+                                seg,
+                                direction: Direction::Higher,
+                            };
                         }
                     }
                 }
             }
 
-            eprintln!("Best lambda move: {best_lambda_move:?}");
-            break;
+            eprintln!("  Best lambda move: {best_lambda_move:?}");
+
+            let Move {
+                orientation,
+                gain,
+                seg,
+                direction,
+            } = best_lambda_move;
+
+            if gain == 0.0 {
+                eprintln!("no gain, no pain");
+                break;
+            }
+
+            let at;
+            let new_seg_at;
+            match direction {
+                Direction::Lower => {
+                    at = seg.at - 1;
+                    new_seg_at = seg.at - 1;
+                }
+                Direction::Higher => {
+                    at = seg.at;
+                    new_seg_at = seg.at + 1;
+                }
+            }
+            let moved_cells = (seg.start..seg.end).map(|a| match orientation {
+                Axis::X => [a, at],
+                Axis::Y => [at, a],
+            });
+            let dst_part = match (direction, orientation) {
+                (Direction::Lower, Axis::X) => partition[self.index_of([seg.start, seg.at])],
+                (Direction::Lower, Axis::Y) => partition[self.index_of([seg.at, seg.start])],
+                (Direction::Higher, Axis::X) => partition[self.index_of([seg.start, seg.at - 1])],
+                (Direction::Higher, Axis::Y) => partition[self.index_of([seg.at - 1, seg.start])],
+            };
+            for cell in moved_cells {
+                partition[self.index_of(cell)] = dst_part;
+            }
+            for seg in segs.components(orientation as usize, &seg) {
+                seg.at = new_seg_at;
+            }
         }
     }
 }
@@ -667,7 +746,7 @@ impl SplitTree {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Segment {
     start: usize,
     end: usize,
@@ -707,6 +786,10 @@ impl Segment {
         } else {
             [self.end, self.at]
         }
+    }
+
+    pub fn contains(&self, other: &Self) -> bool {
+        self.at == other.at && self.start <= other.start && other.end <= self.end
     }
 }
 
@@ -782,6 +865,14 @@ impl Segments<2> {
         }
 
         moves
+    }
+
+    pub fn components<'a>(
+        &'a mut self,
+        coord: usize,
+        seg: &'a Segment,
+    ) -> impl Iterator<Item = &'a mut Segment> + 'a {
+        self.c[coord].iter_mut().filter(|s| seg.contains(s))
     }
 }
 
