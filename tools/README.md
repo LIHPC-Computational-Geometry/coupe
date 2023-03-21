@@ -21,7 +21,8 @@ includes the following tools:
       tools,
     - mesh-dup and mesh-refine increase the size of a mesh by either duplicating
       the vertices or splitting its elements into smaller ones, respectively,
-    - mesh-reorder changes the order of mesh elements.
+    - mesh-reorder changes the order of mesh elements,
+    - mesh-points extracts the cell centers of a given mesh.
 - in the `report` directory, a collection of shell scripts that aggregate
   results into visual reports:
     - `imbedgecut` generates an SVG graph comparing the imbalance/edge-cut of
