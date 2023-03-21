@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::env;
 use std::io;
 
-const USAGE: &str = "Usage: medit2svg [options] [in-mesh [out-svg]] <in.mesh >out.svg";
+const USAGE: &str = "Usage: mesh-svg [options] [in-mesh [out-svg]] <in.mesh >out.svg";
 
 /// Returns the list of elements that are interesting.
 fn elements(mesh: &Mesh) -> impl Iterator<Item = (ElementType, &[usize], isize)> {
