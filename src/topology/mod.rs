@@ -58,7 +58,6 @@ pub trait Topology<E> {
             .map(|vertex| {
                 let vertex_part = partition[vertex];
                 self.neighbors(vertex)
-                    .into_iter()
                     .filter(|(neighbor, _edge_weight)| {
                         vertex_part != partition[*neighbor] && *neighbor < vertex
                     })

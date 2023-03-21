@@ -200,7 +200,6 @@ fn frontier<'a>(
         })
         .collect();
     merge_paths(path_set)
-        .into_iter()
         .map(|path| path_to_coords(mesh, path))
         .collect()
 }
