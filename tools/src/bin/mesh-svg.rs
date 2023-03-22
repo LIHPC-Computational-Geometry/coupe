@@ -126,7 +126,7 @@ fn merge_paths(mut paths: Vec<Vec<usize>>) -> impl Iterator<Item = Vec<usize>> {
 }
 
 /// Returns the coordinates from a path and removes redundant nodes.
-fn path_to_coords(mesh: &Mesh, path: Vec<usize>) -> Vec<Point2D> {
+fn path_to_coords(mesh: &Mesh, path: &[usize]) -> Vec<Point2D> {
     fn are_aligned(p1: Point2D, p2: Point2D, p3: Point2D) -> bool {
         const EPSILON: f64 = 1e-9;
         let alignment = if f64::abs(p1[0] - p3[0]) < EPSILON {
@@ -141,7 +141,7 @@ fn path_to_coords(mesh: &Mesh, path: Vec<usize>) -> Vec<Point2D> {
 
     let mut path_coords: Vec<Point2D> = Vec::with_capacity(path.len());
     for node in path {
-        let coords = mesh.node(node);
+        let coords = mesh.node(*node);
         let coords = Point2D::new(coords[0], coords[1]);
         let len = path_coords.len();
         if let (Some(last_coords), Some(laster_coords)) =
@@ -200,7 +200,7 @@ fn frontier<'a>(
         })
         .collect();
     merge_paths(path_set)
-        .map(|path| path_to_coords(mesh, path))
+        .map(|path| path_to_coords(mesh, &path))
         .collect()
 }
 
@@ -211,7 +211,7 @@ struct Path {
 
 /// Returns the list of "blobs"/frontiers/paths of the mesh's elements that
 /// share the same reference.
-fn paths(mesh: &Mesh) -> impl Iterator<Item = Path> + '_ {
+fn blob_paths(mesh: &Mesh) -> impl Iterator<Item = Path> + '_ {
     let adjacency = coupe_tools::dual(mesh);
     let mut visited = HashSet::new();
     let element_fn = element_lookup(mesh);
@@ -243,7 +243,17 @@ fn paths(mesh: &Mesh) -> impl Iterator<Item = Path> + '_ {
         })
 }
 
-fn write_svg<W>(mut w: W, mesh: &Mesh) -> Result<()>
+fn paths(mesh: &Mesh) -> impl Iterator<Item = Path> + '_ {
+    elements(mesh).map(|(_el_type, el_nodes, el_ref)| {
+        let nodes = path_to_coords(mesh, el_nodes);
+        Path {
+            nodes: vec![nodes],
+            color: el_ref,
+        }
+    })
+}
+
+fn write_svg<W>(mut w: W, mesh: &Mesh, optimize: bool) -> Result<()>
 where
     W: io::Write,
 {
@@ -278,7 +288,12 @@ where
             brightness << 16 | brightness << 8 | brightness
         }
     };
-    for path in paths(mesh) {
+    let paths: Box<dyn Iterator<Item = Path>> = if optimize {
+        Box::new(blob_paths(mesh))
+    } else {
+        Box::new(paths(mesh))
+    };
+    for path in paths {
         write!(
             w,
             "<path fill=\"#{:06x}\" fill-rule=\"evenodd\" d=\"",
@@ -303,6 +318,11 @@ where
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optflag(
+        "o",
+        "no-optimize",
+        "do not merge elements of the same ref together",
+    );
 
     let matches = options.parse(env::args().skip(1))?;
 
@@ -315,10 +335,10 @@ fn main() -> Result<()> {
     }
 
     let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
-
     let output = coupe_tools::writer(matches.free.get(1))?;
+    let optimize = !matches.opt_present("o");
     match mesh.dimension() {
-        2 => write_svg(output, &mesh)?,
+        2 => write_svg(output, &mesh, optimize)?,
         n => anyhow::bail!("expected 2D mesh, got a {n}D mesh"),
     };
 
