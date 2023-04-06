@@ -374,14 +374,15 @@ pub fn parse_ascii<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
 
 pub fn test_format_ascii(header: &[u8]) -> bool {
     const HEADER: &str = "meshversionformatted";
-    if header.len() < HEADER.len() {
-        return false;
-    }
-    let header = match std::str::from_utf8(&header[..HEADER.len()]) {
+    let header = match std::str::from_utf8(header) {
         Ok(v) => v,
         Err(_) => return false,
     };
-    header.eq_ignore_ascii_case(HEADER)
+    let header = header.trim_start();
+    if header.len() < HEADER.len() {
+        return false;
+    }
+    header[..HEADER.len()].eq_ignore_ascii_case(HEADER)
 }
 
 pub fn test_format_binary(header: &[u8]) -> bool {
