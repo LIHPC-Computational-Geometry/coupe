@@ -33,6 +33,9 @@ See *PARTITION FILE* for a description of the output format of mesh-part.
 *-h, --help*
 	Show a help message and exit.
 
+*--version*
+	Show version information and exit.
+
 *-a, --algorithm* <spec>
 	Apply the given algorithm on the mesh.  This option can be specified
 	multiple times, so that algorithms can be chained together.  See

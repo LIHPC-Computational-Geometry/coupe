@@ -246,6 +246,7 @@ fn main() -> Result<()> {
 
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optflag("", "version", "print version information");
     options.optmulti(
         "a",
         "algorithm",
@@ -266,7 +267,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage(USAGE));
+        println!("{}", options.usage(USAGE));
+        return Ok(());
+    }
+    if matches.opt_present("version") {
+        println!("part-bench version {}", env!("COUPE_VERSION"));
         return Ok(());
     }
     if !matches.free.is_empty() {

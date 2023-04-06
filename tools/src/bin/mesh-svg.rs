@@ -319,6 +319,7 @@ where
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optflag("", "version", "print version information");
     options.optflag(
         "o",
         "no-optimize",
@@ -328,7 +329,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage(USAGE));
+        println!("{}", options.usage(USAGE));
+        return Ok(());
+    }
+    if matches.opt_present("version") {
+        println!("mesg-svg version {}", env!("COUPE_VERSION"));
         return Ok(());
     }
     if matches.free.len() > 2 {
