@@ -24,6 +24,9 @@ FORMAT* for details.
 *-h, --help*
 	Show a help message and exit.
 
+*--version*
+	Show version information and exit.
+
 *-E, --edge-weights* <variant>
 	Change how edge weights are set.  Possible values are listed in
 	*mesh-part*(1).

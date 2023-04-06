@@ -28,6 +28,9 @@ See *WEIGHT FILE* for a description of the output format.
 *-h, --help*
 	Show a help message and exit.
 
+*--version*
+	Show version information and exit.
+
 *-d, --distribution* <spec>
 	Required.  The definition of a weight distribution.  This option must be
 	specified once per criterion.  See *DISTRIBUTION FORMAT* and *SUPPORTED

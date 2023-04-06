@@ -23,6 +23,9 @@ FORMAT* for details.
 *-h, --help*
 	Show a help message and exit.
 
+*--version*
+	Show version information and exit.
+
 # SEE ALSO
 
 *apply-part*(1) *apply-weight*(1)

@@ -195,6 +195,7 @@ where
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
     options.optflag("h", "help", "print this help menu");
+    options.optflag("", "version", "print version information");
     options.optopt(
         "E",
         "edge-weights",
@@ -209,7 +210,11 @@ fn main() -> Result<()> {
     let matches = options.parse(env::args().skip(1))?;
 
     if matches.opt_present("h") {
-        eprintln!("{}", options.usage("Usage: part-info [options]"));
+        println!("{}", options.usage("Usage: part-info [options]"));
+        return Ok(());
+    }
+    if matches.opt_present("version") {
+        println!("part-info version {}", env!("COUPE_VERSION"));
         return Ok(());
     }
     if !matches.free.is_empty() {

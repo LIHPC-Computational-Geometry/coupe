@@ -28,6 +28,9 @@ FORMAT* for details.
 *-h, --help*
 	Show a help message and exit.
 
+*--version*
+	Show version information and exit.
+
 *-f, --format* <format>
 	Override the output format.  By default, the file format is inferred from
 	the file extension.  See *apply-part*(1)'s *OUTPUT FORMAT* for more info.
