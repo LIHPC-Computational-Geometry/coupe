@@ -26,6 +26,13 @@ FORMAT* for details.
 *--version*
 	Show version information and exit.
 
+*-o, --no-optimize*
+	Do not merge elements of the same ref/color together.
+
+	By default, mesh-svg merges elements of the same color together in the SVG,
+	so that the visuals stay the same but file size is drastically reduced. This
+	argument disables this behavior.
+
 # SEE ALSO
 
 *apply-part*(1) *apply-weight*(1)
