@@ -50,6 +50,7 @@ where
     cg: Vec<T>,
     last_side: u32,
     adjacency: &'a Adj,
+    cost: T,
 }
 
 impl<'a, Adj, T> Path<'a, Adj, T>
@@ -77,7 +78,7 @@ where
     }
 
     /// Find the next path vertex
-    fn select_next_cell(&self) -> Option<usize> {
+    fn select_next_cell(&self) -> Option<(usize, T)> {
         let side = (1 - self.last_side) as usize;
         // Take the second last recent because "minimization"
         let v = self.path[self.path.len() - 2];
@@ -91,18 +92,18 @@ where
                     return None;
                 }
                 // Check if move decreases cut
-                if self.flip_cost_incr(neighbor) >= T::zero() {
+                let cost = self.flip_cost_incr(neighbor);
+                if cost >= T::zero() {
                     return None;
                 }
-                Some(neighbor)
+                Some((neighbor, cost))
             })
             .next()
     }
 
     /// Create an empty path
     fn new(adjacency: &'a Adj, part: &[usize]) -> Self {
-        let cg = (0..part
-            .len())
+        let cg = (0..part.len())
             .map(|v| {
                 adjacency
                     .neighbors(v)
@@ -121,6 +122,33 @@ where
             cg,
             last_side: 0,
             adjacency,
+            cost: T::zero(),
+        }
+    }
+
+    fn add_to_path(&mut self, (v, cost): (usize, T)) {
+        self.path.push(v);
+        self.cost += cost;
+        self.last_side = self.part[v] as u32;
+    }
+
+    fn find_path(self, side: usize) -> Option<Self> {
+        // Choose v as the best vertex
+        let v: usize = 0;
+        // Find w
+        let w: usize = 1;
+
+        let mut path = self;
+        path.add_to_path((v, path.cg[v]));
+        path.add_to_path((w, path.cg[w]));
+
+        while let Some(candidate) = path.select_next_cell() {
+            path.add_to_path(candidate);
+        }
+        if path.cost < T::zero() {
+            Some(path)
+        } else {
+            None
         }
     }
 }
