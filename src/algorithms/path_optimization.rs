@@ -75,6 +75,29 @@ where
         );
         self.cg[v] + (e_c - e_nc) + (e_c - e_nc) //* T::from(2)
     }
+
+    /// Find the next path vertex
+    fn select_next_cell(&self) -> Option<usize> {
+        let side = (1 - self.last_side) as usize;
+        let v = self.path[self.path.len() - 2];
+        self.adjacency
+            .neighbors(v)
+            .filter_map(|(neighbor, _edge_weight)| {
+                if self.part[neighbor] != side {
+                    return None;
+                };
+                if self.path.contains(&neighbor) {
+                    return None;
+                }
+                if self.flip_cost_incr(neighbor) >= T::zero() {
+                    return None;
+                }
+                Some(neighbor)
+            })
+            .next()
+    }
+
+
 }
 
 /// Path Optimization
