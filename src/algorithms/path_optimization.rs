@@ -1,16 +1,13 @@
 use super::Error;
 use crate::topology::Topology;
+use itertools::Itertools;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
-use rayon::iter::IntoParallelRefIterator as _;
-use rayon::iter::ParallelIterator as _;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashSet};
 use std::iter::Sum;
+use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
-use std::ops::{AddAssign, Index};
 
 /// Trait alias for values accepted as weights by [PathOptimization].
 pub trait PathWeight
@@ -29,14 +26,57 @@ where
 {
 }
 
-struct Gains<T: PathWeight> {
-    edge_sum: Vec<[T; 2]>,
-    parts: Vec<usize>,
+struct TopologicalPart<'a, Adj, T>
+where
+    T: PathWeight,
+    Adj: Topology<T> + Sync,
+{
+    part: Vec<usize>,
+    cg: Vec<T>,
+    adjacency: &'a Adj,
 }
 
-impl<T: PathWeight> Gains<T> {
-    fn gain(&self, vertex: usize) -> T {
-        self.edge_sum[vertex][1 - self.parts[vertex]] - self.edge_sum[vertex][self.parts[vertex]]
+impl<'a, Adj, T> TopologicalPart<'a, Adj, T>
+where
+    T: PathWeight,
+    Adj: Topology<T> + Sync,
+{
+    fn new(topo: &'a Adj, part: &[usize]) -> Self {
+        let cg = Vec::with_capacity(part.len());
+
+        let mut out = Self {
+            cg,
+            part: Vec::from(part),
+            adjacency: topo,
+        };
+
+        (0..part.len()).for_each(|v| out.cg[v] = out.compute_cg(v));
+        out
+    }
+
+    fn flip_part(part: usize) -> usize {
+        1 - part
+    }
+
+    fn compute_cg(&self, v: usize) -> T {
+        self.adjacency
+            .neighbors(v)
+            .fold(T::zero(), |acc, (neighbor, edge_weight)| {
+                if self.part[neighbor] == self.part[v] {
+                    acc + edge_weight
+                } else {
+                    acc - edge_weight
+                }
+            })
+    }
+
+    fn flip_flop<P>(&mut self, path: P)
+    where
+        P: IntoIterator<Item = usize>,
+    {
+        path.into_iter().for_each(|v| {
+            Self::flip_part(self.part[v]);
+        });
     }
 }
 
@@ -46,11 +86,9 @@ where
     Adj: Topology<T> + Sync,
 {
     path: Vec<usize>,
-    part: Vec<usize>,
-    cg: Vec<T>,
     last_side: u32,
-    adjacency: &'a Adj,
     cost: T,
+    topo_part: &'a TopologicalPart<'a, Adj, T>,
 }
 
 impl<'a, Adj, T> Path<'a, Adj, T>
@@ -61,20 +99,20 @@ where
     /// Compute whether a vertex v is suitable to extend P
     /// Not for hypergraph yet.
     fn flip_cost_incr(&self, v: usize) -> T {
-        let (e_nc, e_c) = self.adjacency.neighbors(v).fold(
+        let (e_nc, e_c) = self.topo_part.adjacency.neighbors(v).fold(
             (T::zero(), T::zero()),
             |acc, (neighbor, edge_weight)| {
                 if !self.path.contains(&neighbor) {
                     return acc;
                 }
-                if self.part[neighbor] == self.part[v] {
+                if self.topo_part.part[neighbor] == self.topo_part.part[v] {
                     (acc.0 + edge_weight, acc.1)
                 } else {
                     (acc.0, acc.1 + edge_weight)
                 }
             },
         );
-        self.cg[v] + (e_c - e_nc) + (e_c - e_nc) //* T::from(2)
+        self.topo_part.cg[v] + (e_c - e_nc) + (e_c - e_nc) //* T::from(2)
     }
 
     /// Find the next path vertex
@@ -82,10 +120,11 @@ where
         let side = (1 - self.last_side) as usize;
         // Take the second last recent because "minimization"
         let v = self.path[self.path.len() - 2];
-        self.adjacency
+        self.topo_part
+            .adjacency
             .neighbors(v)
             .filter_map(|(neighbor, _edge_weight)| {
-                if self.part[neighbor] != side {
+                if self.topo_part.part[neighbor] != side {
                     return None;
                 };
                 if self.path.contains(&neighbor) {
@@ -102,36 +141,22 @@ where
     }
 
     /// Create an empty path
-    fn new(adjacency: &'a Adj, part: &[usize]) -> Self {
-        let cg = (0..part.len())
-            .map(|v| {
-                adjacency
-                    .neighbors(v)
-                    .fold(T::zero(), |acc, (neighbor, edge_weight)| {
-                        if part[neighbor] == part[v] {
-                            acc + edge_weight
-                        } else {
-                            acc - edge_weight
-                        }
-                    })
-            })
-            .collect();
+    fn new(topo_part: &'a TopologicalPart<'a, Adj, T>) -> Self {
         Self {
             path: Vec::new(),
-            part: Vec::from(part),
-            cg,
             last_side: 0,
-            adjacency,
             cost: T::zero(),
+            topo_part,
         }
     }
 
     fn add_to_path(&mut self, (v, cost): (usize, T)) {
         self.path.push(v);
         self.cost += cost;
-        self.last_side = self.part[v] as u32;
+        self.last_side = self.topo_part.part[v] as u32;
     }
 
+    /// Create an optimization path, beginning in side
     fn find_path(self, side: usize) -> Option<Self> {
         // Choose v as the best vertex
         let v: usize = 0;
@@ -139,8 +164,8 @@ where
         let w: usize = 1;
 
         let mut path = self;
-        path.add_to_path((v, path.cg[v]));
-        path.add_to_path((w, path.cg[w]));
+        path.add_to_path((v, path.topo_part.cg[v]));
+        path.add_to_path((w, path.topo_part.cg[w]));
 
         while let Some(candidate) = path.select_next_cell() {
             path.add_to_path(candidate);
