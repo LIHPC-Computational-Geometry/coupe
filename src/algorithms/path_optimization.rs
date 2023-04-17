@@ -40,7 +40,7 @@ impl<T: PathWeight> Gains<T> {
     }
 }
 
-struct Path<Adj, T>
+struct Path<'a, Adj, T>
 where
     T: PathWeight,
     Adj: Topology<T> + Sync,
@@ -49,10 +49,10 @@ where
     part: Vec<usize>,
     cg: Vec<T>,
     last_side: u32,
-    adjacency: Adj,
+    adjacency: &'a Adj,
 }
 
-impl<Adj, T> Path<Adj, T>
+impl<'a, Adj, T> Path<'a, Adj, T>
 where
     T: PathWeight,
     Adj: Topology<T> + Sync,
@@ -79,6 +79,7 @@ where
     /// Find the next path vertex
     fn select_next_cell(&self) -> Option<usize> {
         let side = (1 - self.last_side) as usize;
+        // Take the second last recent because "minimization"
         let v = self.path[self.path.len() - 2];
         self.adjacency
             .neighbors(v)
@@ -89,6 +90,7 @@ where
                 if self.path.contains(&neighbor) {
                     return None;
                 }
+                // Check if move decreases cut
                 if self.flip_cost_incr(neighbor) >= T::zero() {
                     return None;
                 }
@@ -97,7 +99,30 @@ where
             .next()
     }
 
-
+    /// Create an empty path
+    fn new(adjacency: &'a Adj, part: &[usize]) -> Self {
+        let cg = (0..part
+            .len())
+            .map(|v| {
+                adjacency
+                    .neighbors(v)
+                    .fold(T::zero(), |acc, (neighbor, edge_weight)| {
+                        if part[neighbor] == part[v] {
+                            acc + edge_weight
+                        } else {
+                            acc - edge_weight
+                        }
+                    })
+            })
+            .collect();
+        Self {
+            path: Vec::new(),
+            part: Vec::from(part),
+            cg,
+            last_side: 0,
+            adjacency,
+        }
+    }
 }
 
 /// Path Optimization
