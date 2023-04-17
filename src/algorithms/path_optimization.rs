@@ -26,12 +26,16 @@ where
 {
 }
 
+type VertexId = usize;
+type EdgeId = usize;
+type PartId = usize;
+
 struct TopologicalPart<'a, Adj, T>
 where
     T: PathWeight,
     Adj: Topology<T> + Sync,
 {
-    part: Vec<usize>,
+    part: Vec<PartId>,
     cg: Vec<T>,
     adjacency: &'a Adj,
 }
@@ -41,7 +45,7 @@ where
     T: PathWeight,
     Adj: Topology<T> + Sync,
 {
-    fn new(topo: &'a Adj, part: &[usize]) -> Self {
+    fn new(topo: &'a Adj, part: &[PartId]) -> Self {
         let cg = Vec::with_capacity(part.len());
 
         let mut out = Self {
@@ -54,11 +58,11 @@ where
         out
     }
 
-    fn flip_part(part: usize) -> usize {
+    fn flip_part(part: PartId) -> PartId {
         1 - part
     }
 
-    fn compute_cg(&self, v: usize) -> T {
+    fn compute_cg(&self, v: VertexId) -> T {
         self.adjacency
             .neighbors(v)
             .fold(T::zero(), |acc, (neighbor, edge_weight)| {
@@ -85,8 +89,8 @@ where
     T: PathWeight,
     Adj: Topology<T> + Sync,
 {
-    path: Vec<usize>,
-    last_side: u32,
+    path: Vec<VertexId>,
+    last_side: PartId,
     cost: T,
     topo_part: &'a TopologicalPart<'a, Adj, T>,
 }
@@ -150,10 +154,10 @@ where
         }
     }
 
-    fn add_to_path(&mut self, (v, cost): (usize, T)) {
+    fn add_to_path(&mut self, (v, cost): (VertexId, T)) {
         self.path.push(v);
         self.cost += cost;
-        self.last_side = self.topo_part.part[v] as u32;
+        self.last_side = self.topo_part.part[v];
     }
 
     /// Create an optimization path, beginning in side
