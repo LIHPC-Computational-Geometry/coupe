@@ -10,6 +10,7 @@ mod k_means;
 mod kernighan_lin;
 mod kk;
 mod multi_jagged;
+mod path_optimization;
 mod recursive_bisection;
 mod vn;
 mod z_curve;
