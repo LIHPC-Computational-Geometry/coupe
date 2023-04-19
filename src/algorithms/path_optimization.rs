@@ -1,7 +1,7 @@
 use super::Error;
 use crate::topology::Topology;
 use itertools::Itertools;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, Signed};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::iter::Sum;
@@ -10,20 +10,43 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 
 /// Trait alias for values accepted as weights by [PathOptimization].
-pub trait PathWeight
-where
-    Self: Copy + std::fmt::Debug + Send + Sync,
-    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
-    Self: Sub<Output = Self> + AddAssign + SubAssign,
+pub trait PathWeight:
+     Copy + std::fmt::Debug + Send + Sync+
+     Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero +
+     Sub<Output = Self> + AddAssign + SubAssign +
+     SignedNum
 {
 }
 
 impl<T> PathWeight for T
-where
-    Self: Copy + std::fmt::Debug + Send + Sync,
-    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
-    Self: Sub<Output = Self> + AddAssign + SubAssign,
+    where
+        Self: Copy + std::fmt::Debug + Send + Sync,
+        Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
+        Self: Sub<Output = Self> + AddAssign + SubAssign,
+        Self: SignedNum
 {
+}
+
+pub trait SignedNum: Sized {
+    type SignedType:  Copy + PartialOrd + Zero + AddAssign ;
+
+    fn to_signed(self) -> Self::SignedType;
+}
+//
+// impl<T: Signed + Copy + PartialOrd + Zero + AddAssign > SignedNum for T {
+//     type SignedType = T;
+//
+//     fn to_signed(self) -> T {
+//         self
+//     }
+// }
+
+impl SignedNum for usize {
+    type SignedType = i64;
+
+    fn to_signed(self) -> Self::SignedType {
+        self.try_into().unwrap()
+    }
 }
 
 type VertexId = usize;
@@ -33,16 +56,18 @@ type PartId = usize;
 struct TopologicalPart<'a, Adj, T>
 where
     T: PathWeight,
+    <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
 {
     part: Vec<PartId>,
-    cg: Vec<T>,
+    pub cg: Vec<T::SignedType>,
     adjacency: &'a Adj,
 }
 
 impl<'a, Adj, T> TopologicalPart<'a, Adj, T>
 where
     T: PathWeight,
+    <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
 {
     fn new(topo: &'a Adj, part: &[PartId]) -> Self {
@@ -54,7 +79,7 @@ where
             adjacency: topo,
         };
 
-        (0..part.len()).for_each(|v| out.cg[v] = out.compute_cg(v));
+        (0..part.len()).for_each(|v| out.cg.push(out.compute_cg(v)));
         out
     }
 
@@ -62,14 +87,14 @@ where
         1 - part
     }
 
-    fn compute_cg(&self, v: VertexId) -> T {
+    fn compute_cg(&self, v: VertexId) -> T::SignedType {
         self.adjacency
             .neighbors(v)
-            .fold(T::zero(), |acc, (neighbor, edge_weight)| {
+            .fold(T::SignedType::zero(), |acc, (neighbor, edge_weight)| {
                 if self.part[neighbor] == self.part[v] {
-                    acc + edge_weight
+                    acc + edge_weight.to_signed()
                 } else {
-                    acc - edge_weight
+                    acc - edge_weight.to_signed()
                 }
             })
     }
@@ -87,32 +112,34 @@ where
 struct Path<'a, Adj, T>
 where
     T: PathWeight,
+    <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
 {
     path: Vec<VertexId>,
     last_side: PartId,
-    cost: T,
+    cost: T::SignedType,
     topo_part: &'a TopologicalPart<'a, Adj, T>,
 }
 
 impl<'a, Adj, T> Path<'a, Adj, T>
 where
     T: PathWeight,
+    <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
 {
     /// Compute whether a vertex v is suitable to extend P
     /// Not for hypergraph yet.
-    fn flip_cost_incr(&self, v: usize) -> T {
+    fn flip_cost_incr(&self, v: usize) -> T::SignedType {
         let (e_nc, e_c) = self.topo_part.adjacency.neighbors(v).fold(
-            (T::zero(), T::zero()),
+            (T::SignedType::zero(), T::SignedType::zero()),
             |acc, (neighbor, edge_weight)| {
                 if !self.path.contains(&neighbor) {
                     return acc;
                 }
                 if self.topo_part.part[neighbor] == self.topo_part.part[v] {
-                    (acc.0 + edge_weight, acc.1)
+                    (acc.0 + edge_weight.to_signed(), acc.1)
                 } else {
-                    (acc.0, acc.1 + edge_weight)
+                    (acc.0, acc.1 + edge_weight.to_signed())
                 }
             },
         );
@@ -120,7 +147,7 @@ where
     }
 
     /// Find the next path vertex
-    fn select_next_cell(&self) -> Option<(usize, T)> {
+    fn select_next_cell(&self) -> Option<(usize, T::SignedType)> {
         let side = (1 - self.last_side) as usize;
         // Take the second last recent because "minimization"
         let v = self.path[self.path.len() - 2];
@@ -136,7 +163,7 @@ where
                 }
                 // Check if move decreases cut
                 let cost = self.flip_cost_incr(neighbor);
-                if cost >= T::zero() {
+                if cost >= T::SignedType::zero() {
                     return None;
                 }
                 Some((neighbor, cost))
@@ -149,12 +176,12 @@ where
         Self {
             path: Vec::new(),
             last_side: 0,
-            cost: T::zero(),
+            cost: T::SignedType::zero(),
             topo_part,
         }
     }
 
-    fn add_to_path(&mut self, (v, cost): (VertexId, T)) {
+    fn add_to_path(&mut self, (v, cost): (VertexId, T::SignedType)) {
         self.path.push(v);
         self.cost += cost;
         self.last_side = self.topo_part.part[v];
@@ -174,7 +201,7 @@ where
         while let Some(candidate) = path.select_next_cell() {
             path.add_to_path(candidate);
         }
-        if path.cost < T::zero() {
+        if path.cost < T::SignedType::zero() {
             Some(path)
         } else {
             None
@@ -305,5 +332,82 @@ where
             return Err(Error::BiPartitioningOnly);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sprs::CsMatI;
+    use crate::Point2D;
+    use super::*;
+
+    struct Instance {
+        pub geometry: Vec<Point2D>,
+        pub v_weights: Vec<f64>,
+        pub topology: sprs::CsMat<usize>,
+        pub partition: Vec<usize>,
+    }
+
+    impl Instance {
+        fn create_instance() -> Self
+        {
+            let mut out = Self {
+                geometry: Vec::with_capacity(8),
+                v_weights: vec![1.0; 8],
+                partition: Vec::with_capacity(8),
+                topology: sprs::CsMat::empty(sprs::CSR, 0),
+            };
+
+            //    swap
+            // 0  1  0  1
+            // +--+--+--+
+            // |  |  |  |
+            // +--+--+--+
+            // 0  0  1  1
+            out.geometry.extend( [
+                Point2D::new(0., 0.),
+                Point2D::new(1., 0.),
+                Point2D::new(2., 0.),
+                Point2D::new(3., 0.),
+                Point2D::new(0., 1.),
+                Point2D::new(1., 1.),
+                Point2D::new(2., 1.),
+                Point2D::new(3., 1.),
+            ]);
+            out.partition.extend([0, 0, 1, 1, 0, 1, 0, 1]);
+            
+            out.topology.insert(0, 1, 1);
+            out.topology.insert(1, 2, 1);
+            out.topology.insert(2, 3, 1);
+            out.topology.insert(4, 5, 1);
+            out.topology.insert(5, 6, 1);
+            out.topology.insert(6, 7, 1);
+            out.topology.insert(0, 4, 1);
+            out.topology.insert(1, 5, 1);
+            out.topology.insert(2, 6, 1);
+            out.topology.insert(3, 7, 1);
+
+            // symmetry
+            out.topology.insert(1, 0, 1);
+            out.topology.insert(2, 1, 1);
+            out.topology.insert(3, 2, 1);
+            out.topology.insert(5, 4, 1);
+            out.topology.insert(6, 5, 1);
+            out.topology.insert(7, 6, 1);
+            out.topology.insert(4, 0, 1);
+            out.topology.insert(5, 1, 1);
+            out.topology.insert(6, 2, 1);
+            out.topology.insert(7, 3, 1);
+
+            out
+        }
+    }
+    #[test]
+    fn check_cg() {
+        let instance = Instance::create_instance();
+
+        let topo = instance.topology.view();
+        let tp = TopologicalPart::new(&topo, instance.partition.as_slice());
+        println!("CG = {:?}", tp.cg);
     }
 }
