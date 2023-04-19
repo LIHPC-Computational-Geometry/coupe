@@ -53,6 +53,7 @@ type VertexId = usize;
 type EdgeId = usize;
 type PartId = usize;
 
+#[derive(Debug)]
 struct TopologicalPart<'a, Adj, T>
 where
     T: PathWeight,
@@ -104,11 +105,12 @@ where
         P: IntoIterator<Item = usize>,
     {
         path.into_iter().for_each(|v| {
-            Self::flip_part(self.part[v]);
+            self.part[v] = Self::flip_part(self.part[v]);
         });
     }
 }
 
+#[derive(Debug)]
 struct Path<'a, Adj, T>
 where
     T: PathWeight,
@@ -190,7 +192,7 @@ where
     /// Create an optimization path, beginning in side
     fn find_path(self, side: usize) -> Option<Self> {
         // Choose v as the best vertex
-        let v: usize = 0;
+        let v: usize = 5;
         // Find w
         let w: usize = 1;
 
@@ -407,7 +409,14 @@ mod tests {
         let instance = Instance::create_instance();
 
         let topo = instance.topology.view();
-        let tp = TopologicalPart::new(&topo, instance.partition.as_slice());
+        let mut tp = TopologicalPart::new(&topo, instance.partition.as_slice());
         println!("CG = {:?}", tp.cg);
+
+        let path = Path::new(&tp);
+        if let Some(p) = path.find_path(0) {
+            println!("path = {:?}", p);
+            tp.flip_flop(p.path);
+        }
+        println!("tp = {:?}", tp);
     }
 }
