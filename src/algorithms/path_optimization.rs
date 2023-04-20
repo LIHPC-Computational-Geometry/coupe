@@ -465,11 +465,12 @@ mod tests {
         let mut tp = TopologicalPart::new(&topo, instance.partition.as_slice());
         println!("CG = {:?}", tp.cg);
 
-        let path = Path::new(&tp);
-        if let Some(p) = path.find_path(0) {
+        let mut side = 0;
+        while let Some(p) = Path::new(&tp).find_path(side) {
             println!("path = {:?}", p);
             tp.flip_flop(p.path);
+            side = 1 - side;
+            println!("tp = {:?}", tp);
         }
-        println!("tp = {:?}", tp);
     }
 }
