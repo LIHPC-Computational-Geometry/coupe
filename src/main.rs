@@ -1,3 +1,4 @@
+use coupe::imbalance;
 use num_traits::Float;
 use rand::distributions::Distribution;
 // use rand::distributions::Uniform;
@@ -13,6 +14,7 @@ use itertools::Itertools;
 use itertools::MultiProduct;
 use itertools::Product;
 use rand::{distributions::Uniform, Rng};
+use std::cmp::max;
 use std::iter::Filter;
 use std::iter::Map; // 0.6.5
 
@@ -40,6 +42,7 @@ pub struct PartitionMetadata<const NB_CRITERIA: usize> {
     pub parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA],
 }
 
+// pub struct NotImplementedError;
 #[derive(Clone, Copy)]
 pub struct TargetorParameters<const NB_CRITERIA: usize> {
     // Number of intervals used to discretize the solution space over each
@@ -151,6 +154,131 @@ fn compute_boxes(
     res
 }
 
+fn compute_candidate_moves(
+    // fn filtered_boxed_moves<'a>(
+    // origin: &'a [usize; NB_CRITERIA],
+    part_source: usize,
+    partition_imbalance: usize,
+    // boxes: &'a HashMap<[usize; NB_CRITERIA], Vec<usize>>,
+    box_content: &Vec<usize>,
+    partition: &Vec<usize>,
+    parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA],
+    c_weights: Vec<CWeight>,
+    // ) -> Box<dyn Iterator<Item = (&'a usize, usize)> + 'a> {
+) -> Vec<(usize, usize)> {
+    // ) {
+    println!("ICIIIIIIIIIIIIIIIIII {:?}", box_content);
+    // println!("ICIIIIIIIIIIIIIIIIII ",);
+    let part_target = 1 - part_source;
+    let max_imbalance_per_crit: [usize; NB_CRITERIA] = parts_imbalances_per_crit
+        .iter()
+        .map(|imbalances| *imbalances.iter().max().unwrap() as usize)
+        .collect::<Vec<usize>>()
+        .try_into()
+        .unwrap();
+    // println!("~~~ {:?} {:?}", boxes, origin);
+
+    let strict_positive_gain = |c_weight_index: usize| {
+        !(0..NB_CRITERIA).any(|criterion| {
+            max_imbalance_per_crit[criterion] == partition_imbalance
+                && c_weights[c_weight_index][criterion] >= 2 * partition_imbalance
+                || max_imbalance_per_crit[criterion] != partition_imbalance
+                    && c_weights[c_weight_index][criterion] as isize
+                        >= partition_imbalance as isize
+                            - parts_imbalances_per_crit[criterion][part_target]
+        })
+    };
+
+    // let mut box_indices: Vec<usize> = boxes.get(origin).unwrap().clone();
+    // println!("{}", my_list.iter().any(|&i| i == 4));
+    // println!("box indices {:?}", box_indices);
+    // box_indices = box_indices
+    //     .iter()
+    //     .filter(|&&c_weight_index| partition[c_weight_index] == part_source)
+    //     .collect::<Vec<usize>>();
+    // let mut box_indices: Vec<usize> = boxes
+    let mut box_indices: Vec<usize> = box_content
+        .iter()
+        .cloned()
+        // .into_iter()
+        // Filter c_weight indices that are not assigned to part_source
+        .filter(|c_weight_index| partition[*c_weight_index] == part_source)
+        // Filter moves with settled wieghts, i.e. weights whose move would
+        // leave to a higher partition imbalance
+        .filter(|c_weight_index| strict_positive_gain(*c_weight_index))
+        .collect();
+
+    println!("box indices {:?}", box_indices);
+
+    let moves = box_indices
+        .iter()
+        .map(move |c_weight_index| (*c_weight_index, part_target))
+        .collect();
+
+    println!("moves {:?}", moves);
+    moves
+}
+
+fn filtered_boxed_moves_bis<'a>(
+    origin: &'a [usize; NB_CRITERIA],
+    part_source: usize,
+    partition_imbalance: usize,
+    boxes: &'a HashMap<[usize; NB_CRITERIA], Vec<usize>>,
+    partition: &'a Vec<usize>,
+    parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA],
+    c_weights: Vec<CWeight>,
+    // ) -> Box<dyn Iterator<Item = (&'a &'a usize, usize)> + 'a> {
+) {
+    let part_target = 1 - part_source;
+    let max_imbalance_per_crit: [usize; NB_CRITERIA] = parts_imbalances_per_crit
+        .iter()
+        .map(|imbalances| *imbalances.iter().max().unwrap() as usize)
+        .collect::<Vec<usize>>()
+        .try_into()
+        .unwrap();
+    println!("~~~ {:?} {:?}", boxes, origin);
+
+    let strict_positive_gain = |&&c_weight_index: &&usize| {
+        !(0..NB_CRITERIA).any(|criterion| {
+            max_imbalance_per_crit[criterion] == partition_imbalance
+                && c_weights[criterion][c_weight_index] >= 2 * partition_imbalance
+                || max_imbalance_per_crit[criterion] != partition_imbalance
+                    && c_weights[criterion][c_weight_index] as isize
+                        >= partition_imbalance as isize
+                            - parts_imbalances_per_crit[criterion][part_target]
+        })
+    };
+
+    // let mut box_indices: Vec<usize> = boxes.get(origin).unwrap().clone();
+    // println!("{}", my_list.iter().any(|&i| i == 4));
+    // println!("box indices {:?}", box_indices);
+    // box_indices = box_indices
+    //     .iter()
+    //     .filter(|&&c_weight_index| partition[c_weight_index] == part_source)
+    //     .collect::<Vec<usize>>();
+    // let mut box_indices: Vec<usize> = boxes
+    let mut box_indices: Vec<&usize> = boxes
+        .get(origin)
+        .unwrap()
+        .iter()
+        // Filter c_weight indices that are not assigned to part_source
+        .filter(|&&c_weight_index| partition[c_weight_index] == part_source)
+        // Filter moves with settled wieghts, i.e. weights whose move would
+        // leave to a higher partition imbalance
+        .filter(|c_weight_index| strict_positive_gain(c_weight_index))
+        .collect();
+
+    let moves = Box::new(
+        box_indices
+            .iter()
+            .map(move |c_weight_index| (c_weight_index, part_target)),
+    );
+
+    println!("box indices {:?}", box_indices);
+    println!("moves {:?}", moves);
+    // moves
+}
+
 fn generate_indices(
     origin: [usize; NB_CRITERIA],
     dist: usize,
@@ -234,6 +362,196 @@ fn generate_indices(
     //     ]
 }
 
+fn process_imbalance(
+    parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA],
+) -> (Vec<usize>, Vec<usize>) {
+    let max_imbalance_per_crit: [usize; NB_CRITERIA] = parts_imbalances_per_crit
+        .iter()
+        .map(|imbalances| *imbalances.iter().max().unwrap() as usize)
+        .collect::<Vec<usize>>()
+        .try_into()
+        .unwrap();
+    println!("[MAX IMB PER CRIT] {:?}", max_imbalance_per_crit,);
+
+    let partition_imbalance: usize = *max_imbalance_per_crit.iter().max().unwrap();
+    let mut criteria_most_imbalanced = Vec::new();
+    for (criterion, &imbalance) in max_imbalance_per_crit.iter().enumerate() {
+        if imbalance == partition_imbalance {
+            criteria_most_imbalanced.push(criterion)
+        }
+    }
+    // println!("yes{:?}", most_imbalanced_criteria);
+    // let res = max_imbalance_per_crit.iter().enumerate().fold(
+    //     Vec::new(),
+    //     |mut mut_res, (criterion, &imbalance)| {
+    //         if imbalance == partition_imbalance {
+    //             mut_res.push(criterion);
+    //         }
+    //         mut_res
+    //     },
+    // );
+    // println!("yes{:?}", res);
+
+    let mut parts_source = Vec::new();
+    for imbalance in parts_imbalances_per_crit.iter() {
+        for (part, &imbalance) in imbalance.iter().enumerate() {
+            if imbalance as usize == partition_imbalance {
+                parts_source.push(part)
+            }
+        }
+    }
+    println!("criteria_most_imbalanced{:?}", criteria_most_imbalanced);
+    println!("part sources{:?}", parts_source);
+
+    (criteria_most_imbalanced, parts_source)
+    // let part_sources = parts_imbalances_per_crit.iter().enumerate().map(
+    //     |(i, (min, center))| {
+    //         if (region >> i) & 1 == 0 {
+    //             *min
+    //         } else {
+    //             *center
+    //         }
+    //     },
+    // ));
+    // .fold(
+    //     Vec::new(),
+    //     [mut ret, ()]
+    // );
+
+    // let mut parts_source = Vec::new();
+    // for imbalance in parts_imbalances_per_crit.iter() {
+
+    // }
+
+    // // for (criterion, value) in max_imbalance_per_crit.iter().enumerate(){
+    // // }
+    // max_imbalance_per_crit
+    //     .iter()
+    //     .enumerate()
+    //     .max_by_key(|(_, &value)| value)
+    //     .map(|(idx, _)| v.push(idx));
+
+    // let mut r = Vec::new();
+    // // Put each weight in the lightweightest part.
+    // for (weight, weight_id) in weights.into_iter().rev() {
+    //     let (min_part_weight_idx, _min_part_weight) = r
+    //         .iter()
+    //         .enumerate()
+    //         .min_by(|(_, part_weight0), (_, part_weight1)| {
+    //             crate::partial_cmp(part_weight0, part_weight1)
+    //         })
+    //         .unwrap(); // Will not panic because !part_weights.is_empty()
+    //     partition[weight_id] = min_part_weight_idx;
+    //     part_weights[min_part_weight_idx] += weight;
+    // }
+    // let partition_imbalance = max_imbalance_per_crit[most_imbalanced_criterion];
+
+    // let found = false;
+    // for imbalances in parts_imbalances_per_crit {
+    //     for (part, imbalance) in imbalances.iter().enumerate() {
+    //         if imbalance == partition_imbalance {
+    //             part_source = part
+    //         }
+    //     }
+    // }
+
+    // println!(
+    //     "res {:?}, {}",
+    //     max_imbalance_per_crit, most_imbalanced_criterion
+    // );
+}
+
+fn find_move(
+    parameters: TargetorParameters<NB_CRITERIA>,
+    c_weights: Vec<CWeight>,
+    parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA],
+    boxes: HashMap<[usize; NB_CRITERIA], Vec<usize>>,
+    partition: &Vec<usize>,
+) -> Option<(usize, usize)> {
+    let (criteria_most_imbalanced, parts_source) = process_imbalance(parts_imbalances_per_crit);
+
+    // No more strictly positive gain can be achieved through a move
+    if parts_source.len() > 1 {
+        return None;
+    }
+    let part_source: usize = parts_source[0];
+
+    // Setup target gain
+    let mut target_gain: [usize; NB_CRITERIA] = [0; NB_CRITERIA];
+    target_gain = core::array::from_fn::<usize, NB_CRITERIA, _>(|criterion| {
+        let mut gain = parts_imbalances_per_crit[criterion][part_source].abs() as usize;
+        if gain > MAX_WEIGHTS[criterion] {
+            gain = MAX_WEIGHTS[criterion];
+        }
+        gain
+    });
+
+    // Retrieve candidates
+    // let target_box_index = compute_box_indices(target_gain, parameters).clone();
+    let target_box_index = compute_box_indices(target_gain, parameters);
+    // let target_box_index = compute_box_indices(c_weights[0], parameters);
+    let partition_imbalance: usize =
+        parts_imbalances_per_crit[criteria_most_imbalanced[0]][part_source] as usize;
+
+    println!("target gain {:?}", target_gain);
+
+    println!(
+        "boxes {:?} and target_box_index {:?} contains {:?}",
+        boxes,
+        &target_box_index,
+        boxes.contains_key(&target_box_index)
+    );
+
+    if boxes.contains_key(&target_box_index) {
+        let box_content = boxes.get(&target_box_index).unwrap();
+        let candidate_moves = compute_candidate_moves(
+            // &target_box_index,
+            part_source,
+            partition_imbalance,
+            box_content,
+            partition,
+            parts_imbalances_per_crit,
+            c_weights,
+        );
+        if !candidate_moves.is_empty() {
+            return Some(candidate_moves[0]);
+        }
+        // return candidate_moves.next();
+    }
+
+    let mut dist = 1;
+    loop {
+        let iter_indices = generate_indices(target_box_index, dist, parameters);
+
+        // generate_indices(target_box_index, offset)
+    }
+
+    return None;
+
+    // return Some(target_gain);
+    // target_gain.iter().enumerate().map(
+    //     |(criterion, _)| parts_imbalances_per_crit[]
+    // )
+    // let a = core::array::from_fn<usize,NB_CRITERIA,_>()
+    // return [12, 0];
+}
+
+// print("[[MAX IMB PER CRIT]]", max_imbalance_per_crit)
+// most_imbalanced_criterion = np.argmax(max_imbalance_per_crit)
+// partition_imbalance = max_imbalance_per_crit[most_imbalanced_criterion]
+
+// found = False
+// for imbalances in self.parts_imbalances_per_crit:
+//     for part, imbalance in enumerate(imbalances):
+//         if imbalance == partition_imbalance:
+//             part_source = part
+//             found = True
+//             break
+//     if found:
+//         break
+
+// return most_imbalanced_criterion, part_source
+
 fn main() {
     // Instance related data
     let range = Uniform::new(MIN_WEIGHT, MAX_WEIGHT);
@@ -262,13 +580,16 @@ fn main() {
 
     // PartitionMetadata
     let curr_parts_loads_per_crit: [[usize; NB_PARTS]; NB_CRITERIA] =
-        eval_parts_loads_per_crit(partition, instance.c_weights.clone());
-    // let curr_parts_imbalances_per_crit: [[i64; NB_PARTS]; NB_CRITERIA] =
-    //     eval_parts_imbalances_per_crit(curr_parts_loads_per_crit, parts_target_load);
-    // let partition_metadata: PartitionMetadata<NB_CRITERIA> = PartitionMetadata {
-    //     parts_loads_per_crit: curr_parts_loads_per_crit,
-    //     parts_imbalances_per_crit: curr_parts_imbalances_per_crit,
-    // };
+        eval_parts_loads_per_crit(partition.clone(), instance.c_weights.clone());
+    let curr_parts_imbalances_per_crit: [[isize; NB_PARTS]; NB_CRITERIA] =
+        eval_parts_imbalances_per_crit(curr_parts_loads_per_crit, parts_target_load);
+    let partition_metadata: PartitionMetadata<NB_CRITERIA> = PartitionMetadata {
+        parts_loads_per_crit: curr_parts_loads_per_crit,
+        parts_imbalances_per_crit: curr_parts_imbalances_per_crit,
+    };
+
+    // process_imbalance(curr_parts_imbalances_per_crit);
+    let (criteria_most_imbalanced, parts_source) = process_imbalance([[12, 0], [0, 12], [5, 5]]);
 
     // TargetorParameters
     let nb_intervals: [usize; NB_CRITERIA] = [NB_INTERVALS; NB_CRITERIA];
@@ -292,6 +613,47 @@ fn main() {
         println! {".... {:?}", val};
     }
 
+    let res = find_move(
+        tp,
+        instance.c_weights.clone(),
+        curr_parts_imbalances_per_crit,
+        boxes,
+        &partition,
+    );
+
+    // let res = find_move(
+    //     tp,
+    //     instance.c_weights.clone(),
+    //     curr_parts_imbalances_per_crit,
+    //     boxes.clone(),
+    // );
+
+    println!("RESULT {:?}", res);
+
+    // // let : usize = parts_imbalances_per_crit.iter().max().unwrap();
+    // let partition_imbalance: usize = curr_parts_imbalances_per_crit
+    //     .iter()
+    //     .map(|imbalances| *imbalances.iter().max().unwrap() as usize)
+    //     // .collect::<Vec<usize>>()
+    //     // .try_into()
+    //     // .unwrap()
+    //     // .iter()
+    //     .max()
+    //     .unwrap();
+    // println!("[IMBALANCE] {:?}", partition_imbalance);
+
+    // let part_source = parts_source[0];
+    // let origin = compute_box_indices(instance.c_weights.clone()[0], tp);
+    // // let partition_imbalance: usize = *max_imbalance_per_crit.iter().max().unwrap();
+    // filtered_boxed_moves(
+    //     &origin,
+    //     part_source,
+    //     partition_imbalance,
+    //     &boxes,
+    //     &partition,
+    //     curr_parts_imbalances_per_crit,
+    //     instance.c_weights.clone(),
+    // )
     // let map_2 = compute_boxes(instance, tp);
     // println!("~~~ {:?}", res);
     // for (criterion, (max, min)) in MAX_WEIGHTS.iter().zip(&MIN_WEIGHTS).enumerate() {
