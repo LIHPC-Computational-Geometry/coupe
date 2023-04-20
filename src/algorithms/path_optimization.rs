@@ -4,6 +4,7 @@ use itertools::{enumerate, Itertools};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use num_traits::{FromPrimitive, Signed};
+use std::collections::HashSet;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -111,10 +112,18 @@ where
 
     fn flip_flop<P>(&mut self, path: P)
     where
-        P: IntoIterator<Item = usize>,
+        P: IntoIterator<Item = VertexId>,
     {
-        path.into_iter().for_each(|v| {
-            self.part[v] = Self::flip_part(self.part[v]);
+        let cg_to_update = path
+            .into_iter()
+            .fold(HashSet::<VertexId>::new(), |mut acc, v| {
+                self.part[v] = Self::flip_part(self.part[v]);
+                acc.insert(v);
+                acc.extend(self.adjacency.neighbors(v).map(|(w, _)| w));
+                acc
+            });
+        cg_to_update.iter().for_each(|&v| {
+            self.cg[v] = self.compute_cg(v);
         });
     }
 }
@@ -198,31 +207,48 @@ where
         self.last_side = self.topo_part.part[v];
     }
 
+    fn find_best<I>(&self, side: usize, iter: I) -> Option<VertexId>
+    where
+        I: IntoIterator<Item = VertexId>,
+    {
+        iter.into_iter()
+            .filter(|&v| self.topo_part.part[v] == side)
+            .fold(
+                (None as Option<VertexId>, T::SignedType::zero()),
+                |(id_min, val_min), id| {
+                    if id_min.is_none() || self.topo_part.cg[id] <= val_min {
+                        (Some(id), self.topo_part.cg[id])
+                    } else {
+                        (id_min, val_min)
+                    }
+                },
+            )
+            .0
+    }
+
     /// Create an optimization path, beginning in side
     fn find_path(self, side: usize) -> Option<Self> {
-
-        let find_best = |side| {(0..self.topo_part.part.len())
-            .fold((None as Option<VertexId>, self.topo_part.cg[0]), |(id_min, val_min), id| {
-                if self.topo_part.part[id] != side {
-                    return (id_min, val_min);
-                }
-                if self.topo_part.cg[id] <= val_min {
-                    (Some(id), self.topo_part.cg[id])
-                } else {
-                    (id_min, val_min)
-                }
-            })
-            .0};
         // Choose v as the best vertex
-        let v = if let Some(v) = find_best(side) {
+        let v = if let Some(v) = self.find_best(side, 0..self.topo_part.part.len()) {
             v
-        }
-        else { return None};
+        } else {
+            return None;
+        };
         // Find w
-        let w= if let Some(w) = find_best(1 - side) {
+        let w = if let Some(w) = self.find_best(
+            1 - side,
+            (0..self.topo_part.part.len()).filter(|&candidate| {
+                !self
+                    .topo_part
+                    .adjacency
+                    .neighbors(v)
+                    .any(|(neighbor, _)| neighbor == candidate)
+            }),
+        ) {
             w
-        }
-        else { return None};
+        } else {
+            return None;
+        };
 
         let mut path = self;
         path.add_to_path((v, path.topo_part.cg[v]));
