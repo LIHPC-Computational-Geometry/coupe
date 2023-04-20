@@ -1,9 +1,9 @@
 use super::Error;
 use crate::topology::Topology;
-use itertools::Itertools;
-use num_traits::{FromPrimitive, Signed};
+use itertools::{enumerate, Itertools};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
+use num_traits::{FromPrimitive, Signed};
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -11,24 +11,33 @@ use std::ops::SubAssign;
 
 /// Trait alias for values accepted as weights by [PathOptimization].
 pub trait PathWeight:
-     Copy + std::fmt::Debug + Send + Sync+
-     Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero +
-     Sub<Output = Self> + AddAssign + SubAssign +
-     SignedNum
+    Copy
+    + std::fmt::Debug
+    + Send
+    + Sync
+    + Sum
+    + PartialOrd
+    + FromPrimitive
+    + ToPrimitive
+    + Zero
+    + Sub<Output = Self>
+    + AddAssign
+    + SubAssign
+    + SignedNum
 {
 }
 
 impl<T> PathWeight for T
-    where
-        Self: Copy + std::fmt::Debug + Send + Sync,
-        Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
-        Self: Sub<Output = Self> + AddAssign + SubAssign,
-        Self: SignedNum
+where
+    Self: Copy + std::fmt::Debug + Send + Sync,
+    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
+    Self: Sub<Output = Self> + AddAssign + SubAssign,
+    Self: SignedNum,
 {
 }
 
 pub trait SignedNum: Sized {
-    type SignedType:  Copy + PartialOrd + Zero + AddAssign ;
+    type SignedType: Copy + PartialOrd + Zero + AddAssign;
 
     fn to_signed(self) -> Self::SignedType;
 }
@@ -191,10 +200,29 @@ where
 
     /// Create an optimization path, beginning in side
     fn find_path(self, side: usize) -> Option<Self> {
+
+        let find_best = |side| {(0..self.topo_part.part.len())
+            .fold((None as Option<VertexId>, self.topo_part.cg[0]), |(id_min, val_min), id| {
+                if self.topo_part.part[id] != side {
+                    return (id_min, val_min);
+                }
+                if self.topo_part.cg[id] <= val_min {
+                    (Some(id), self.topo_part.cg[id])
+                } else {
+                    (id_min, val_min)
+                }
+            })
+            .0};
         // Choose v as the best vertex
-        let v: usize = 5;
+        let v = if let Some(v) = find_best(side) {
+            v
+        }
+        else { return None};
         // Find w
-        let w: usize = 1;
+        let w= if let Some(w) = find_best(1 - side) {
+            w
+        }
+        else { return None};
 
         let mut path = self;
         path.add_to_path((v, path.topo_part.cg[v]));
@@ -339,9 +367,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use sprs::CsMatI;
-    use crate::Point2D;
     use super::*;
+    use crate::Point2D;
+    use sprs::CsMatI;
 
     struct Instance {
         pub geometry: Vec<Point2D>,
@@ -351,8 +379,7 @@ mod tests {
     }
 
     impl Instance {
-        fn create_instance() -> Self
-        {
+        fn create_instance() -> Self {
             let mut out = Self {
                 geometry: Vec::with_capacity(8),
                 v_weights: vec![1.0; 8],
@@ -366,7 +393,7 @@ mod tests {
             // |  |  |  |
             // +--+--+--+
             // 0  0  1  1
-            out.geometry.extend( [
+            out.geometry.extend([
                 Point2D::new(0., 0.),
                 Point2D::new(1., 0.),
                 Point2D::new(2., 0.),
@@ -377,7 +404,7 @@ mod tests {
                 Point2D::new(3., 1.),
             ]);
             out.partition.extend([0, 0, 1, 1, 0, 1, 0, 1]);
-            
+
             out.topology.insert(0, 1, 1);
             out.topology.insert(1, 2, 1);
             out.topology.insert(2, 3, 1);
