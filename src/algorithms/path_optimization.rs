@@ -1,6 +1,5 @@
 use super::Error;
 use crate::topology::Topology;
-use itertools::{enumerate, Itertools};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use num_traits::{FromPrimitive, Signed};
@@ -399,7 +398,7 @@ where
         part_ids
             .iter_mut()
             .zip(tp.part)
-            .for_each(|(mut dst, src)| *dst = src);
+            .for_each(|(dst, src)| *dst = src);
 
         Ok(())
     }
@@ -409,7 +408,7 @@ where
 mod tests {
     use super::*;
     use crate::Point2D;
-    use sprs::CsMatI;
+    
 
     struct Instance {
         pub geometry: Vec<Point2D>,
