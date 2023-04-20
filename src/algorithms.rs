@@ -33,6 +33,7 @@ pub use kernighan_lin::KernighanLin;
 pub use kk::KarmarkarKarp;
 pub use kk::KkWeight;
 pub use multi_jagged::MultiJagged;
+pub use path_optimization::PathOptimization;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;

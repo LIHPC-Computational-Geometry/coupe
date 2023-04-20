@@ -59,6 +59,22 @@ impl SignedNum for usize {
     }
 }
 
+impl SignedNum for i64 {
+    type SignedType = i64;
+
+    fn to_signed(self) -> Self::SignedType {
+        self
+    }
+}
+
+impl SignedNum for f64 {
+    type SignedType = f64;
+
+    fn to_signed(self) -> Self::SignedType {
+        self
+    }
+}
+
 type VertexId = usize;
 type EdgeId = usize;
 type PartId = usize;
@@ -211,6 +227,7 @@ where
     where
         I: IntoIterator<Item = VertexId>,
     {
+        // Should use priority queue
         iter.into_iter()
             .filter(|&v| self.topo_part.part[v] == side)
             .fold(
@@ -337,24 +354,7 @@ where
 /// https://doi.org/10.1016/S0166-218X(98)00084-5.
 ///
 #[derive(Debug, Clone, Copy, Default)]
-pub struct PathOptimization {
-    /// If `Some(max)` then the algorithm will not do more than `max` passes.
-    /// If `None` then it will stop on the first non-fruitful pass.
-    pub max_passes: Option<usize>,
-
-    /// If `Some(max)` then the algorithm will not do more than `max` moves per
-    /// pass.  If `None` then passes will stop when no more vertices yield a
-    /// positive gain, and no more bad moves can be made.
-    pub max_moves_per_pass: Option<usize>,
-
-    /// If `Some(max)` then the algorithm will not move vertices in ways that
-    /// the imbalance goes over `max`.  If `None`, then it will default to the
-    /// imbalance of the input partition.
-    pub max_imbalance: Option<f64>,
-
-    /// How many moves that yield negative gains can be made before a pass ends.
-    pub max_bad_move_in_a_row: usize,
-}
+pub struct PathOptimization {}
 
 impl<'a, T, W> crate::Partition<(T, &'a [W])> for PathOptimization
 where
@@ -387,6 +387,20 @@ where
         if 1 < *part_ids.iter().max().unwrap_or(&0) {
             return Err(Error::BiPartitioningOnly);
         }
+
+        let mut tp = TopologicalPart::new(&adjacency, part_ids);
+
+        let mut side = 0;
+        while let Some(p) = Path::new(&tp).find_path(side) {
+            tp.flip_flop(p.path);
+            side = 1 - side;
+        }
+
+        part_ids
+            .iter_mut()
+            .zip(tp.part)
+            .for_each(|(mut dst, src)| *dst = src);
+
         Ok(())
     }
 }

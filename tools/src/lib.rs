@@ -364,6 +364,34 @@ impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
     }
 }
 
+impl<const D: usize> ToRunner<D> for coupe::PathOptimization {
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+        let adjacency = {
+            let shape = problem.adjacency().shape();
+            let (indptr, indices, f64_data) = problem.adjacency().into_raw_storage();
+            let i64_data = f64_data.iter().map(|f| *f as i64).collect();
+            CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
+        };
+        match &problem.weights {
+            Integers(is) => {
+                let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
+                })
+            }
+            Floats(fs) => {
+                let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
+                Box::new(move |partition| {
+                    let metadata = self.partition(partition, (adjacency.view(), &weights))?;
+                    Ok(Some(Box::new(metadata)))
+                })
+            }
+        }
+    }
+}
+
 pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>>>
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
@@ -427,6 +455,7 @@ where
             order: optional(parse(args.next()), 12)?,
         }),
         "kmeans" => Box::<coupe::KMeans>::default(),
+        "path" => Box::<coupe::PathOptimization>::default(),
         "arcswap" => {
             let max_imbalance = parse(args.next()).transpose()?;
             Box::new(coupe::ArcSwap { max_imbalance })
