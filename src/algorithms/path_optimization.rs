@@ -408,11 +408,24 @@ mod tests {
     use super::*;
     use crate::Point2D;
 
+    struct Topo<T>(sprs::CsMat::<T>) where T: PathWeight;
+
     struct Instance {
         pub geometry: Vec<Point2D>,
         pub v_weights: Vec<f64>,
-        pub topology: sprs::CsMat<usize>,
+        pub topology: Topo<usize>,
         pub partition: Vec<usize>,
+    }
+
+    impl<T> Topo<T> where T: PathWeight {
+        fn new() -> Self {
+            Self(sprs::CsMat::empty(sprs::CSR, 0))
+        }
+
+        fn add_edge(&mut self, u: VertexId, v: VertexId, weight: T) {
+            self.0.insert(u, v, weight);
+            self.0.insert(v, u, weight);
+        }
     }
 
     impl Instance {
@@ -421,7 +434,7 @@ mod tests {
                 geometry: Vec::with_capacity(8),
                 v_weights: vec![1.0; 8],
                 partition: Vec::with_capacity(8),
-                topology: sprs::CsMat::empty(sprs::CSR, 0),
+                topology: Topo::new(),
             };
 
             //    swap
@@ -442,28 +455,16 @@ mod tests {
             ]);
             out.partition.extend([0, 0, 1, 1, 0, 1, 0, 1]);
 
-            out.topology.insert(0, 1, 1);
-            out.topology.insert(1, 2, 1);
-            out.topology.insert(2, 3, 1);
-            out.topology.insert(4, 5, 1);
-            out.topology.insert(5, 6, 1);
-            out.topology.insert(6, 7, 1);
-            out.topology.insert(0, 4, 1);
-            out.topology.insert(1, 5, 1);
-            out.topology.insert(2, 6, 1);
-            out.topology.insert(3, 7, 1);
-
-            // symmetry
-            out.topology.insert(1, 0, 1);
-            out.topology.insert(2, 1, 1);
-            out.topology.insert(3, 2, 1);
-            out.topology.insert(5, 4, 1);
-            out.topology.insert(6, 5, 1);
-            out.topology.insert(7, 6, 1);
-            out.topology.insert(4, 0, 1);
-            out.topology.insert(5, 1, 1);
-            out.topology.insert(6, 2, 1);
-            out.topology.insert(7, 3, 1);
+            out.topology.add_edge(0, 1, 1);
+            out.topology.add_edge(1, 2, 1);
+            out.topology.add_edge(2, 3, 1);
+            out.topology.add_edge(4, 5, 1);
+            out.topology.add_edge(5, 6, 1);
+            out.topology.add_edge(6, 7, 1);
+            out.topology.add_edge(0, 4, 1);
+            out.topology.add_edge(1, 5, 1);
+            out.topology.add_edge(2, 6, 1);
+            out.topology.add_edge(3, 7, 1);
 
             out
         }
@@ -472,7 +473,7 @@ mod tests {
     fn check_cg() {
         let instance = Instance::create_instance();
 
-        let topo = instance.topology.view();
+        let topo = instance.topology.0.view();
         let mut tp = TopologicalPart::new(&topo, instance.partition.as_slice());
         println!("CG = {:?}", tp.cg);
 
