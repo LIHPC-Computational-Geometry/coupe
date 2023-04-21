@@ -1,8 +1,11 @@
 use super::Error;
+use crate::imbalance;
 use crate::topology::Topology;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use num_traits::{FromPrimitive, Signed};
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use std::collections::HashSet;
 use std::iter::Sum;
 use std::ops::AddAssign;
@@ -73,30 +76,36 @@ type EdgeId = usize;
 type PartId = usize;
 
 #[derive(Debug)]
-struct TopologicalPart<'a, Adj, T>
+struct TopologicalPart<'a, Adj, T, W>
 where
     T: PathWeight,
     <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
+    W: PathWeight,
 {
     part: Vec<PartId>,
     pub cg: Vec<T::SignedType>,
     adjacency: &'a Adj,
+    part_loads: Vec<W>,
+weights: &'a [W],
 }
 
-impl<'a, Adj, T> TopologicalPart<'a, Adj, T>
+impl<'a, Adj, T, W> TopologicalPart<'a, Adj, T, W>
 where
     T: PathWeight,
     <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
+    W: PathWeight,
 {
-    fn new(topo: &'a Adj, part: &[PartId]) -> Self {
+    fn new(topo: &'a Adj, weights: &'a [W], part: &[PartId]) -> Self {
         let cg = Vec::with_capacity(part.len());
 
         let mut out = Self {
             cg,
             part: Vec::from(part),
             adjacency: topo,
+            part_loads: imbalance::compute_parts_load(part, 2, weights.par_iter().cloned()),
+            weights,
         };
 
         (0..part.len()).for_each(|v| out.cg.push(out.compute_cg(v)));
@@ -138,23 +147,27 @@ where
 }
 
 #[derive(Debug)]
-struct Path<'a, Adj, T>
+struct Path<'a, Adj, T, W>
 where
     T: PathWeight,
     <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
+    W: PathWeight,
 {
     path: Vec<VertexId>,
     last_side: PartId,
     cost: T::SignedType,
-    topo_part: &'a TopologicalPart<'a, Adj, T>,
+    topo_part: &'a TopologicalPart<'a, Adj, T, W>,
+    target_load: W,
+    part_loads: [W; 2],
 }
 
-impl<'a, Adj, T> Path<'a, Adj, T>
+impl<'a, Adj, T, W> Path<'a, Adj, T, W>
 where
     T: PathWeight,
     <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     Adj: Topology<T> + Sync,
+    W: PathWeight,
 {
     /// Compute whether a vertex v is suitable to extend P
     /// Not for hypergraph yet.
@@ -201,12 +214,18 @@ where
     }
 
     /// Create an empty path
-    fn new(topo_part: &'a TopologicalPart<'a, Adj, T>) -> Self {
+    fn new(topo_part: &'a TopologicalPart<'a, Adj, T, W>) -> Self {
+        let part_loads = [topo_part.part_loads[0], topo_part.part_loads[1]];
+        let target_load =
+            W::from_f64(((part_loads[0] + part_loads[1]).to_f64().unwrap() * 0.005).ceil())
+                .unwrap();
         Self {
             path: Vec::new(),
             last_side: 0,
             cost: T::SignedType::zero(),
             topo_part,
+            target_load,
+            part_loads,
         }
     }
 
@@ -215,7 +234,6 @@ where
         self.cost += cost;
         self.last_side = self.topo_part.part[v];
     }
-
 
     /// Find best candidate to be swapped, from candidates `iter`
     /// TODO: check imbalance
@@ -385,7 +403,7 @@ where
             return Err(Error::BiPartitioningOnly);
         }
 
-        let mut tp = TopologicalPart::new(&adjacency, part_ids);
+        let mut tp = TopologicalPart::new(&adjacency, weights, part_ids);
 
         let mut side = 0;
         while let Some(p) = Path::new(&tp).find_path(side) {
@@ -408,7 +426,9 @@ mod tests {
     use super::*;
     use crate::Point2D;
 
-    struct Topo<T>(sprs::CsMat::<T>) where T: PathWeight;
+    struct Topo<T>(sprs::CsMat<T>)
+    where
+        T: PathWeight;
 
     struct Instance {
         pub geometry: Vec<Point2D>,
@@ -417,7 +437,10 @@ mod tests {
         pub partition: Vec<usize>,
     }
 
-    impl<T> Topo<T> where T: PathWeight {
+    impl<T> Topo<T>
+    where
+        T: PathWeight,
+    {
         fn new() -> Self {
             Self(sprs::CsMat::empty(sprs::CSR, 0))
         }
@@ -474,7 +497,11 @@ mod tests {
         let instance = Instance::create_instance();
 
         let topo = instance.topology.0.view();
-        let mut tp = TopologicalPart::new(&topo, instance.partition.as_slice());
+        let mut tp = TopologicalPart::new(
+            &topo,
+            instance.v_weights.as_slice(),
+            instance.partition.as_slice(),
+        );
         println!("CG = {:?}", tp.cg);
 
         let mut side = 0;
