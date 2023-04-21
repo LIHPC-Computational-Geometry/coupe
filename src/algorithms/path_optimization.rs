@@ -41,38 +41,32 @@ pub trait SignedNum: Sized {
 
     fn to_signed(self) -> Self::SignedType;
 }
-//
-// impl<T: Signed + Copy + PartialOrd + Zero + AddAssign > SignedNum for T {
-//     type SignedType = T;
-//
-//     fn to_signed(self) -> T {
-//         self
-//     }
-// }
 
-impl SignedNum for usize {
-    type SignedType = i64;
+macro_rules! impl_signednum_signed {
+    ( $($t:ty),* ) => {
+    $( impl SignedNum for $t
+    {
+        type SignedType = Self;
 
-    fn to_signed(self) -> Self::SignedType {
-        self.try_into().unwrap()
+        fn to_signed(self) -> Self { self }
+    }) *
     }
 }
 
-impl SignedNum for i64 {
-    type SignedType = i64;
+impl_signednum_signed! {i8, i16, i32, i64, i128, f32, f64}
 
-    fn to_signed(self) -> Self::SignedType {
-        self
+macro_rules! impl_signednum_unsigned {
+    ( $(($t:ty, $s:ty)),* ) => {
+    $( impl SignedNum for $t
+    {
+        type SignedType = $s;
+
+        fn to_signed(self) -> Self::SignedType { self.try_into().unwrap() }
+    }) *
     }
 }
 
-impl SignedNum for f64 {
-    type SignedType = f64;
-
-    fn to_signed(self) -> Self::SignedType {
-        self
-    }
-}
+impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128), (usize, i64)}
 
 type VertexId = usize;
 type EdgeId = usize;
@@ -222,6 +216,9 @@ where
         self.last_side = self.topo_part.part[v];
     }
 
+
+    /// Find best candidate to be swapped, from candidates `iter`
+    /// TODO: check imbalance
     fn find_best<I>(&self, side: usize, iter: I) -> Option<VertexId>
     where
         I: IntoIterator<Item = VertexId>,
@@ -242,7 +239,8 @@ where
             .0
     }
 
-    /// Create an optimization path, beginning in side
+    /// Create an optimization path, beginning in `side`
+    /// TODO: try more candidates at beginning
     fn find_path(self, side: usize) -> Option<Self> {
         // Choose v as the best vertex
         let v = if let Some(v) = self.find_best(side, 0..self.topo_part.part.len()) {
@@ -391,6 +389,7 @@ where
 
         let mut side = 0;
         while let Some(p) = Path::new(&tp).find_path(side) {
+            eprintln!("found path: {:?}", p.path);
             tp.flip_flop(p.path);
             side = 1 - side;
         }
@@ -408,7 +407,6 @@ where
 mod tests {
     use super::*;
     use crate::Point2D;
-    
 
     struct Instance {
         pub geometry: Vec<Point2D>,
