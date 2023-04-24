@@ -69,7 +69,7 @@ macro_rules! impl_signednum_unsigned {
     }
 }
 
-impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128), (usize, i64)}
+impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128), (usize, isize)}
 
 type VertexId = usize;
 type EdgeId = usize;
@@ -87,7 +87,7 @@ where
     pub cg: Vec<T::SignedType>,
     adjacency: &'a Adj,
     part_loads: Vec<W>,
-weights: &'a [W],
+    weights: &'a [W],
 }
 
 impl<'a, Adj, T, W> TopologicalPart<'a, Adj, T, W>
