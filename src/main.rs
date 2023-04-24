@@ -305,7 +305,7 @@ fn generate_indices(
         .multi_cartesian_product()
         .filter(move |indices| indices.iter().map(|i| i.abs() as usize).sum::<usize>() == dist)
         .map(move |indices| {
-            let mut add = [0; NB_CRITERIA];
+            let mut add: [isize; NB_CRITERIA] = [0; NB_CRITERIA];
             for ((addref, aval), bval) in add.iter_mut().zip(indices).zip(origin) {
                 *addref = aval + bval as isize;
             }
@@ -503,7 +503,7 @@ fn find_move(
     );
 
     if boxes.contains_key(&target_box_index) {
-        let box_content = boxes.get(&target_box_index).unwrap();
+        let box_content = boxes.get(&target_box_index as &[usize; 3]).unwrap();
         let candidate_moves = compute_candidate_moves(
             // &target_box_index,
             part_source,
@@ -511,7 +511,7 @@ fn find_move(
             box_content,
             partition,
             parts_imbalances_per_crit,
-            c_weights,
+            c_weights.clone(),
         );
         if !candidate_moves.is_empty() {
             return Some(candidate_moves[0]);
@@ -519,14 +519,52 @@ fn find_move(
         // return candidate_moves.next();
     }
 
-    let mut dist = 1;
+    let mut dist: usize = 1;
     loop {
         let iter_indices = generate_indices(target_box_index, dist, parameters);
+        for box_index in iter_indices {
+            if boxes.contains_key(&box_index) {
+                let box_content = boxes.get(&box_index).unwrap();
+                let candidate_moves = compute_candidate_moves(
+                    // &target_box_index,
+                    part_source,
+                    partition_imbalance,
+                    box_content,
+                    partition,
+                    parts_imbalances_per_crit,
+                    c_weights.clone(),
+                );
+                if !candidate_moves.is_empty() {
+                    return Some(candidate_moves[0]);
+                }
+                // return candidate_moves.next();
+            }
+        }
 
-        // generate_indices(target_box_index, offset)
+        dist += 1;
+        let bound_indices = compute_box_indices([partition_imbalance; NB_CRITERIA], parameters);
+        let increase_offset = (0..NB_CRITERIA).any(|criterion| {
+            target_box_index[criterion] >= dist
+                || target_box_index[criterion] + dist <= bound_indices[criterion]
+        });
+        if !increase_offset {
+            return None;
+        }
+        // bound_indices = self.__box_indices([partition_imbalance] * NB_CRITERIA)
+        // increase_offset = any(
+        //     map(
+        //         lambda criterion: target_box_index[criterion] - offset >= 0
+        //         or target_box_index[criterion] + offset
+        //         <= bound_indices[criterion],
+        //         range(NB_CRITERIA),
+        //     )
+        // )
+        // if not increase_offset:
+        //     print("move not found with offset", offset)
+        //     break
     }
 
-    return None;
+    // return None;
 
     // return Some(target_gain);
     // target_gain.iter().enumerate().map(

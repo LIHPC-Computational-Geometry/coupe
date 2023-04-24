@@ -1,0 +1,48 @@
+const NB_PARTS: usize = 2;
+const NB_CRITERIA: usize = 3;
+const NB_WEIGHTS: usize = 5;
+
+type CWeight = [usize; NB_CRITERIA];
+
+fn eval_partition_metadata(
+    partition: [usize; NB_WEIGHTS],
+    c_weights: [CWeight; NB_WEIGHTS],
+    parts_target_load: [[usize; NB_PARTS]; NB_CRITERIA],
+) -> [[usize; NB_PARTS]; NB_CRITERIA] {
+    let mut res = [[0; NB_PARTS]; NB_CRITERIA];
+
+    for (part, c_weight) in partition.iter().zip(c_weights) {
+        for (criterion, weight) in c_weight.iter().enumerate() {
+            res[criterion][*part] += *weight
+        }
+    }
+
+    res
+}
+
+fn eval_partition_metadata_2(
+    partition: [usize; NB_WEIGHTS],
+    c_weights: [CWeight; NB_WEIGHTS],
+    parts_target_load: [[usize; NB_PARTS]; NB_CRITERIA],
+) -> [[usize; NB_PARTS]; NB_CRITERIA] {
+    let mut res = [[0; NB_PARTS]; NB_CRITERIA];
+
+    partition.iter().zip(c_weights).map(|(part, c_weight)| {
+        c_weight
+            .iter()
+            .enumerate()
+            .map(|(criterion, weight)| res[criterion][*part] += *weight)
+    });
+
+    res
+}
+
+fn main() {
+    let mut partition = [0; NB_WEIGHTS];
+    let c_weights = [[1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4], [5, 5, 5]];
+    let parts_target_load = [[7, 8], [7, 8], [7, 8]];
+    let res = eval_partition_metadata(partition, c_weights, parts_target_load);
+    println!("{:?}", res);
+    let res_2 = eval_partition_metadata_2(partition, c_weights, parts_target_load);
+    println!("{:?}", res_2);
+}
