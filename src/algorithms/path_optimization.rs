@@ -87,7 +87,7 @@ where
     pub cg: Vec<T::SignedType>,
     adjacency: &'a Adj,
     part_loads: Vec<W>,
-weights: &'a [W],
+    weights: &'a [W],
 }
 
 impl<'a, Adj, T, W> TopologicalPart<'a, Adj, T, W>

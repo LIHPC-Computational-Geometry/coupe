@@ -12,6 +12,7 @@ mod kk;
 mod multi_jagged;
 mod path_optimization;
 mod recursive_bisection;
+mod targetor;
 mod vn;
 mod z_curve;
 
@@ -37,6 +38,7 @@ pub use path_optimization::PathOptimization;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;
+pub use targetor::Targetor;
 pub use vn::VnBest;
 pub use vn::VnBestWeight;
 pub use vn::VnFirst;
