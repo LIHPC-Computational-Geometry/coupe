@@ -1,43 +1,12 @@
-// use coupe::imbalance;
-// use coupe::Topology;
-use num_traits::Float;
-use rand::distributions::Distribution;
-// use rand::distributions::Uniform;
-use rand::thread_rng;
-use rand::SeedableRng as _;
-use std::cmp;
-use std::collections::HashMap;
-use std::iter::Chain;
-// use rand_distr::Distribution as _;
-// use array_init;
-use itertools::iproduct;
 use itertools::Itertools;
-use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
-use itertools::MultiProduct;
-use itertools::Product;
 use num_traits::ToPrimitive;
-use num_traits::Unsigned;
 use num_traits::Zero;
 use num_traits::{FromPrimitive, Signed};
-use rand::{distributions::Uniform, Rng};
-use std::cmp::max;
-use std::iter::Filter;
-use std::iter::Map; // 0.6.5
+use std::cmp;
+use std::collections::HashMap;
 use std::iter::Sum;
 use std::ops::AddAssign;
 use std::ops::Sub;
-use std::ops::SubAssign;
-
-const NB_PARTS: usize = 2;
-const NB_CRITERIA: usize = 3;
-// const NB_WEIGHTS: usize = 100;
-// const MIN_WEIGHT: usize = 1;
-// const MIN_WEIGHTS: [usize; NB_CRITERIA] = [MIN_WEIGHT; NB_CRITERIA];
-// const MAX_WEIGHT: usize = 1000;
-// const MAX_WEIGHTS: [usize; NB_CRITERIA] = [MAX_WEIGHT; NB_CRITERIA];
-// const NB_INTERVALS: usize = 10;
-
-// TODO : See CKK
 
 /// Trait alias for values accepted as weights by [PathOptimization].
 pub trait Weight:
@@ -102,20 +71,30 @@ impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128),
 type CWeightId = usize;
 type PartId = usize;
 // type BoxIndices = [usize; NB_CRITERIA];
-type BoxIndices = Vec<usize>;
+// type BoxIndices = Vec<usize>;
 pub struct Targetor {}
+
+type BoxIndices = Vec<usize>;
 
 trait SearchStrat {
     fn new(nb_intervals: Vec<usize>) -> Self;
-    // fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> Box<dyn Iterator<Item = Vec<usize>>>;
-    fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> Box<dyn Iterator<Item = Vec<usize>>>;
-    // fn gen_indices(&'a self, origin: Vec<usize>, dist: usize) -> Self::ItemIterator;
-    // fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> Box<dyn Iterator<Item = &isize>>;
-    // found struct `std::iter::Map<std::iter::Filter<MultiProduct<std::ops::Range<isize>>, [closure@src/algorithms/targetor.rs:154:21: 154:35]>, [closure@src/algorithms/targetor.rs:155:18: 155:32]>`rustcClick for full compiler diagnostic
+    fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> IterBoxIndices;
 }
 
 struct NeighborSearchStrat {
     nb_intervals: Vec<usize>,
+}
+
+struct IterBoxIndices {
+    iter: Box<dyn Iterator<Item = BoxIndices>>,
+}
+
+impl Iterator for IterBoxIndices {
+    type Item = BoxIndices;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 impl SearchStrat for NeighborSearchStrat {
@@ -127,20 +106,7 @@ impl SearchStrat for NeighborSearchStrat {
         out
     }
 
-    fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> Box<dyn Iterator<Item = Vec<usize>>> {
-        // fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> Box<dyn Iterator<Item = &isize>> {
-        //     self.coordinates
-        //         .chunks_exact(self.dimension)
-        //         .zip(self.node_refs.iter().cloned())
-        // }
-        // fn gen_indices(&self, origin: Vec<usize>, dist: usize) -> () {
-        // where
-        //     T: Iterator<Item = Vec<isize>>,
-
-        // fn gen_indices<T>(&self, origin: Vec<usize>, dist: usize) -> T
-        // where
-        //     T: Iterator<Item = Vec<isize>>,
-        // {
+    fn gen_indices(&self, origin: BoxIndices, dist: usize) -> IterBoxIndices {
         let nb_criteria = origin.len();
         let mut left_bounds = vec![0; nb_criteria];
         let mut right_bounds = vec![0; nb_criteria];
@@ -156,32 +122,21 @@ impl SearchStrat for NeighborSearchStrat {
             rngs.push(rng);
         }
 
-        let indices_generator = Box::new(
-            rngs.into_iter()
-                .multi_cartesian_product()
-                .filter(move |indices| {
-                    indices.iter().map(|i| i.abs() as usize).sum::<usize>() == dist
-                })
-                .map(move |indices| {
-                    let mut box_indices = Vec::with_capacity(nb_criteria);
-                    (0..nb_criteria).for_each(|criterion| {
-                        box_indices.push((indices[criterion] + origin[criterion] as isize) as usize)
-                    });
-                    box_indices
-                }),
-        );
+        let indices_generator = rngs
+            .into_iter()
+            .multi_cartesian_product()
+            .filter(move |indices| indices.iter().map(|i| i.abs() as usize).sum::<usize>() == dist)
+            .map(move |indices| {
+                let mut box_indices = Vec::with_capacity(nb_criteria);
+                (0..nb_criteria).for_each(|criterion| {
+                    box_indices.push((indices[criterion] + origin[criterion] as isize) as usize)
+                });
+                BoxIndices::from(box_indices)
+            });
 
-        // let mut out = Vec::with_capacity(nb_criteria);
-        // (0..nb_criteria).for_each(|criterion| {
-        //     out.push(
-        //         (max_weights[criterion] - min_weights[criterion])
-        //             .to_f64()
-        //             .unwrap()
-        //             / nb_intervals[criterion] as f64,
-        //     );
-        // });
-
-        Box::new(indices_generator)
+        IterBoxIndices {
+            iter: Box::new(indices_generator.into_iter()),
+        }
     }
 }
 
