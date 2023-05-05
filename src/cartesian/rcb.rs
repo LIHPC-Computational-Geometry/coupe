@@ -1,5 +1,13 @@
 use super::Grid;
 use super::SubGrid;
+use arrayfire::seq;
+use arrayfire::view;
+use arrayfire::Array;
+use arrayfire::BinaryOp;
+use arrayfire::ConstGenerator;
+use arrayfire::Dim4;
+use arrayfire::Fromf64;
+use arrayfire::HasAfEnum;
 use num_traits::AsPrimitive;
 use num_traits::Num;
 use rayon::iter::IndexedParallelIterator;
@@ -98,10 +106,46 @@ where
     }
 }
 
+fn weighted_median_gpu<W>(weights: &Array<W>, total_weight: W) -> WeightedMedian<W>
+where
+    W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
+    f64: AsPrimitive<W>,
+    W: HasAfEnum<AggregateOutType = W, BaseType = W> + ConstGenerator<OutType = W> + Fromf64,
+{
+    let ideal_part_weight: W = (total_weight.as_() / 2.0).as_();
+    let prefix_sum = arrayfire::scan(weights, 0, BinaryOp::ADD, false);
+    let greaters = arrayfire::gt(
+        &prefix_sum,
+        &arrayfire::constant(ideal_part_weight, prefix_sum.dims()),
+        false,
+    );
+    // TODO get best index
+    let locations = arrayfire::locate(&greaters);
+    let position;
+    let left_weight;
+    if locations.dims()[0] > 0 {
+        // TODO find how to index arrays...
+        let p = view!(locations[0:0:1]);
+        (position, _) = arrayfire::sum_all(&p);
+        assert!((position as u64) < weights.dims()[0]);
+        let s = seq!(0, position as i32, 1);
+        (left_weight, _) = arrayfire::sum_all(&view!(weights[s]));
+    } else {
+        position = weights.dims()[0] as u32 - 1;
+        assert!((position as u64) < weights.dims()[0]);
+        left_weight = total_weight; // TODO
+    }
+
+    WeightedMedian {
+        position: position as usize,
+        left_weight,
+    }
+}
+
 pub(super) fn recurse_2d<W>(
     grid: Grid<2>,
     subgrid: SubGrid<2>,
-    weights: &[W],
+    weights: &Array<W>,
     total_weight: W,
     iter_count: usize,
     coord: usize,
@@ -109,65 +153,48 @@ pub(super) fn recurse_2d<W>(
 where
     W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
     f64: AsPrimitive<W>,
+    W: HasAfEnum<AggregateOutType = W, BaseType = W> + ConstGenerator<OutType = W> + Fromf64,
 {
-    if subgrid.size[coord] == 0 || iter_count == 0 {
+    if subgrid.size.contains(&0) || iter_count == 0 {
         return IterationResult::Whole;
     }
 
-    let axis_weights: Vec<W> = if coord == 0 {
-        subgrid
-            .axis(0)
-            .into_par_iter()
-            .map(|x| {
-                let s: W = subgrid
-                    .axis(1)
-                    .map(|y| weights[grid.index_of([x, y])])
-                    .sum();
-                s
-            })
-            .collect()
-    } else {
-        subgrid
-            .axis(1)
-            .into_par_iter()
-            .map(|y| {
-                let s: W = subgrid
-                    .axis(0)
-                    .map(|x| weights[grid.index_of([x, y])])
-                    .sum();
-                s
-            })
-            .collect()
-    };
+    let sub_x = seq!(
+        subgrid.offset[0] as i32,
+        (subgrid.offset[0] + subgrid.size[0]) as i32 - 1,
+        1
+    );
+    let sub_y = seq!(
+        subgrid.offset[1] as i32,
+        (subgrid.offset[1] + subgrid.size[1]) as i32 - 1,
+        1
+    );
+    let sub_weights = view!(weights[sub_x, sub_y]);
+    let axis_weights = arrayfire::sum(&sub_weights, 1 - coord as i32);
+    let axis_weights = arrayfire::flat(&axis_weights);
 
-    let split = weighted_median(&axis_weights, total_weight);
+    let split = weighted_median_gpu(&axis_weights, total_weight);
 
     let split_position = split.position + subgrid.offset[coord];
     let left_weight = split.left_weight;
     let right_weight = total_weight - left_weight;
 
     let (left_grid, right_grid) = subgrid.split_at(coord, split_position);
-    let (left, right) = rayon::join(
-        || {
-            recurse_2d(
-                grid,
-                left_grid,
-                weights,
-                left_weight,
-                iter_count - 1,
-                (coord + 1) % 2,
-            )
-        },
-        || {
-            recurse_2d(
-                grid,
-                right_grid,
-                weights,
-                right_weight,
-                iter_count - 1,
-                (coord + 1) % 2,
-            )
-        },
+    let left = recurse_2d(
+        grid,
+        left_grid,
+        &weights,
+        left_weight,
+        iter_count - 1,
+        (coord + 1) % 2,
+    );
+    let right = recurse_2d(
+        grid,
+        right_grid,
+        &weights,
+        right_weight,
+        iter_count - 1,
+        (coord + 1) % 2,
     );
 
     IterationResult::Split {

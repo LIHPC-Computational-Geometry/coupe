@@ -1,4 +1,8 @@
 fn main() {
+    rayon::ThreadPoolBuilder::new()
+        .start_handler(|_| arrayfire::set_device(0))
+        .build_global()
+        .unwrap();
     let x = std::env::args().nth(1).unwrap().parse().unwrap();
     let y = std::env::args().nth(2).unwrap().parse().unwrap();
     let iter = std::env::args()
@@ -11,6 +15,10 @@ fn main() {
     let n = usize::from(x) * usize::from(y);
     let weights: Vec<f64> = (0..n).map(|i| i as f64).collect();
     let mut partition = vec![0; n];
+
+    eprintln!("warming up...");
+    grid.rcb(&mut partition, &weights, iter);
+    eprintln!("actual run...");
 
     let domain = ittapi::Domain::new("MyIncredibleDomain");
     let before = std::time::Instant::now();
