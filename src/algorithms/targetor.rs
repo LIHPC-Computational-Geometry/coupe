@@ -1,98 +1,98 @@
 use itertools::Itertools;
 use num_traits::ToPrimitive;
-use num_traits::Zero;
-use num_traits::{FromPrimitive, Signed};
+use num_traits::{FromPrimitive, PrimInt, Signed, Zero};
 use std::cmp;
 use std::collections::HashMap;
 use std::iter::Sum;
 use std::ops::AddAssign;
-use std::ops::Sub;
+use std::ops::{Add, Div, Mul, Sub, SubAssign};
 
-/// Trait alias for values accepted as weights by [PathOptimization].
-pub trait Weight:
-    Copy
-    + std::fmt::Debug
-    + Send
-    + Sync
-    + Sum
-    + FromPrimitive
-    + ToPrimitive
-    + Zero
-    + Sub<Output = Self>
-    + PartialOrd
-    // + AddAssign
-    // + SubAssign
-    + SignedNum
-{
-}
+// /// Trait alias for values accepted as weights by [PathOptimization].
+// pub trait Weight:
+//     Copy
+//     + std::fmt::Debug
+//     + Send
+//     + Sync
+//     + Sum
+//     + FromPrimitive
+//     + ToPrimitive
+//     + Zero
+//     + Sub<Output = Self>
+//     + PartialOrd
+//     // + AddAssign
+//     // + SubAssign
+//     + SignedNum
+// {
+// }
 
-impl<T> Weight for T
-where
-    Self: Copy + std::fmt::Debug + Send + Sync,
-    Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
-    Self: Sub<Output = Self>,
-    // + AddAssign + SubAssign,
-    Self: SignedNum,
-{
-}
+// impl<T> Weight for T
+// where
+//     Self: Copy + std::fmt::Debug + Send + Sync,
+//     Self: Sum + PartialOrd + FromPrimitive + ToPrimitive + Zero,
+//     Self: Sub<Output = Self>,
+//     // + AddAssign + SubAssign,
+//     Self: SignedNum,
+// {
+// }
 
-pub trait SignedNum: Sized {
-    type SignedType: Copy + PartialOrd + Zero + AddAssign;
+// pub trait SignedNum: Sized {
+//     type SignedType: Copy + PartialOrd + Zero + AddAssign;
 
-    fn to_signed(self) -> Self::SignedType;
-}
+//     fn to_signed(self) -> Self::SignedType;
+// }
 
-macro_rules! impl_signednum_signed {
-    ( $($t:ty),* ) => {
-    $( impl SignedNum for $t
-    {
-        type SignedType = Self;
+// macro_rules! impl_signednum_signed {
+//     ( $($t:ty),* ) => {
+//     $( impl SignedNum for $t
+//     {
+//         type SignedType = Self;
 
-        fn to_signed(self) -> Self { self }
-    }) *
-    }
-}
-
-impl_signednum_signed! {i8, i16, i32, i64, i128, f32, f64}
-
-macro_rules! impl_signednum_unsigned {
-    ( $(($t:ty, $s:ty)),* ) => {
-    $( impl SignedNum for $t
-    {
-        type SignedType = $s;
-
-        fn to_signed(self) -> Self::SignedType { self.try_into().unwrap() }
-    }) *
-    }
-}
-
-impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128), (usize, isize)}
-
-type CWeightId = usize;
-type PartId = usize;
-pub struct Targetor {}
-
-struct BoxIndices<T>(Vec<T>);
-
-struct IterBoxIndices<T> {
-    inner: Box<dyn Iterator<Item = BoxIndices<T>>>,
-}
-impl<T> Iterator for IterBoxIndices<T> {
-    type Item = BoxIndices<T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-}
-// impl<T> BoxIndices<T> {
-//     fn iter(&self) -> IterBoxIndices<T> {
-//         IterBoxIndices { inner: self }
+//         fn to_signed(self) -> Self { self }
+//     }) *
 //     }
 // }
 
-struct NeighborSearchStrat<T> {
-    nb_intervals: Vec<T>,
-}
+// impl_signednum_signed! {i8, i16, i32, i64, i128, f32, f64}
+
+// macro_rules! impl_signednum_unsigned {
+//     ( $(($t:ty, $s:ty)),* ) => {
+//     $( impl SignedNum for $t
+//     {
+//         type SignedType = $s;
+
+//         fn to_signed(self) -> Self::SignedType { self.try_into().unwrap() }
+//     }) *
+//     }
+// }
+
+// impl_signednum_unsigned! {(u8,i8), (u16,i16), (u32,i32), (u64,i64), (u128,i128), (usize, isize)}
+
+// type CWeightId = usize;
+// type PartId = usize;
+// pub struct Targetor {}
+
+// struct BoxIndices<T>(Vec<T>);
+
+// struct IterBoxIndices<T> {
+//     inner: Box<dyn Iterator<Item = BoxIndices<T>>>,
+// }
+// impl<T> Iterator for IterBoxIndices<T> {
+//     type Item = BoxIndices<T>;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         self.inner.next()
+//     }
+// }
+
+// // impl<T> BoxIndices<T> {
+// //     fn iter(&self) -> IterBoxIndices<T> {
+// //         IterBoxIndices { inner: self }
+// //     }
+// // }
+
+// struct NeighborSearchStrat<T> {
+//     nb_intervals: Vec<T>,
+// }
 
 // struct IterBoxIndices {
 //     iter: Box<dyn Iterator<Item = BoxIndices>>,
@@ -106,51 +106,158 @@ struct NeighborSearchStrat<T> {
 //     }
 // }
 
-trait SearchStrat<U> {
-    fn new(nb_intervals: Vec<U>) -> Self;
-    fn gen_indices(&self, origin: &BoxIndices<U>, dist: U) -> IterBoxIndices<U>
-    where
-        U: Ord + Clone + Zero + std::ops::Sub<Output = U>;
+// pub trait BoxIndex:
+//     Clone + Copy + PartialEq + PartialOrd + Add<Self, Output = Self> + Sub<Self, Output = Option<Self>>
+// {
+//     fn new(value: T) -> Option<Self>;
+//     fn value(self) -> T;
+// }
+
+/// Trait alias for values accepted as box indices by [...].
+// pub trait BoxIndex:
+//     Copy
+//     + std::fmt::Debug
+//     + Send
+//     + Sync
+//     + Sum
+//     + PartialOrd
+//     + FromPrimitive
+//     + ToPrimitive
+//     + Zero
+//     + Sub<Output = Self>
+//     + AddAssign
+//     + SignedNum
+//     + Into<isize>
+// {
+// }
+
+// // Trait alias for values accepted as indices for the solution space discretization.
+// pub trait PositiveInteger: Copy + PartialEq + PartialOrd + Add<Output = Self> {}
+pub trait PositiveInteger: PrimInt + Zero + Add<Output = Self> {}
+
+impl<T: PrimInt + Zero> PositiveInteger for T {}
+//
+//
+// struct BoxIndices<T>(Vec<T>);
+// // Structure encapsulating the indices associated with a box in the discretised solution space
+struct BoxIndices<T>
+where
+    T: PositiveInteger,
+{
+    indices: Vec<T>,
+}
+impl<T> BoxIndices<T>
+where
+    T: PositiveInteger,
+{
+    fn new(indices: Vec<T>) -> Self {
+        Self { indices }
+    }
 }
 
-impl<U> SearchStrat<U> for NeighborSearchStrat<U> {
-    fn new(nb_intervals: Vec<U>) -> Self {
+struct IterBoxIndices<T>
+where
+    T: PositiveInteger,
+{
+    inner: Box<dyn Iterator<Item = BoxIndices<T>>>,
+}
+impl<T> Iterator for IterBoxIndices<T>
+where
+    T: PositiveInteger,
+{
+    type Item = BoxIndices<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+struct NeighborSearchStrat<T> {
+    nb_intervals: Vec<T>,
+}
+
+// pub trait BoxIndex:
+//     Copy
+//     + Ord
+//     + std::fmt::Debug
+//     + Send
+//     + Sync
+//     + Sum
+//     + PartialOrd
+//     + num_traits::FromPrimitive
+//     + num_traits::ToPrimitive
+//     + num_traits::Zero
+//     + std::ops::Sub<Output = Self>
+//     + std::ops::AddAssign
+//     + std::ops::SubAssign
+//     + std::convert::TryInto<isize>
+//     + std::convert::TryInto<usize>
+// {
+// }
+
+// impl<T> BoxIndex for T where
+//     T: Copy
+//         + Ord
+//         + std::fmt::Debug
+//         + Send
+//         + Sync
+//         + Sum
+//         + PartialOrd
+//         + num_traits::FromPrimitive
+//         + num_traits::ToPrimitive
+//         + num_traits::Zero
+//         + std::ops::Sub<Output = Self>
+//         + std::ops::AddAssign
+//         + std::ops::SubAssign
+//         + std::convert::TryInto<isize>
+//         + std::convert::TryInto<usize>
+// {
+// }
+
+trait SearchStrat<T: PositiveInteger> {
+    fn new(nb_intervals: Vec<T>) -> Self;
+    fn gen_indices(&self, origin: &BoxIndices<T>, dist: T) -> IterBoxIndices<T>;
+}
+
+impl<T: PositiveInteger> SearchStrat<T> for NeighborSearchStrat<T>
+where
+    isize: From<T>,
+    // usize: From<T>,
+{
+    fn new(nb_intervals: Vec<T>) -> Self {
         let out = Self {
             nb_intervals: nb_intervals,
         };
 
         out
     }
-    fn gen_indices(&self, origin: &BoxIndices<U>, dist: U) -> IterBoxIndices<U>
-    where
-        U: Ord + Clone + Zero + std::ops::Sub<Output = U>,
-    {
-        // fn gen_indices(&self, origin: BoxIndices, dist: usize) -> IterBoxIndices {
-        let nb_criteria = origin.0.len();
-        let mut left_bounds = vec![U::zero(); nb_criteria];
-        let mut right_bounds = vec![U::zero(); nb_criteria];
+
+    fn gen_indices(&self, origin: &BoxIndices<T>, dist: T) -> IterBoxIndices<T> {
+        let nb_criteria = origin.indices.len();
+        let mut left_bounds = vec![T::zero(); nb_criteria];
+        let mut right_bounds = vec![T::zero(); nb_criteria];
         for criterion in 0..nb_criteria {
-            left_bounds[criterion] = origin.0[criterion];
-            right_bounds[criterion] = self.nb_intervals[criterion] - origin.0[criterion];
+            left_bounds[criterion] = origin.indices[criterion];
+            right_bounds[criterion] = self.nb_intervals[criterion] - origin.indices[criterion];
         }
 
         let mut rngs = Vec::new();
         for criterion in 0..nb_criteria as usize {
-            let rng = -(cmp::min(dist, left_bounds[criterion]) as isize)
-                ..=(cmp::min(dist, right_bounds[criterion]) as isize);
+            let rng = -(isize::from(cmp::min(dist, left_bounds[criterion])))
+                ..=isize::from(cmp::min(dist, right_bounds[criterion]));
             rngs.push(rng);
         }
 
         let indices_generator = rngs
             .into_iter()
             .multi_cartesian_product()
-            .filter(move |indices| indices.iter().map(|i| i.abs() as usize).sum::<usize>() == dist)
+            .filter(move |indices| indices.iter().map(|i| i.abs()).sum() == isize::from(dist))
             .map(move |indices| {
                 let mut box_indices = Vec::with_capacity(nb_criteria);
                 (0..nb_criteria).for_each(|criterion| {
-                    box_indices.push((indices[criterion] + origin[criterion] as isize) as usize)
+                    box_indices.push(indices[criterion] + origin.indices[criterion])
                 });
-                BoxIndices::from(box_indices)
+                BoxIndices::new(box_indices)
             });
 
         IterBoxIndices {
@@ -293,78 +400,80 @@ impl<U> SearchStrat<U> for NeighborSearchStrat<U> {
 //     }
 // }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     struct Instance {
-//         pub cweights: Vec<Vec<usize>>,
-//         pub nb_intervals: Vec<usize>,
-//     }
+    struct Instance {
+        pub cweights: Vec<Vec<usize>>,
+        pub nb_intervals: Vec<usize>,
+    }
 
-//     impl Instance {
-//         fn create_instance() -> Self {
-//             let mut out = Self {
-//                 cweights: Vec::with_capacity(3),
-//                 nb_intervals: Vec::with_capacity(2),
-//             };
+    impl Instance {
+        fn create_instance() -> Self {
+            let mut out = Self {
+                cweights: Vec::with_capacity(3),
+                nb_intervals: Vec::with_capacity(2),
+            };
 
-//             out.cweights.extend([vec![1, 1], vec![4, 2], vec![3, 5]]);
-//             out.nb_intervals.extend(vec![2, 2]);
+            out.cweights.extend([vec![1, 1], vec![4, 2], vec![3, 5]]);
+            out.nb_intervals.extend(vec![2, 2]);
 
-//             out
-//         }
-//     }
+            out
+        }
+    }
 
-//     #[test]
-//     fn check_regular_box_handler() {
-//         let instance = Instance::create_instance();
+    // #[test]
+    // fn check_regular_box_handler() {
+    //     let instance = Instance::create_instance();
 
-//         let rbh = RegularBoxHandler::new(&instance.cweights, instance.nb_intervals);
-//         let mut expected_box_indices: Vec<BoxIndices> = Vec::with_capacity(3);
-//         expected_box_indices.extend([vec![0, 0], vec![1, 0], vec![1, 1]]);
+    //     let rbh = RegularBoxHandler::new(&instance.cweights, instance.nb_intervals);
+    //     let mut expected_box_indices: Vec<BoxIndices> = Vec::with_capacity(3);
+    //     expected_box_indices.extend([vec![0, 0], vec![1, 0], vec![1, 1]]);
 
-//         expected_box_indices
-//             .iter()
-//             .zip(instance.cweights)
-//             .for_each(|(box_indices, cweight)| {
-//                 let indices = rbh.box_indices(cweight);
-//                 assert!(
-//                     box_indices
-//                         .iter()
-//                         .zip(indices.iter())
-//                         .all(|(expected_val, computed_val)| expected_val == computed_val),
-//                     "Indices are not equal {:?}, {:?} ",
-//                     box_indices,
-//                     indices
-//                 );
-//             });
-//     }
+    //     expected_box_indices
+    //         .iter()
+    //         .zip(instance.cweights)
+    //         .for_each(|(box_indices, cweight)| {
+    //             let indices = rbh.box_indices(cweight);
+    //             assert!(
+    //                 box_indices
+    //                     .iter()
+    //                     .zip(indices.iter())
+    //                     .all(|(expected_val, computed_val)| expected_val == computed_val),
+    //                 "Indices are not equal {:?}, {:?} ",
+    //                 box_indices,
+    //                 indices
+    //             );
+    //         });
+    // }
 
-//     #[test]
-//     fn check_neighbor_search_strat() {
-//         let instance = Instance::create_instance();
+    #[test]
+    fn check_neighbor_search_strat() {
+        let instance = Instance::create_instance();
 
-//         let nss = NeighborSearchStrat::new(instance.nb_intervals);
-//         let origin = vec![1, 1];
-//         let dist = 1;
-//         let iterator_box_indices = nss.gen_indices(origin, dist);
-//         let mut expected_box_indices: Vec<BoxIndices> = Vec::with_capacity(3);
-//         expected_box_indices.extend([vec![0, 1], vec![1, 0], vec![2, 1], vec![1, 2]]);
+        let nss = NeighborSearchStrat::new(instance.nb_intervals);
+        let origin = vec![1, 1];
+        let dist = 1;
+        let iterator_box_indices = nss.gen_indices(origin, dist);
+        let mut expected_box_indices: Vec<BoxIndices> = Vec::with_capacity(3);
+        expected_box_indices.extend([vec![0, 1], vec![1, 0], vec![2, 1], vec![1, 2]]);
 
-//         iterator_box_indices.for_each(|box_indices| {
-//             assert!(
-//                 expected_box_indices
-//                     .iter()
-//                     .any(|iter_box_indices| box_indices
-//                         .iter()
-//                         .zip(iter_box_indices.iter())
-//                         .all(|(expected_val, computed_val)| expected_val == computed_val)),
-//                 "Box indices {:?} was not found",
-//                 box_indices,
-//             );
-//         })
-//     }
+        iterator_box_indices.for_each(|box_indices| {
+            assert!(
+                expected_box_indices
+                    .iter()
+                    .any(|iter_box_indices| box_indices
+                        .iter()
+                        .zip(iter_box_indices.iter())
+                        .all(|(expected_val, computed_val)| expected_val == computed_val)),
+                "Box indices {:?} was not found",
+                box_indices,
+            );
+        })
+    }
+}
+
+// fn main() {
+
 // }
-
-fn main() {}
