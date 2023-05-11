@@ -132,14 +132,12 @@ use std::ops::{Add, Div, Mul, Sub, SubAssign};
 // }
 
 // // Trait alias for values accepted as indices for the solution space discretization.
-// pub trait PositiveInteger: Copy + PartialEq + PartialOrd + Add<Output = Self> {}
-pub trait PositiveInteger: PrimInt + Zero + Add<Output = Self> {}
+pub trait PositiveInteger: PrimInt + Zero + Add<Self, Output = Self> {}
 
-impl<T: PrimInt + Zero> PositiveInteger for T {}
-//
-//
-// struct BoxIndices<T>(Vec<T>);
+impl<T: PrimInt + Zero + Add<Output = Self>> PositiveInteger for T {}
+
 // // Structure encapsulating the indices associated with a box in the discretised solution space
+#[derive(Debug)]
 struct BoxIndices<T>
 where
     T: PositiveInteger,
@@ -172,47 +170,12 @@ where
     }
 }
 
-struct NeighborSearchStrat<T> {
+struct NeighborSearchStrat<T>
+where
+    T: PositiveInteger,
+{
     nb_intervals: Vec<T>,
 }
-
-// pub trait BoxIndex:
-//     Copy
-//     + Ord
-//     + std::fmt::Debug
-//     + Send
-//     + Sync
-//     + Sum
-//     + PartialOrd
-//     + num_traits::FromPrimitive
-//     + num_traits::ToPrimitive
-//     + num_traits::Zero
-//     + std::ops::Sub<Output = Self>
-//     + std::ops::AddAssign
-//     + std::ops::SubAssign
-//     + std::convert::TryInto<isize>
-//     + std::convert::TryInto<usize>
-// {
-// }
-
-// impl<T> BoxIndex for T where
-//     T: Copy
-//         + Ord
-//         + std::fmt::Debug
-//         + Send
-//         + Sync
-//         + Sum
-//         + PartialOrd
-//         + num_traits::FromPrimitive
-//         + num_traits::ToPrimitive
-//         + num_traits::Zero
-//         + std::ops::Sub<Output = Self>
-//         + std::ops::AddAssign
-//         + std::ops::SubAssign
-//         + std::convert::TryInto<isize>
-//         + std::convert::TryInto<usize>
-// {
-// }
 
 trait SearchStrat<T: PositiveInteger> {
     fn new(nb_intervals: Vec<T>) -> Self;
@@ -251,11 +214,14 @@ where
         let indices_generator = rngs
             .into_iter()
             .multi_cartesian_product()
-            .filter(move |indices| indices.iter().map(|i| i.abs()).sum() == isize::from(dist))
+            .filter(move |indices| {
+                indices.iter().map(|i| i.abs()).sum::<isize>() == isize::from(dist)
+            })
             .map(move |indices| {
                 let mut box_indices = Vec::with_capacity(nb_criteria);
                 (0..nb_criteria).for_each(|criterion| {
-                    box_indices.push(indices[criterion] + origin.indices[criterion])
+                    box_indices
+                        .push(T::from(indices[criterion]).unwrap() + origin.indices[criterion])
                 });
                 BoxIndices::new(box_indices)
             });
@@ -452,11 +418,11 @@ mod tests {
     fn check_neighbor_search_strat() {
         let instance = Instance::create_instance();
 
-        let nss = NeighborSearchStrat::new(instance.nb_intervals);
-        let origin = vec![1, 1];
+        let nss = NeighborSearchStrat::new(vec![2, 2]);
+        let origin = BoxIndices::new(vec![1, 1]);
         let dist = 1;
-        let iterator_box_indices = nss.gen_indices(origin, dist);
-        let mut expected_box_indices: Vec<BoxIndices> = Vec::with_capacity(3);
+        let iterator_box_indices = nss.gen_indices(&origin, dist);
+        let mut expected_box_indices = Vec::with_capacity(3);
         expected_box_indices.extend([vec![0, 1], vec![1, 0], vec![2, 1], vec![1, 2]]);
 
         iterator_box_indices.for_each(|box_indices| {
@@ -464,6 +430,7 @@ mod tests {
                 expected_box_indices
                     .iter()
                     .any(|iter_box_indices| box_indices
+                        .indices
                         .iter()
                         .zip(iter_box_indices.iter())
                         .all(|(expected_val, computed_val)| expected_val == computed_val)),
