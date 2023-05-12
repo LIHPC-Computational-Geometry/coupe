@@ -418,7 +418,7 @@ mod tests {
     fn check_neighbor_search_strat() {
         let instance = Instance::create_instance();
 
-        let nss = NeighborSearchStrat::new(vec![2, 2]);
+        let nss: NeighborSearchStrat<i16> = NeighborSearchStrat::new(vec![2, 2]);
         let origin = BoxIndices::new(vec![1, 1]);
         let dist = 1;
         let iterator_box_indices = nss.gen_indices(&origin, dist);
