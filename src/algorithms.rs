@@ -11,6 +11,7 @@ mod kernighan_lin;
 mod kk;
 mod multi_jagged;
 mod recursive_bisection;
+mod targetor;
 mod vn;
 mod z_curve;
 
