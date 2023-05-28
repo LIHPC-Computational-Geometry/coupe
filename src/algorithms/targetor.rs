@@ -19,7 +19,7 @@ pub trait PositiveWeight:
 }
 
 #[derive(Debug)]
-struct NonPositiveError;
+pub struct NonPositiveError;
 
 // For the moment we only implement this for i32 values
 impl PositiveWeight for i32 {
@@ -157,9 +157,6 @@ trait RegularDeltaHandler<'a, T: PositiveInteger, W: PositiveWeight> {
 
 impl<'a, T: PositiveInteger, W: PositiveWeight> RegularDeltaHandler<'a, T, W>
     for RegularBoxHandler<T, W>
-where
-    f64: From<T>,
-    f64: From<W>,
 {
     // Compute the regular delta associated with each criterion
     fn process_deltas(
@@ -172,7 +169,7 @@ where
             .zip(max_weights.into_iter())
             .zip(nb_intervals.into_iter())
             .map(|((min_val, max_val), nb_interval)| {
-                (max_val - min_val).to_f64().unwrap() / f64::from(nb_interval)
+                (max_val - min_val).to_f64().unwrap() / nb_interval.to_f64().unwrap()
             })
             .collect();
 
@@ -195,20 +192,19 @@ where
     pub boxes: BTreeMap<BoxIndices<T>, Vec<CWeightId>>,
 }
 
+//FIXME:Refact this code to avoid clone calls.
 impl<T, W> RegularBoxHandler<T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = T>) -> Self
+    fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = T> + Clone) -> Self
     where
-        C: IntoIterator<Item = I>,
+        C: IntoIterator<Item = I> + Clone,
         I: IntoIterator<Item = W>,
-        f64: From<T>,
-        f64: From<W>,
     {
         let boxes: BTreeMap<BoxIndices<T>, Vec<CWeightId>> = BTreeMap::new();
-        let mut cweights_iter = cweights.into_iter();
+        let mut cweights_iter = cweights.clone().into_iter();
         let first_cweight = cweights_iter.next().unwrap();
         let mut min_values = first_cweight.into_iter().collect::<Vec<_>>();
         let mut max_values = min_values.clone();
@@ -228,7 +224,7 @@ where
                 })
         }
 
-        let deltas = Self::process_deltas(min_values, max_values, nb_intervals);
+        let deltas = Self::process_deltas(min_values.clone(), max_values, nb_intervals.clone());
 
         let mut res = Self {
             min_weights: min_values,
@@ -240,7 +236,7 @@ where
             boxes: boxes,
         };
 
-        cweights_iter = cweights.into_iter();
+        cweights_iter = cweights.clone().into_iter();
         cweights_iter.enumerate().for_each(|(cweight_id, cweight)| {
             let indices: BoxIndices<T> = Self::box_indices(&res, cweight);
             match res.boxes.get_mut(&indices) {
@@ -261,8 +257,6 @@ where
     W: Sub<W, Output = W> + Zero + ToPrimitive,
 {
     fn box_indices(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndices<T> {
-        let nb_criteria: usize = self.min_weights.len();
-
         let res = BoxIndices::new(
             cweight
                 .into_iter()
@@ -300,7 +294,7 @@ mod tests {
         fn create_instance() -> Self {
             let out = Self {
                 cweights: vec![vec![0, 2], vec![1, 0], vec![4, 1]],
-                nb_intervals: vec![4, 3],
+                nb_intervals: vec![4, 2],
             };
 
             out
@@ -312,13 +306,13 @@ mod tests {
         let instance = Instance::create_instance();
 
         // Split with steps 1.0 on the first criterion and 0.5 on the second one.
-        let rbh = RegularBoxHandler::new(instance.cweights, instance.nb_intervals);
+        let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
         let mut expected_box_indices: Vec<Vec<i32>> = Vec::with_capacity(3);
-        expected_box_indices.extend([vec![0, 2], vec![1, 0], vec![3, 2]]);
+        expected_box_indices.extend([vec![0, 1], vec![1, 0], vec![3, 1]]);
 
         expected_box_indices
             .iter()
-            .zip(instance.cweights)
+            .zip(instance.cweights.clone())
             .for_each(|(box_indices, cweight)| {
                 let values = rbh.box_indices(cweight);
                 assert!(
