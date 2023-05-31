@@ -282,6 +282,20 @@ where
     }
 }
 
+impl<'a, T, W> Debug for RegularBoxHandler<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "Regular Box Handler with min_weights {:?}, nb_intervals {:?} and deltas {:?}",
+            self.min_weights, self.nb_intervals, self.deltas
+        )
+    }
+}
+
 impl<'a, T: PositiveInteger, W: PositiveWeight> BoxHandler<'a, T, W> for RegularBoxHandler<T, W>
 where
     W: Sub<W, Output = W> + Zero + ToPrimitive,
