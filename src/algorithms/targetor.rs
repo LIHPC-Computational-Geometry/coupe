@@ -1,15 +1,36 @@
 use itertools::Itertools;
-use std::cmp::{self, min};
+use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
-use std::slice::SliceIndex;
-
-use num_traits::{PrimInt, ToPrimitive, Zero};
-use std::ops::{Add, Sub};
+// use std::cmp::PartialOrd;
+use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
+use std::ops::{Add, Index, Sub};
 
 type CWeightId = usize;
 type PartId = usize;
 type CriterionId = usize;
 type CWeightMove = (CWeightId, PartId);
+
+pub trait GainValue:
+    Copy
+    + std::fmt::Debug
+    + FromPrimitive
+    + ToPrimitive
+    + Zero
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + PartialOrd
+{
+}
+
+impl<T> GainValue for T
+where
+    Self: Copy + std::fmt::Debug,
+    Self: FromPrimitive + ToPrimitive + Zero,
+    Self: Add<Output = Self>,
+    Self: Sub<Output = Self>,
+    Self: PartialOrd,
+{
+}
 
 pub trait PositiveWeight:
     Sized + Copy + Zero + PartialOrd + Clone + Sub<Output = Self> + ToPrimitive
@@ -139,11 +160,22 @@ where
         }
     }
 }
+
+//TODO:Update find_valid_move signature (refs and/or traits needs)
 trait BoxHandler<'a, T: PositiveInteger, W: PositiveWeight> {
-    // fn new(cweights: &Vec<Vec<W>>, nb_intervals: Vec<T>) -> Box<dyn BoxHandler<T, W>>;
-    // fn new(cweights: &Vec<Vec<W>>, nb_intervals: Vec<T>) -> Box<Self>;
     fn box_indices(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndices<T>;
-    // fn valid_cweight_from_indices(&self, box_indices: &'a BoxIndices<T>,
+    fn find_valid_move<CC, CP, CW>(
+        &self,
+        origin: &'a BoxIndices<T>,
+        part_source: PartId,
+        partition_imbalances: CC,
+        partition: &'a CP,
+        cweights: CC,
+    ) -> Option<CWeightMove>
+    where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+        CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
 }
 
 // // Trait alias for handling regular delta of the solution space discretization.
@@ -275,6 +307,85 @@ where
         );
 
         res
+    }
+
+    //TODO:Create some struct encapsulating partition/solution state
+    fn find_valid_move<CC, CP, CW>(
+        &self,
+        origin: &'a BoxIndices<T>,
+        part_source: PartId,
+        partition_imbalances: CC,
+        partition: &'a CP,
+        cweights: CC,
+    ) -> Option<CWeightMove>
+    where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+        CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    {
+        let imbalances_iter = partition_imbalances.clone().into_iter();
+        let max_imbalances = imbalances_iter
+            .map(|criterion_imbalances| {
+                let mut criterion_imbalances_iter = criterion_imbalances.into_iter();
+                let first_part_imbalance = criterion_imbalances_iter.next().unwrap();
+                match first_part_imbalance.positive_or() {
+                    Some(val) => val,
+                    None => criterion_imbalances_iter.next().unwrap(),
+                }
+            })
+            .collect::<Vec<_>>();
+        // let partition_imbalance: W = *max_imbalances.iter().max().unwrap();
+        let partition_imbalance = max_imbalances
+            .iter()
+            .fold(None, |acc, &imbalance| match acc {
+                None => Some(imbalance),
+                Some(max) => {
+                    let comparison = imbalance.partial_cmp(&max);
+                    match comparison {
+                        Some(Ordering::Greater) => Some(imbalance),
+                        Some(Ordering::Less) | Some(Ordering::Equal) => Some(max),
+                        None => acc,
+                    }
+                }
+            })
+            .unwrap();
+
+        let strict_positive_gain = |id| {
+            max_imbalances
+                .iter()
+                .zip(cweights[id].clone().into_iter())
+                .zip(partition_imbalances.clone().into_iter())
+                // .map(|((max, cweight), criterion_imbalances)| {
+                //     *max == partition_imbalance
+                //         && cweight >= (partition_imbalance + partition_imbalance)
+                //         || *max != partition_imbalance
+                //             && cweight
+                //                 >= partition_imbalance - criterion_imbalances[1 - part_source]
+                // })
+                // .any(|invalid_gain| !invalid_gain)
+                .map(|((max, cweight), criterion_imbalances)| {
+                    *max == partition_imbalance
+                        && cweight < (partition_imbalance + partition_imbalance)
+                        || *max != partition_imbalance
+                            && cweight
+                                < (partition_imbalance - criterion_imbalances[1 - part_source])
+                })
+                .all(|valid_gain| valid_gain)
+        };
+
+        let candidates = self.boxes.get(&origin);
+        let candidate_move = candidates
+            .unwrap_or(&vec![])
+            .iter()
+            // Filter moves
+            .filter(|id| partition[**id] == part_source)
+            // Filter settled cweights, i.e. cweights whose move should leave
+            // to a higher partition imbalance
+            .find(|id| strict_positive_gain(**id))
+            .map(|id| (*id, 1 - part_source))
+            .clone();
+
+        candidate_move
     }
 }
 
