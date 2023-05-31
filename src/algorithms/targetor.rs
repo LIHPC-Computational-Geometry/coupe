@@ -679,4 +679,29 @@ mod tests {
                 );
             });
     }
+
+    #[test]
+    fn check_targetor() {
+        let instance = Instance::create_instance();
+        let partition = vec![0; instance.cweights.len()];
+        let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
+        let partition_target_loads = vec![vec![10, 10], vec![9, 8]];
+
+        let mut targetor = TargetorWIP::new(
+            partition.clone(),
+            instance.cweights.clone(),
+            rbh.nb_intervals,
+            partition_target_loads,
+        );
+
+        targetor.optimize(instance.cweights);
+        let expected_partition_res = vec![0, 1, 1, 0];
+        assert!(
+            targetor.partition == expected_partition_res,
+            "Partition are not equal. Expected {:?}, returned {:?}",
+            expected_partition_res,
+            targetor.partition
+        );
+    }
+
 }
