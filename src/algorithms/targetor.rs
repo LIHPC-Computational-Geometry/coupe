@@ -293,8 +293,8 @@ mod tests {
     impl Instance {
         fn create_instance() -> Self {
             let out = Self {
-                cweights: vec![vec![0, 2], vec![1, 0], vec![4, 1]],
-                nb_intervals: vec![4, 2],
+                cweights: vec![vec![2, 2], vec![4, 6], vec![6, 4], vec![8, 5]],
+                nb_intervals: vec![3, 2],
             };
 
             out
@@ -308,7 +308,7 @@ mod tests {
         // Split with steps 1.0 on the first criterion and 0.5 on the second one.
         let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
         let mut expected_box_indices: Vec<Vec<i32>> = Vec::with_capacity(3);
-        expected_box_indices.extend([vec![0, 1], vec![1, 0], vec![3, 1]]);
+        expected_box_indices.extend([vec![0, 0], vec![1, 1], vec![2, 1], vec![2, 1]]);
 
         expected_box_indices
             .iter()
@@ -323,6 +323,40 @@ mod tests {
                     "Indices are not equal {:?}, {:?} ",
                     box_indices,
                     values
+                );
+            });
+
+        let part_source = 0;
+        let partition = vec![part_source; instance.cweights.len()];
+        let partition_imbalances = vec![vec![10, -10], vec![9, -8]];
+        let space_box_indices = vec![
+            BoxIndices::new(vec![0, 0]),
+            BoxIndices::new(vec![1, 0]),
+            BoxIndices::new(vec![2, 0]),
+            BoxIndices::new(vec![0, 1]),
+            BoxIndices::new(vec![1, 1]),
+            BoxIndices::new(vec![2, 1]),
+        ];
+        let iter_box_indices = space_box_indices.iter();
+
+        let expected_moves = vec![Some((0, 1)), None, None, None, Some((1, 1)), Some((2, 1))];
+        expected_moves
+            .iter()
+            .zip(iter_box_indices)
+            .for_each(|(expected_move, box_indices)| {
+                // let box_indices = rbh.box_indices(cweight);
+                let candidate_move = rbh.find_valid_move(
+                    &box_indices,
+                    part_source,
+                    partition_imbalances.clone(),
+                    &partition.clone(),
+                    instance.cweights.clone(),
+                );
+                assert!(
+                    *expected_move == candidate_move,
+                    "Moves are not equal. Expected {:?} but returned {:?} ",
+                    *expected_move,
+                    candidate_move,
                 );
             });
     }
