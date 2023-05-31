@@ -401,7 +401,21 @@ where
     }
 }
 
-pub struct TargetorWIP {}
+#[derive(Debug)]
+pub struct TargetorWIP<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    // Instance data
+    nb_intervals: Vec<T>,
+    parts_target_loads: Vec<Vec<W>>,
+
+    // Partition state
+    partition: Vec<PartId>,
+    // box_handler: Box<dyn BoxHandler<'a, T, W>>,
+    box_handler: RegularBoxHandler<T, W>,
+}
 
 #[cfg(test)]
 mod tests {
