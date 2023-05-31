@@ -112,10 +112,7 @@ where
     nb_intervals: Vec<T>,
 }
 
-impl<'a, T: PositiveInteger> SearchStrat<'a, T> for NeighborSearchStrat<T>
-where
-    isize: From<T>,
-{
+impl<'a, T: PositiveInteger> SearchStrat<'a, T> for NeighborSearchStrat<T> {
     fn new(nb_intervals: Vec<T>) -> Self {
         let out = Self {
             nb_intervals: nb_intervals,
@@ -134,9 +131,10 @@ where
         }
 
         let mut rngs = Vec::new();
-        for criterion in 0..nb_criteria as usize {
-            let rng = -(isize::from(cmp::min(dist, left_bounds[criterion])))
-                ..=isize::from(cmp::min(dist, right_bounds[criterion]));
+        for criterion in 0..nb_criteria {
+            let min_rng = -cmp::min(dist, left_bounds[criterion]).to_isize().unwrap();
+            let max_rng = cmp::min(dist, right_bounds[criterion]).to_isize().unwrap();
+            let rng = min_rng..=max_rng;
             rngs.push(rng);
         }
 
@@ -144,7 +142,7 @@ where
             .into_iter()
             .multi_cartesian_product()
             .filter(move |indices| {
-                indices.iter().map(|i| i.abs()).sum::<isize>() == isize::from(dist)
+                indices.iter().map(|i| i.abs()).sum::<isize>() == dist.to_isize().unwrap()
             })
             .map(move |indices| {
                 let mut box_indices = Vec::with_capacity(nb_criteria);
