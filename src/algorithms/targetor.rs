@@ -506,6 +506,44 @@ where
     }
 }
 
+impl<'a, T: PositiveInteger, W: PositiveWeight> TargetorWIP<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    //FIXME:Allow partition imbalance to be composed of float values while cweights are integers
+    fn new<CC, CT, CW>(
+        partition: Vec<PartId>,
+        cweights: CC,
+        // Targetor specific parameter
+        nb_intervals: CT,
+        parts_target_loads: CC,
+    ) -> Self
+    where
+        CC: IntoIterator<Item = CW> + Clone,
+        CT: IntoIterator<Item = T> + Clone,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    {
+        let res_rbh = RegularBoxHandler::new(cweights, nb_intervals.clone());
+        let res_target_loads: Vec<Vec<W>> = parts_target_loads
+            .into_iter()
+            .map(|criterion_target_loads| criterion_target_loads.into_iter().collect())
+            .collect();
+
+        let res = Self {
+            // Instance data
+            nb_intervals: nb_intervals.into_iter().collect(),
+            parts_target_loads: res_target_loads,
+
+            // Partition related data
+            partition: partition,
+            box_handler: res_rbh,
+        };
+
+        res
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
