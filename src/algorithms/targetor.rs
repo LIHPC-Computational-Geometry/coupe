@@ -401,6 +401,24 @@ where
     }
 }
 
+trait PartitionImbalanceHandler<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    fn compute_imbalances<CC, CW>(&self, cweights: CC) -> Vec<Vec<W>>
+    where
+        CC: IntoIterator<Item = CW> + Clone,
+        CW: IntoIterator<Item = W> + Clone;
+    // Return a couple composed of one of the most imbalanced criterion and
+    // the part from which a weight should me moved.
+    // FIXME:Add support to handle multiple criterion having the most imbalanced value
+    fn process_imbalance<CC, CW>(&self, cweights: CC) -> (CriterionId, PartId)
+    where
+        CC: IntoIterator<Item = CW> + Clone,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
+}
+
 #[derive(Debug)]
 pub struct TargetorWIP<T, W>
 where
@@ -415,6 +433,77 @@ where
     partition: Vec<PartId>,
     // box_handler: Box<dyn BoxHandler<'a, T, W>>,
     box_handler: RegularBoxHandler<T, W>,
+}
+
+impl<'a, T: PositiveInteger, W: PositiveWeight> PartitionImbalanceHandler<T, W>
+    for TargetorWIP<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    fn compute_imbalances<CC, CW>(&self, cweights: CC) -> Vec<Vec<W>>
+    where
+        CC: IntoIterator<Item = CW> + Clone,
+        CW: IntoIterator<Item = W> + Clone,
+    {
+        let nb_criterion = self.parts_target_loads.len();
+        // let mut init = vec![vec![W::zero(); 2]; nb_criterion];
+        // for criterion in 0..nb_criterion {
+        //     for part in 0..2 {
+        //         init[criterion][part] -= self.parts_target_loads[criterion][part];
+        //     }
+        // }
+        let mut res = vec![vec![W::zero(); 2]; nb_criterion];
+        for criterion in 0..nb_criterion {
+            for part in 0..2 {
+                res[criterion][part] -= self.parts_target_loads[criterion][part];
+            }
+        }
+
+        let cweights_iter = cweights.clone().into_iter();
+        self.partition
+            .clone()
+            .into_iter()
+            .zip(cweights_iter)
+            .for_each(|(part, cweight)| {
+                cweight
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(criterion, weight)| res[criterion][part] += weight)
+            });
+        res
+    }
+
+    /* Function returning a couple composed of the most imbalanced criterion
+    and the part from which a weight should me moved.
+     */
+    fn process_imbalance<CC, CW>(&self, cweights: CC) -> (CriterionId, PartId)
+    where
+        CC: IntoIterator<Item = CW> + Clone,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    {
+        let imbalances = self.compute_imbalances(cweights);
+        let mut max_imb = W::zero();
+        let mut res: (CriterionId, PartId) = (CriterionId::zero(), PartId::zero());
+
+        imbalances
+            .into_iter()
+            .enumerate()
+            .for_each(|(criterion, loads)| {
+                let max = if loads[0] >= W::zero() {
+                    loads[0]
+                } else {
+                    loads[1]
+                };
+                if max > max_imb {
+                    let part = 1 - (loads[0] >= loads[1]) as usize;
+                    res = (criterion, part);
+                    max_imb = max;
+                }
+            });
+
+        res
+    }
 }
 
 #[cfg(test)]
