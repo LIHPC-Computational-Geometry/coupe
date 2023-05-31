@@ -401,6 +401,15 @@ where
     }
 }
 
+trait Repartitioning<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    // TODO: Add a builder for generic Repartitioning
+    fn optimize(&mut self, cweights: Vec<Vec<W>>);
+}
+
 trait PartitionImbalanceHandler<T, W>
 where
     T: PositiveInteger,
@@ -541,6 +550,52 @@ where
         };
 
         res
+    }
+}
+
+impl<'a, T: PositiveInteger, W: PositiveWeight> Repartitioning<T, W> for TargetorWIP<T, W>
+where
+    T: PositiveInteger,
+    W: PositiveWeight,
+{
+    fn optimize(&mut self, cweights: Vec<Vec<W>>) {
+        while true {
+            // Setup target part and most imbalanced criteria
+            let (most_imb_criterion, part_source) = self.process_imbalance(cweights.clone());
+
+            // Setup search strat
+            let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
+
+            // Setup target gain
+            let partition_imbalances: Vec<Vec<W>> = self.compute_imbalances(cweights.clone());
+            let target_gain: Vec<W> = partition_imbalances
+                .clone()
+                .into_iter()
+                .map(
+                    |criterion_imbalances| match criterion_imbalances[part_source].positive_or() {
+                        Some(val) => val,
+                        None => W::zero(),
+                    },
+                )
+                .collect();
+
+            let origin = self.box_handler.box_indices(target_gain);
+            let option_valid_move = self.box_handler.find_valid_move(
+                &origin,
+                part_source,
+                partition_imbalances.clone(),
+                &self.partition,
+                cweights.clone(),
+            );
+
+            if option_valid_move.is_some() {
+                let (id_cweight, target_part) = option_valid_move.unwrap();
+                self.partition[id_cweight] = target_part;
+            } else {
+                //TODO:Implement seach using searchstrat
+                break;
+            }
+        }
     }
 }
 
