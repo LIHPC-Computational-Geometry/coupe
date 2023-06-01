@@ -603,7 +603,7 @@ where
                 self.partition[id_cweight] = target_part;
             } else {
                 let mut increase_offset = true;
-                let offset = 1;
+                let mut offset = 1;
                 while increase_offset {
                     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
                     if let Some(option_valid_move) = iter_indices
@@ -623,6 +623,7 @@ where
                         let (id_cweight, target_part) = option_valid_move.unwrap();
                         self.partition[id_cweight] = target_part;
                     } else {
+                        offset += 1;
                         let partition_imbalance =
                             partition_imbalances[most_imbalanced_criterion][part_source];
                         let bound_indices = self
