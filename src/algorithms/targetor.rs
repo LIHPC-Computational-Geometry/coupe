@@ -3,7 +3,8 @@ use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 // use std::cmp::PartialOrd;
 use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
-use std::ops::{Add, Index, Sub};
+use std::fmt::Debug;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 type CWeightId = usize;
 type PartId = usize;
@@ -33,7 +34,16 @@ where
 }
 
 pub trait PositiveWeight:
-    Sized + Copy + Zero + PartialOrd + Clone + Sub<Output = Self> + ToPrimitive
+    Sized
+    + Copy
+    + Zero
+    + PartialOrd
+    + Clone
+    + Sub<Output = Self>
+    + ToPrimitive
+    + Debug
+    + SubAssign
+    + AddAssign
 {
     fn try_into_positive(self) -> Result<Self, NonPositiveError>;
     fn positive_or(self) -> Option<Self>;
@@ -62,9 +72,9 @@ impl PositiveWeight for i32 {
 }
 
 // // Trait alias for values accepted as indices for the solution space discretization.
-pub trait PositiveInteger: PrimInt + Zero + Add<Self, Output = Self> {}
+pub trait PositiveInteger: PrimInt + Zero + Add<Self, Output = Self> + Debug {}
 
-impl<T: PrimInt + Zero + Add<Output = Self>> PositiveInteger for T {}
+impl<T: PrimInt + Zero + Add<Output = Self> + Debug> PositiveInteger for T {}
 
 // // Structure encapsulating the indices associated with a box in the discretised solution space
 #[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -172,7 +182,7 @@ trait BoxHandler<'a, T: PositiveInteger, W: PositiveWeight> {
     ) -> Option<CWeightMove>
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-        CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+        CP: Clone + std::ops::Index<usize, Output = PartId>,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
 }
 
@@ -214,7 +224,6 @@ where
 {
     // Values related to the instance to be improved
     min_weights: Vec<W>,
-    // max_weights: Vec<W>,
     // Parameters related to the discretization of the solution space
     nb_intervals: Vec<T>,
     deltas: Vec<f64>,
@@ -228,7 +237,7 @@ where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = T> + Clone) -> Self
+    pub fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = T> + Clone) -> Self
     where
         C: IntoIterator<Item = I> + Clone,
         I: IntoIterator<Item = W>,
@@ -254,14 +263,12 @@ where
                 })
         }
 
-        let deltas = Self::process_deltas(min_values.clone(), max_values, nb_intervals.clone());
+        let deltas =
+            Self::process_deltas(min_values.clone(), max_values.clone(), nb_intervals.clone());
 
         let mut res = Self {
             min_weights: min_values,
-            // max_weights: max_weights,
-            // nb_intervals: nb_intervals.into(),
             nb_intervals: nb_intervals.into_iter().collect(),
-
             deltas: deltas,
             boxes: boxes,
         };
@@ -309,7 +316,7 @@ where
                 .zip(self.deltas.iter())
                 .zip(self.nb_intervals.iter())
                 .map(|((diff, delta), nb_interval)| match diff.positive_or() {
-                    Some(val) => cmp::min(
+                    Some(_) => cmp::min(
                         T::from((diff.to_f64().unwrap() / delta).floor()).unwrap(),
                         T::from(*nb_interval - T::from(1).unwrap()).unwrap(),
                     ),
@@ -321,6 +328,7 @@ where
         res
     }
 
+    //FIXME:Allow partition imbalance to be composed of float values while cweights are integers
     //TODO:Create some struct encapsulating partition/solution state
     fn find_valid_move<CC, CP, CW>(
         &self,
@@ -332,7 +340,7 @@ where
     ) -> Option<CWeightMove>
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-        CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+        CP: Clone + std::ops::Index<usize, Output = PartId>,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
         let imbalances_iter = partition_imbalances.clone().into_iter();
