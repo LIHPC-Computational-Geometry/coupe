@@ -724,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn check_targetor() {
+    fn check_targetor_without_search() {
         let instance = Instance::create_instance();
         let partition = vec![0; instance.cweights.len()];
         let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
@@ -734,11 +734,39 @@ mod tests {
             partition.clone(),
             instance.cweights.clone(),
             rbh.nb_intervals,
+            partition_target_loads.clone(),
+        );
+
+        targetor.optimize(instance.cweights.clone());
+        let expected_partition_res = vec![0, 1, 1, 0];
+        assert!(
+            targetor.partition == expected_partition_res,
+            "Partition are not equal. Expected {:?}, returned {:?}",
+            expected_partition_res,
+            targetor.partition
+        );
+    }
+
+    #[test]
+    fn check_targetor_with_search() {
+        let instance = Instance::create_instance();
+        let partition = vec![0; instance.cweights.len()];
+
+        // Custom made data triggering exploration on the bottom right of the
+        // weight space.
+        let nb_intervals = vec![6, 2];
+        let partition_target_loads = vec![vec![12, 8], vec![15, 2]];
+
+        let rbh = RegularBoxHandler::new(instance.cweights.clone(), nb_intervals);
+        let mut targetor = TargetorWIP::new(
+            partition.clone(),
+            instance.cweights.clone(),
+            rbh.nb_intervals.clone(),
             partition_target_loads,
         );
 
-        targetor.optimize(instance.cweights);
-        let expected_partition_res = vec![0, 1, 1, 0];
+        targetor.optimize(instance.cweights.clone());
+        let expected_partition_res = vec![0, 0, 0, 1];
         assert!(
             targetor.partition == expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
