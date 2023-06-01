@@ -1,8 +1,7 @@
 use itertools::Itertools;
+use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
 use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
-// use std::cmp::PartialOrd;
-use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
@@ -706,7 +705,6 @@ mod tests {
             .iter()
             .zip(iter_box_indices)
             .for_each(|(expected_move, box_indices)| {
-                // let box_indices = rbh.box_indices(cweight);
                 let candidate_move = rbh.find_valid_move(
                     &box_indices,
                     part_source,
@@ -774,5 +772,4 @@ mod tests {
             targetor.partition
         );
     }
-
 }
