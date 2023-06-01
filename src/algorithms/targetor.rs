@@ -567,15 +567,17 @@ where
     W: PositiveWeight,
 {
     fn optimize(&mut self, cweights: Vec<Vec<W>>) {
-        while true {
+        let mut look_for_movement = true;
+        while look_for_movement {
             // Setup target part and most imbalanced criteria
-            let (most_imb_criterion, part_source) = self.process_imbalance(cweights.clone());
+            let (most_imbalanced_criterion, part_source) = self.process_imbalance(cweights.clone());
 
             // Setup search strat
             let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
 
             // Setup target gain
             let partition_imbalances: Vec<Vec<W>> = self.compute_imbalances(cweights.clone());
+            let nb_criteria = partition_imbalances.len();
             let target_gain: Vec<W> = partition_imbalances
                 .clone()
                 .into_iter()
@@ -600,8 +602,40 @@ where
                 let (id_cweight, target_part) = option_valid_move.unwrap();
                 self.partition[id_cweight] = target_part;
             } else {
-                //TODO:Implement seach using searchstrat
-                break;
+                let mut increase_offset = true;
+                let offset = 1;
+                while increase_offset {
+                    let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
+                    if let Some(option_valid_move) = iter_indices
+                        .into_iter()
+                        .map(|box_indices| {
+                            self.box_handler.find_valid_move(
+                                &box_indices,
+                                part_source,
+                                partition_imbalances.clone(),
+                                &self.partition,
+                                cweights.clone(),
+                            )
+                        })
+                        .find(|option_valid_move| option_valid_move.is_some())
+                    {
+                        increase_offset = false;
+                        let (id_cweight, target_part) = option_valid_move.unwrap();
+                        self.partition[id_cweight] = target_part;
+                    } else {
+                        let partition_imbalance =
+                            partition_imbalances[most_imbalanced_criterion][part_source];
+                        let bound_indices = self
+                            .box_handler
+                            .box_indices(vec![partition_imbalance; nb_criteria]);
+                        increase_offset = (0..nb_criteria).all(|criterion| {
+                            origin.indices[criterion] - T::from(offset).unwrap() >= T::zero()
+                                || origin.indices[criterion] + T::from(offset).unwrap()
+                                    <= bound_indices.indices[criterion]
+                        });
+                    }
+                }
+                look_for_movement = false;
             }
         }
     }
