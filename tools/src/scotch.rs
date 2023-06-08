@@ -37,9 +37,17 @@ impl<const D: usize> ToRunner<D> for Standard {
         let mut strat = scotch::Strategy::new();
         let arch = scotch::Architecture::complete(self.part_count as Num);
 
-        let mut scotch_partition = vec![0; weights.len()];
+        let mut scotch_partition = vec![0; problem.adjacency().rows()];
         Box::new(move |partition| {
-            let graph_data = Data::new(0, &xadj, &[], &weights, &[], &adjncy, &adjwgt);
+            let graph_data = Data::new(
+                0,
+                &xadj,
+                &[],
+                weights.as_deref().unwrap_or(&[]),
+                &[],
+                &adjncy,
+                adjwgt.as_deref().unwrap_or(&[]),
+            );
             let mut graph = Graph::build(&graph_data).context("failed to build SCOTCH graph")?;
             graph.check().context("failed to build SCOTCH graph")?;
             graph
