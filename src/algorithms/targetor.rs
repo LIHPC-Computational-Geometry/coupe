@@ -1,8 +1,10 @@
+use crate::Error;
 use itertools::Itertools;
 use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
 use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::ops::IndexMut;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 type CWeightId = usize;
@@ -48,7 +50,7 @@ pub trait PositiveWeight:
     fn positive_or(self) -> Option<Self>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct NonPositiveError;
 
 // For the moment we only implement this for i32 values
@@ -175,13 +177,13 @@ trait BoxHandler<'a, T: PositiveInteger, W: PositiveWeight> {
         &self,
         origin: &'a BoxIndices<T>,
         part_source: PartId,
-        partition_imbalances: CC,
+        partition_imbalances: Vec<Vec<W>>,
         partition: &'a CP,
         cweights: CC,
     ) -> Option<CWeightMove>
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-        CP: Clone + std::ops::Index<usize, Output = PartId>,
+        CP: std::ops::Index<usize, Output = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
 }
 
@@ -333,13 +335,13 @@ where
         &self,
         origin: &'a BoxIndices<T>,
         part_source: PartId,
-        partition_imbalances: CC,
+        partition_imbalances: Vec<Vec<W>>,
         partition: &'a CP,
         cweights: CC,
     ) -> Option<CWeightMove>
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-        CP: Clone + std::ops::Index<usize, Output = PartId>,
+        CP: std::ops::Index<usize, Output = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
         let imbalances_iter = partition_imbalances.clone().into_iter();
@@ -408,30 +410,44 @@ where
     }
 }
 
-trait Repartitioning<T, W>
+trait Repartitioning<'a, T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
 {
     // TODO: Add a builder for generic Repartitioning
-    fn optimize(&mut self, cweights: Vec<Vec<W>>);
+    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
+    where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+        CP: IntoIterator<Item = PartId>
+            + std::ops::Index<usize, Output = PartId>
+            + IndexMut<usize>
+            + Clone,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
 }
 
-trait PartitionImbalanceHandler<T, W>
+trait PartitionImbalanceHandler<'a, T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn compute_imbalances<CC, CW>(&self, cweights: CC) -> Vec<Vec<W>>
+    fn compute_imbalances<CC, CP, CW>(&self, partition: &'a CP, cweights: CC) -> Vec<Vec<W>>
     where
         CC: IntoIterator<Item = CW> + Clone,
+        CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone;
+
     // Return a couple composed of one of the most imbalanced criterion and
     // the part from which a weight should me moved.
     // FIXME:Add support to handle multiple criterion having the most imbalanced value
-    fn process_imbalance<CC, CW>(&self, cweights: CC) -> (CriterionId, PartId)
+    fn process_imbalance<CC, CP, CW>(
+        &self,
+        partition: &'a CP,
+        cweights: CC,
+    ) -> (CriterionId, PartId)
     where
         CC: IntoIterator<Item = CW> + Clone,
+        CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
 }
 
@@ -445,30 +461,25 @@ where
     nb_intervals: Vec<T>,
     parts_target_loads: Vec<Vec<W>>,
 
-    // Partition state
-    partition: Vec<PartId>,
+    // // Partition state
+    // partition: Vec<PartId>,
     // box_handler: Box<dyn BoxHandler<'a, T, W>>,
     box_handler: RegularBoxHandler<T, W>,
 }
 
-impl<'a, T: PositiveInteger, W: PositiveWeight> PartitionImbalanceHandler<T, W>
+impl<'a, T: PositiveInteger, W: PositiveWeight> PartitionImbalanceHandler<'a, T, W>
     for TargetorWIP<T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn compute_imbalances<CC, CW>(&self, cweights: CC) -> Vec<Vec<W>>
+    fn compute_imbalances<CC, CP, CW>(&self, partition: &'a CP, cweights: CC) -> Vec<Vec<W>>
     where
         CC: IntoIterator<Item = CW> + Clone,
+        CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone,
     {
         let nb_criterion = self.parts_target_loads.len();
-        // let mut init = vec![vec![W::zero(); 2]; nb_criterion];
-        // for criterion in 0..nb_criterion {
-        //     for part in 0..2 {
-        //         init[criterion][part] -= self.parts_target_loads[criterion][part];
-        //     }
-        // }
         let mut res = vec![vec![W::zero(); 2]; nb_criterion];
         for criterion in 0..nb_criterion {
             for part in 0..2 {
@@ -477,7 +488,7 @@ where
         }
 
         let cweights_iter = cweights.clone().into_iter();
-        self.partition
+        partition
             .clone()
             .into_iter()
             .zip(cweights_iter)
@@ -493,12 +504,17 @@ where
     /* Function returning a couple composed of the most imbalanced criterion
     and the part from which a weight should me moved.
      */
-    fn process_imbalance<CC, CW>(&self, cweights: CC) -> (CriterionId, PartId)
+    fn process_imbalance<CC, CP, CW>(
+        &self,
+        partition: &'a CP,
+        cweights: CC,
+    ) -> (CriterionId, PartId)
     where
         CC: IntoIterator<Item = CW> + Clone,
+        CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
-        let imbalances = self.compute_imbalances(cweights);
+        let imbalances = self.compute_imbalances(partition, cweights);
         let mut max_imb = W::zero();
         let mut res: (CriterionId, PartId) = (CriterionId::zero(), PartId::zero());
 
@@ -528,8 +544,8 @@ where
     W: PositiveWeight,
 {
     //FIXME:Allow partition imbalance to be composed of float values while cweights are integers
-    fn new<CC, CT, CW>(
-        partition: Vec<PartId>,
+    pub fn new<CC, CT, CW>(
+        // partition: Vec<PartId>,
         cweights: CC,
         // Targetor specific parameter
         nb_intervals: CT,
@@ -552,7 +568,7 @@ where
             parts_target_loads: res_target_loads,
 
             // Partition related data
-            partition: partition,
+            // partition: partition,
             box_handler: res_rbh,
         };
 
@@ -560,22 +576,31 @@ where
     }
 }
 
-impl<'a, T: PositiveInteger, W: PositiveWeight> Repartitioning<T, W> for TargetorWIP<T, W>
+impl<'a, T: PositiveInteger, W: PositiveWeight> Repartitioning<'a, T, W> for TargetorWIP<T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn optimize(&mut self, cweights: Vec<Vec<W>>) {
+    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
+    where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+        CP: IntoIterator<Item = PartId>
+            + std::ops::Index<usize, Output = PartId>
+            + IndexMut<usize>
+            + Clone,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    {
         let mut look_for_movement = true;
         while look_for_movement {
             // Setup target part and most imbalanced criteria
-            let (most_imbalanced_criterion, part_source) = self.process_imbalance(cweights.clone());
+            let (most_imbalanced_criterion, part_source) =
+                self.process_imbalance(partition, cweights.clone());
 
             // Setup search strat
             let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
 
             // Setup target gain
-            let partition_imbalances: Vec<Vec<W>> = self.compute_imbalances(cweights.clone());
+            let partition_imbalances = self.compute_imbalances(partition, cweights.clone());
             let nb_criteria = partition_imbalances.len();
             let target_gain: Vec<W> = partition_imbalances
                 .clone()
@@ -593,13 +618,13 @@ where
                 &origin,
                 part_source,
                 partition_imbalances.clone(),
-                &self.partition,
+                partition,
                 cweights.clone(),
             );
 
             if option_valid_move.is_some() {
                 let (id_cweight, target_part) = option_valid_move.unwrap();
-                self.partition[id_cweight] = target_part;
+                partition[id_cweight] = target_part;
             } else {
                 let mut increase_offset = true;
                 let mut offset = 1;
@@ -612,7 +637,7 @@ where
                                 &box_indices,
                                 part_source,
                                 partition_imbalances.clone(),
-                                &self.partition,
+                                partition,
                                 cweights.clone(),
                             )
                         })
@@ -620,7 +645,7 @@ where
                     {
                         increase_offset = false;
                         let (id_cweight, target_part) = option_valid_move.unwrap();
-                        self.partition[id_cweight] = target_part;
+                        partition[id_cweight] = target_part;
                     } else {
                         offset += 1;
                         let partition_imbalance =
@@ -638,6 +663,56 @@ where
                 look_for_movement = false;
             }
         }
+    }
+}
+
+impl<'a, T: PositiveInteger, W: PositiveWeight, CC, CW> crate::Partition<CC> for TargetorWIP<T, W>
+where
+    CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+{
+    // impl<'a, T: PositiveInteger, W: PositiveWeight, CC> crate::Partition<CC> for TargetorWIP<T, W>
+    // where
+    //     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    //     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    // {
+    type Metadata = usize;
+    type Error = Error;
+
+    // fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
+    // where
+    //     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+    //     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+
+    fn partition(
+        &mut self,
+        part_ids: &mut [usize],
+        // part_ids: &mut CP,
+        cweights: CC,
+    ) -> Result<Self::Metadata, Self::Error>
+// where
+    //     // CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
+    //     // CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    {
+        let partition_len = part_ids.iter().count();
+        let weights_len = cweights.clone().into_iter().count();
+        if partition_len != weights_len {
+            return Err(Error::InputLenMismatch {
+                expected: partition_len,
+                actual: weights_len,
+            });
+        }
+
+        if 1 < part_ids.iter_mut().max().map(|&mut part| part).unwrap_or(0) {
+            return Err(Error::BiPartitioningOnly);
+        }
+
+        let mut vec_partition = part_ids.to_vec();
+        self.optimize(&mut vec_partition, cweights);
+
+        return Ok(0);
     }
 }
 
@@ -724,31 +799,37 @@ mod tests {
     #[test]
     fn check_targetor_without_search() {
         let instance = Instance::create_instance();
-        let partition = vec![0; instance.cweights.len()];
+        let mut partition = vec![0; instance.cweights.len()];
         let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
         let partition_target_loads = vec![vec![10, 10], vec![9, 8]];
 
         let mut targetor = TargetorWIP::new(
-            partition.clone(),
+            // partition.clone(),
             instance.cweights.clone(),
             rbh.nb_intervals,
             partition_target_loads.clone(),
         );
 
-        targetor.optimize(instance.cweights.clone());
+        targetor.optimize(&mut partition, instance.cweights.clone());
         let expected_partition_res = vec![0, 1, 1, 0];
+        // assert!(
+        //     targetor.partition == expected_partition_res,
+        //     "Partition are not equal. Expected {:?}, returned {:?}",
+        //     expected_partition_res,
+        //     targetor.partition
+        // );
         assert!(
-            targetor.partition == expected_partition_res,
+            partition == expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
             expected_partition_res,
-            targetor.partition
+            partition
         );
     }
 
     #[test]
     fn check_targetor_with_search() {
         let instance = Instance::create_instance();
-        let partition = vec![0; instance.cweights.len()];
+        let mut partition = vec![0; instance.cweights.len()];
 
         // Custom made data triggering exploration on the bottom right of the
         // weight space.
@@ -757,19 +838,19 @@ mod tests {
 
         let rbh = RegularBoxHandler::new(instance.cweights.clone(), nb_intervals);
         let mut targetor = TargetorWIP::new(
-            partition.clone(),
+            // partition.clone(),
             instance.cweights.clone(),
             rbh.nb_intervals.clone(),
             partition_target_loads,
         );
 
-        targetor.optimize(instance.cweights.clone());
+        targetor.optimize(&mut partition, instance.cweights.clone());
         let expected_partition_res = vec![0, 0, 0, 1];
         assert!(
-            targetor.partition == expected_partition_res,
+            partition == expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
             expected_partition_res,
-            targetor.partition
+            partition
         );
     }
 }
