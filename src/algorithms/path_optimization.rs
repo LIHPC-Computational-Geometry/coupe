@@ -8,6 +8,7 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use std::collections::HashSet;
 use std::iter::Sum;
+use std::marker::PhantomData;
 use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
@@ -369,11 +370,14 @@ where
 /// https://doi.org/10.1016/S0166-218X(98)00084-5.
 ///
 #[derive(Debug, Clone, Copy, Default)]
-pub struct PathOptimization {}
+pub struct PathOptimization {
+}
 
-impl<'a, T, W> crate::Partition<(T, &'a [W])> for PathOptimization
+impl<'a, Adj, T, W> crate::Partition<(Adj, &'a [W])> for PathOptimization
 where
-    T: Topology<i64> + Sync,
+    Adj: Topology<T> + Sync + 'a,
+    T: PathWeight,
+    <T as SignedNum>::SignedType: Signed + TryFrom<T> + Copy,
     W: PathWeight,
 {
     type Metadata = ();
@@ -382,7 +386,7 @@ where
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (T, &'a [W]),
+        (adjacency, weights): (Adj, &'a [W]),
     ) -> Result<Self::Metadata, Self::Error> {
         if part_ids.is_empty() {
             return Ok(());
@@ -409,7 +413,7 @@ where
         while let Some(p) = Path::new(&tp).find_path(side) {
             eprintln!("found path: {:?}", p.path);
             tp.flip_flop(p.path);
-            side = 1 - side;
+            side = TopologicalPart::<'a, Adj, T, W>::flip_part(side) ;
         }
 
         part_ids
