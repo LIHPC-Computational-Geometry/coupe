@@ -6,6 +6,7 @@ members = [
     "tools/mesh-io",
     "tools/mesh-io/ffi",
     "tools/num-part",
+    "new-rcb-impl",
 ]
 
 [package]
@@ -46,6 +47,8 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 rand = "0.8"
 sprs = { version = "0.11", optional = true, default-features = false, features = ["multi_thread"] }
 ittapi = "0.3"
+clap = { version = "4.3.0", features = ["derive"] }
+cust = { version = "0.3.2", path = "../rust-cuda/crates/cust" }
 
 [dev-dependencies]
 affinity = { version = "0.1", default-features = false }
@@ -54,6 +57,10 @@ proptest = { version = "1.0.0", default-features = false, features = ["std", "ti
 tracing-subscriber = "0.3"
 tracing-chrome = "0.4"
 tracing-tree = "0.2"
+
+[build-dependencies]
+bindgen = "0.66.1"
+cc = "1.0"
 
 [[bench]]
 name = "rcb_cartesian"
