@@ -12,20 +12,20 @@ impl Point2D {
         Self { coords: [x, y] }
     }
 
-    pub fn _x(&self) -> i32 {
+    pub fn x(&self) -> i32 {
         self.coords[0]
     }
 
-    pub fn _y(&self) -> i32 {
+    pub fn y(&self) -> i32 {
         self.coords[1]
     }
 }
 
-impl std::ops::Index<usize> for Point2D {
+impl<const D: usize> std::ops::Index<usize> for PointND<D> {
     type Output = i32;
 
     fn index(&self, index: usize) -> &Self::Output {
-        assert!(index < 2, "Point2D only has two dimensions");
+        assert!(index < D, "PointND only has {D} dimensions");
         &self.coords[index]
     }
 }
@@ -37,7 +37,7 @@ mod tests {
     #[test]
     fn index_point2d() {
         let p = Point2D::new(-1, 2);
-        assert_eq!(p[0], p._x());
-        assert_eq!(p[1], p._y());
+        assert_eq!(p[0], p.x());
+        assert_eq!(p[1], p.y());
     }
 }
