@@ -36,6 +36,8 @@ pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;
+pub use targetor::PositiveInteger;
+pub use targetor::PositiveWeight;
 pub use targetor::TargetorWIP;
 pub use vn::VnBest;
 pub use vn::VnBestWeight;

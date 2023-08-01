@@ -3,6 +3,7 @@ use itertools::Itertools;
 use num_traits::{FromPrimitive, PrimInt, ToPrimitive, Zero};
 use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
+// use std::error::Error;
 use std::fmt::Debug;
 use std::ops::IndexMut;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
@@ -52,9 +53,40 @@ pub trait PositiveWeight:
 
 #[derive(Debug, Copy, Clone)]
 pub struct NonPositiveError;
+// #[derive(Clone, Debug)]
+// pub enum TargetorFailure {
+//     NonPositiveError,
+//     WrongData(String),
+// }
+// #[derive(Clone, Debug)]
+// pub struct TargetorError {
+//     error: TargetorFailure,
+//     description: String,
+// }
 
-// For the moment we only implement this for i32 values
-impl PositiveWeight for i32 {
+// impl TargetorError {
+//     fn new(error: TargetorFailure) -> Self {
+//         TargetorError {
+//             description: error.to_string(),
+//             error,
+//         }
+//     }
+// }
+
+// impl fmt::Display for TargetorError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{}", self.error)
+//     }
+// }
+
+// impl Error for TargetorError {
+//     fn description(&self) -> &str {
+//         &self.description
+//     }
+// }
+
+// For the moment we only implement this for i64 values
+impl PositiveWeight for i64 {
     fn try_into_positive(self) -> Result<Self, NonPositiveError> {
         if self >= 0 {
             Ok(self)
@@ -446,6 +478,7 @@ where
         };
 
         let candidates = self.boxes.get(&origin);
+        // println!("The candidates are {:?}", candidates);
         let candidate_move = candidates
             .unwrap_or(&vec![])
             .iter()
@@ -646,24 +679,19 @@ where
             + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
-        // let box_handler = match self.box_handler {
-        //     Some(bh) => self.box_handler.as_ref().unwrap(),
-        //     None => &RegularBoxHandler::new(cweights, self.nb_intervals.clone()),
-        // };
-
         if self.box_handler.is_none() {
             self.setup_default_box_handler(cweights.clone());
         }
         let box_handler = self.box_handler.as_ref().unwrap();
+
+        // Setup search strat
+        let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
 
         let mut look_for_movement = true;
         while look_for_movement {
             // Setup target part and most imbalanced criteria
             let (most_imbalanced_criterion, part_source) =
                 self.process_imbalance(partition, cweights.clone());
-
-            // Setup search strat
-            let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
 
             // Setup target gain
             let partition_imbalances = self.compute_imbalances(partition, cweights.clone());
@@ -679,7 +707,7 @@ where
                 )
                 .collect();
 
-            let origin = box_handler.box_indices(target_gain);
+            let origin = box_handler.box_indices(target_gain.clone());
             let option_valid_move = box_handler.find_valid_move(
                 &origin,
                 part_source,
@@ -695,6 +723,7 @@ where
                 let mut increase_offset = true;
                 let mut offset = 1;
                 while increase_offset {
+                    // println!("Increasing offset to {}", offset);
                     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
                     if let Some(option_valid_move) = iter_indices
                         .into_iter()
@@ -723,9 +752,9 @@ where
                                 || origin.indices[criterion] + T::from(offset).unwrap()
                                     <= bound_indices.indices[criterion]
                         });
+                        look_for_movement = increase_offset;
                     }
                 }
-                look_for_movement = false;
             }
         }
     }
@@ -761,12 +790,13 @@ where
     //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
     //     // CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
+        println!("Running partition");
         let partition_len = part_ids.iter().count();
-        let weights_len = cweights.clone().into_iter().count();
-        if partition_len != weights_len {
+        let nb_cweights = cweights.clone().into_iter().count();
+        if partition_len != nb_cweights {
             return Err(Error::InputLenMismatch {
                 expected: partition_len,
-                actual: weights_len,
+                actual: nb_cweights,
             });
         }
 
@@ -774,12 +804,69 @@ where
             return Err(Error::BiPartitioningOnly);
         }
 
+        // let nb_criteria = self.parts_target_loads.len();
+        // let cweights_sums =
+        //     cweights
+        //         .into_iter()
+        //         .fold(vec![W::zero(); nb_criteria], |acc, vector| {
+        //             acc.iter()
+        //                 .zip(vector)
+        //                 .map(|(val_0, val_1)| *val_0 + val_1)
+        //                 .collect()
+        //         });
+        // for criterion in 0..nb_criteria {
+        //     if self.parts_target_loads[criterion].iter().sum() != cweights_sums[criterion] {
+        //         Err(panic!(
+        //             "target loads sum does not match weight sum for criterion {}",
+        //             criterion
+        //         ));
+        //     }
+        // }
+
         let mut vec_partition = part_ids.to_vec();
         self.optimize(&mut vec_partition, cweights);
+        for (index, value) in vec_partition.iter().enumerate() {
+            part_ids[index] = *value;
+        }
 
         return Ok(0);
     }
 }
+
+// fn partition(
+//     &mut self,
+//     part_ids: &mut [usize],
+//     (adjacency, weights): (T, &'a [W]),
+// ) -> Result<Self::Metadata, Self::Error> {
+//     if part_ids.is_empty() {
+//         return Ok(Metadata::default());
+//     }
+//     if part_ids.len() != weights.len() {
+//         return Err(Error::InputLenMismatch {
+//             expected: part_ids.len(),
+//             actual: weights.len(),
+//         });
+//     }
+//     if part_ids.len() != adjacency.len() {
+//         return Err(Error::InputLenMismatch {
+//             expected: part_ids.len(),
+//             actual: adjacency.len(),
+//         });
+//     }
+//     if 1 < *part_ids.iter().max().unwrap_or(&0) {
+//         return Err(Error::BiPartitioningOnly);
+//     }
+//     let metadata = fiduccia_mattheyses(
+//         part_ids,
+//         weights,
+//         adjacency,
+//         self.max_passes.unwrap_or(usize::MAX),
+//         self.max_moves_per_pass.unwrap_or(usize::MAX),
+//         self.max_imbalance,
+//         self.max_bad_move_in_a_row,
+//     );
+//     Ok(metadata)
+// }
 
 #[cfg(test)]
 mod tests {
@@ -787,8 +874,8 @@ mod tests {
     use super::*;
 
     struct Instance {
-        pub cweights: Vec<Vec<i32>>,
-        pub nb_intervals: Vec<i32>,
+        pub cweights: Vec<Vec<i64>>,
+        pub nb_intervals: Vec<i64>,
     }
 
     impl Instance {
@@ -808,7 +895,7 @@ mod tests {
 
         // Split with steps 1.0 on the first criterion and 0.5 on the second one.
         let rbh = RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
-        let mut expected_box_indices: Vec<Vec<i32>> = Vec::with_capacity(3);
+        let mut expected_box_indices: Vec<Vec<i64>> = Vec::with_capacity(3);
         expected_box_indices.extend([vec![0, 0], vec![1, 1], vec![2, 1], vec![2, 1]]);
 
         expected_box_indices

@@ -14,6 +14,8 @@ use coupe::sprs::CsMatView;
 use coupe::sprs::CSR;
 use coupe::Partition as _;
 use coupe::PointND;
+use coupe::PositiveInteger;
+use coupe::PositiveWeight;
 use mesh_io::weight;
 use mesh_io::ElementType;
 use mesh_io::Mesh;
@@ -107,6 +109,47 @@ where
     fn to_runner<'a>(&'a mut self, _: &'a Problem<D>) -> Runner<'a> {
         Box::new(move |partition| {
             self.partition(partition, ())?;
+            Ok(None)
+        })
+    }
+}
+
+impl<const D: usize, T, W> ToRunner<D> for coupe::TargetorWIP<T, W>
+where
+    T: PositiveInteger + std::marker::Send + std::marker::Sync,
+    W: PositiveWeight + std::marker::Send + std::marker::Sync,
+    Vec<W>: FromIterator<i64>,
+{
+    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+        use weight::Array::*;
+
+        Box::new(move |partition| {
+            // self.partition(partition, problem.weights)?;
+            // let weights = &problem.weights.iter().map(|weight| weight);
+            // self.partition(partition, weights)?;
+            // Ok(None)
+            match &problem.weights {
+                Integers(is) => {
+                    let weights: Vec<Vec<W>> = is
+                        .iter()
+                        .map(|inner_vec| inner_vec.iter().map(|value| *value).collect())
+                        .collect();
+                    // let weights = is
+                    //     .iter()
+                    //     .map(|weight| Vec<W>::from(*weight))
+                    //     .collect::<Vec<Vec<W>>>(V)
+                    //     .to_vec();
+                    self.partition(partition, weights)?;
+                } // Floats(fs) => {
+                //     //         let weights = fs
+                //     //             .iter()
+                //     //             .map(|inner_vec| inner_vec.iter().map(|&value| W::from(value)).collect())
+                //     //             .collect();
+                //     let weights = fs.iter().map(|weight| *weight);
+                //     self.partition(partition, weights)?;
+                // }
+                Floats(_fs) => (),
+            }
             Ok(None)
         })
     }
@@ -450,46 +493,74 @@ where
             max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
             ..Default::default()
         }),
+
         "targetor" => {
-            let raw_nb_intervals = parse(args.next()).transpose()?;
-            let nb_intervals = raw_nb_intervals.split('-');
-            nb_intervals
-                .iter_mut()
-                .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+            // let raw_nb_intervals = parse(args.next()).transpose()?;
+            // let nb_intervals = vec![2, 3];
+            // let parts_target_loads = vec![vec![10, 10], vec![15, 5]];
+            let mut wip_nb_intervals: Vec<i64> = Vec::new();
+            let mut wip_parts_target_loads: Vec<Vec<i64>> = Vec::new();
+            println!("couocu");
 
-            let raw_parts_target_loads = parse(args.next()).transpose()?;
-            let parts_target_loads = raw_parts_target_loads.split('-');
-            parts_target_loads
-                .iter_mut()
-                .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+            while true {
+                // if let Some(tolerance) = tolerance {
+                //     if tolerance < 0.001 {
+                //         anyhow::bail!("METIS does not support tolerances below 0.001");
+                //     }
+                // }
+                let nb_split: Option<i32> = parse(args.next()).transpose()?;
+                if nb_split.is_none() {
+                    break;
+                }
+                let criterion_load_p0 = parse(args.next()).transpose()?;
+                let criterion_load_p1 = parse(args.next()).transpose()?;
+                if criterion_load_p0.is_none() || criterion_load_p1.is_none() {
+                    panic!("expected three arguments per criterion")
+                }
 
-            let box_handler = RegularBoxHandler {
-                min_weights: vec![],
-                nb_intervals: nb_intervals.into_iter().collect(),
-                deltas: vec![],
-                boxes: BTreeMap::new(),
-            };
+                wip_nb_intervals.push(nb_split.unwrap().into());
+                wip_parts_target_loads
+                    .push(vec![criterion_load_p0.unwrap(), criterion_load_p1.unwrap()]);
+                println!("Added {}", nb_split.unwrap());
+            }
 
-            // let box_handler = RegularBoxHandler::new(instance.cweights, nb_intervals);
+            // let nb_intervals = raw_nb_intervals.unwrap().split('-');
+            // nb_intervals
+            //     .iter_mut()
+            //     .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+
+            // let raw_parts_target_loads = parse(args.next()).transpose()?;
+            // let parts_target_loads = raw_parts_target_loads.split('-');
+            // parts_target_loads
+            //     .iter_mut()
+            //     .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+            // let (_, upper_bound) = args.size_hint();
+            // match upper_bound {
+            //     Some(ub) => {
+            //         println!("{}", ub);
+            //         if ub % 2 != 0 {
+            //             panic!("expected two argument per criterion, got {} in total", ub)
+            //         }
+            //     }
+            //     None => {
+            //         println!("None");
+            //     }
+            // }
+
             // let max_imbalance = parse(args.next()).transpose()?;
             // let max_bad_move_in_a_row = optional(parse(args.next()), 0)?;
             // let mut max_passes = parse(args.next()).transpose()?;
             // if max_passes == Some(0) {
             //     max_passes = None;
             // }
-            // let mut max_moves_per_pass = parse(args.next()).transpose()?;
-            // if max_moves_per_pass == Some(0) {
-            //     max_moves_per_pass = None;
-            // }
-            Box::new(coupe::TargetorWIP {
-                nb_intervals,
-                parts_target_loads,
-                box_handler,
-                // max_imbalance,
-                // max_bad_move_in_a_row,
-                // max_passes,
-                // max_moves_per_pass,
-            })
+
+            Box::new(
+                coupe::TargetorWIP::new(wip_nb_intervals, wip_parts_target_loads), //     coupe::TargetorWIP {
+                                                                                   //     nb_intervals,
+                                                                                   //     parts_target_loads,
+                                                                                   //     None,
+                                                                                   // })
+            )
         }
 
         #[cfg(feature = "metis")]

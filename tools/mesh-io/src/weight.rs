@@ -139,10 +139,10 @@ where
         }
     };
     let criterion_count = first.len();
-    assert!(
-        criterion_count < std::mem::size_of::<u16>(),
-        "Too many criterions",
-    );
+    // assert!(
+    //     criterion_count < std::mem::size_of::<u16>(),
+    //     "Too many criterions",
+    // );
 
     write!(w, "MeWe")?;
     w.write_all(&[VERSION, flags])?;
