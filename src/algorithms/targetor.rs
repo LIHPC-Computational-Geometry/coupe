@@ -13,7 +13,7 @@ type CWeightId = usize;
 type PartId = usize;
 type CriterionId = usize;
 type CWeightMove = (CWeightId, PartId);
-type CachedOptimizeMove<T> = (BoxIndices<T>, PartId, i32);
+type CachedOptimizeMove<T> = (BoxIndices<T>, PartId, usize);
 
 pub trait GainValue:
     Copy
@@ -705,8 +705,7 @@ where
         let mut cached_move: Option<CachedOptimizeMove<T>> = None;
         while look_for_movement {
             // Setup target part and most imbalanced criteria
-            let (most_imbalanced_criterion, part_source) =
-                self.process_imbalance(partition, cweights.clone());
+            let (_, part_source) = self.process_imbalance(partition, cweights.clone());
 
             // Setup target gain
             let partition_imbalances = self.compute_imbalances(partition, cweights.clone());
@@ -740,7 +739,7 @@ where
                 // println!("Moving {} to {}", id_cweight, target_part);
                 partition[id_cweight] = target_part;
             } else {
-                let mut offset = 1;
+                let mut offset: usize = 1;
                 let mut increase_offset = true;
                 match &cached_move {
                     Some((cached_origin, cached_part_taget, cached_offset)) => {
@@ -775,128 +774,34 @@ where
                     {
                         increase_offset = false;
                         let (id_cweight, target_part) = option_valid_move.unwrap();
-                        // print!("Found move with offset {}", offset);
-                        // print!("Moving {} to {}", id_cweight, target_part);
+                        // println!("Found move with offset {}", offset);
+                        // println!("Moving {} to {}", id_cweight, target_part);
                         partition[id_cweight] = target_part;
                         cached_move = Some((origin.clone(), target_part, offset));
                     } else {
                         offset += 1;
-                        let partition_imbalance =
-                            partition_imbalances[most_imbalanced_criterion][part_source];
-                        let bound_indices =
-                            box_handler.box_indices(vec![partition_imbalance; nb_criteria]);
-                        increase_offset = (0..nb_criteria).any(|criterion| {
-                            origin.indices[criterion] - T::from(offset).unwrap() >= T::zero()
-                                || origin.indices[criterion] + T::from(offset).unwrap()
-                                    <= bound_indices.indices[criterion]
-                        });
+                        let mut max_diffs = Vec::new();
+                        for criterion in 0..nb_criteria {
+                            let diff = (T::from(self.nb_intervals[criterion]).unwrap()
+                                - origin.indices[criterion])
+                                .max(
+                                    origin.indices[criterion]
+                                        - T::from(self.nb_intervals[criterion]).unwrap(),
+                                );
+                            if diff > origin.indices[criterion] {
+                                max_diffs.push(diff)
+                            } else {
+                                max_diffs.push(origin.indices[criterion])
+                            }
+                        }
+                        let max_diff = max_diffs.iter().max().unwrap().to_usize().unwrap();
+                        let max_offset = nb_criteria * max_diff;
+                        increase_offset = offset < max_offset;
                         look_for_movement = increase_offset;
                     }
                 }
             }
         }
-
-        // let mut offset = 1;
-        // let mut look_for_movement = true;
-        // let mut res = None;
-
-        // println!("Optimizing");
-        // if self.box_handler.is_none() {
-        //     self.setup_default_box_handler(cweights.clone());
-        // }
-        // let box_handler = self.box_handler.as_ref().unwrap();
-
-        // // Setup search strat
-        // let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
-
-        // // Setup target part and most imbalanced criteria
-        // let (most_imbalanced_criterion, part_source) =
-        //     self.process_imbalance(partition, cweights.clone());
-
-        // // Setup target gain
-        // let partition_imbalances = self.compute_imbalances(partition, cweights.clone());
-        // let nb_criteria = partition_imbalances.len();
-        // let target_gain: Vec<W> = partition_imbalances
-        //     .clone()
-        //     .into_iter()
-        //     .map(
-        //         |criterion_imbalances| match criterion_imbalances[part_source].positive_or() {
-        //             Some(val) => val,
-        //             None => W::zero(),
-        //         },
-        //     )
-        //     .collect();
-        // println!("Target gain {:?}", target_gain);
-
-        // let origin = box_handler.box_indices(target_gain.clone());
-        // println!("Origin = {:?}", origin);
-        // let option_valid_move = box_handler.find_valid_move(
-        //     &origin,
-        //     part_source,
-        //     partition_imbalances.clone(),
-        //     partition,
-        //     cweights.clone(),
-        // );
-
-        // // Look into the origin box
-        // if option_valid_move.is_some() {
-        //     let (id_cweight, target_part) = option_valid_move.unwrap();
-        //     println!("Found move in origin");
-        //     println!("Moving {} to {}", id_cweight, target_part);
-        //     partition[id_cweight] = target_part;
-        //     res = Some((origin.clone(), target_part, 0));
-        //     look_for_movement = false;
-        // }
-        // // Look through the weight boxes
-        // else {
-        //     // Update offset according to cached if needed
-        //     match cached {
-        //         Some((cached_origin, cached_part_taget, cached_offset)) => {
-        //             if cached_origin == origin.clone() && cached_part_taget == (1 - part_source) {
-        //                 offset = cached_offset;
-        //             }
-        //         }
-        //         None => {}
-        //     }
-        // }
-
-        // while look_for_movement {
-        //     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
-        //     if let Some(option_valid_move) = iter_indices
-        //         .into_iter()
-        //         .map(|box_indices| {
-        //             box_handler.find_valid_move(
-        //                 &box_indices,
-        //                 part_source,
-        //                 partition_imbalances.clone(),
-        //                 partition,
-        //                 cweights.clone(),
-        //             )
-        //         })
-        //         .find(|option_valid_move| option_valid_move.is_some())
-        //     {
-        //         let (id_cweight, target_part) = option_valid_move.unwrap();
-        //         println!("Found move with offset {}", offset);
-        //         println!("Moving {} to {}", id_cweight, target_part);
-        //         partition[id_cweight] = target_part;
-        //         res = Some((origin.clone(), target_part, offset));
-        //     } else {
-        //         offset += 1;
-        //         let partition_imbalance =
-        //             partition_imbalances[most_imbalanced_criterion][part_source];
-        //         let bound_indices = box_handler.box_indices(vec![partition_imbalance; nb_criteria]);
-        //         let increase_offset = (0..nb_criteria).any(|criterion| {
-        //             origin.indices[criterion] - T::from(offset).unwrap() >= T::zero()
-        //                 || origin.indices[criterion] + T::from(offset).unwrap()
-        //                     <= bound_indices.indices[criterion]
-        //         });
-        //         look_for_movement = increase_offset;
-        //     }
-        // }
-        // // }
-        // // }
-        // return res;
-        // // }
     }
 }
 
