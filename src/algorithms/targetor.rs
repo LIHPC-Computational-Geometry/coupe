@@ -5,6 +5,7 @@ use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 // use std::error::Error;
 use std::fmt::Debug;
+use std::io::{self, Write};
 use std::ops::IndexMut;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
@@ -12,6 +13,7 @@ type CWeightId = usize;
 type PartId = usize;
 type CriterionId = usize;
 type CWeightMove = (CWeightId, PartId);
+type CachedOptimizeMove<T> = (BoxIndices<T>, PartId, i32);
 
 pub trait GainValue:
     Copy
@@ -110,10 +112,10 @@ pub trait PositiveInteger: PrimInt + Zero + Add<Self, Output = Self> + Debug {}
 impl<T: PrimInt + Zero + Add<Output = Self> + Debug> PositiveInteger for T {}
 
 // // Structure encapsulating the indices associated with a box in the discretised solution space
-#[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Clone)]
 struct BoxIndices<T>
 where
-    T: PositiveInteger,
+    T: PositiveInteger + Clone,
 {
     indices: Vec<T>,
 }
@@ -204,7 +206,7 @@ impl<'a, T: PositiveInteger> SearchStrat<'a, T> for NeighborSearchStrat<T> {
 
 //TODO:Update find_valid_move signature (refs and/or traits needs)
 trait BoxHandler<'a, T: PositiveInteger, W: PositiveWeight> {
-    fn box_indices(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndices<T>;
+    fn box_indices(&self, cweight: impl IntoIterator<Item = W> + Debug) -> BoxIndices<T>;
     fn find_valid_move<CC, CP, CW>(
         &self,
         origin: &'a BoxIndices<T>,
@@ -323,8 +325,8 @@ where
 
     pub fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = T> + Clone) -> Self
     where
-        C: IntoIterator<Item = I> + Clone,
-        I: IntoIterator<Item = W>,
+        C: IntoIterator<Item = I> + Clone + Debug,
+        I: IntoIterator<Item = W> + Debug,
     {
         let boxes: BTreeMap<BoxIndices<T>, Vec<CWeightId>> = BTreeMap::new();
         let mut cweights_iter = cweights.clone().into_iter();
@@ -391,7 +393,7 @@ impl<'a, T: PositiveInteger, W: PositiveWeight> BoxHandler<'a, T, W> for Regular
 where
     W: Sub<W, Output = W> + Zero + ToPrimitive,
 {
-    fn box_indices(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndices<T> {
+    fn box_indices(&self, cweight: impl IntoIterator<Item = W> + Debug) -> BoxIndices<T> {
         let res = BoxIndices::new(
             cweight
                 .into_iter()
@@ -500,14 +502,20 @@ where
     W: PositiveWeight,
 {
     // TODO: Add a builder for generic Repartitioning
-    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
-    where
-        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    fn optimize<CC, CP, CW>(
+        &mut self,
+        partition: &'a mut CP,
+        cweights: CC,
+        // cached: Option<CachedOptimizeMove<T>>,
+        // ) -> Option<CachedOptimizeMove<T>>
+    ) where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW> + Debug,
         CP: IntoIterator<Item = PartId>
             + std::ops::Index<usize, Output = PartId>
             + IndexMut<usize>
-            + Clone,
-        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>;
+            + Clone
+            + Debug,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W> + Debug;
 }
 
 trait PartitionImbalanceHandler<'a, T, W>
@@ -657,8 +665,8 @@ where
 
     pub fn setup_default_box_handler<CC, CW>(&mut self, cweights: CC)
     where
-        CC: IntoIterator<Item = CW> + Clone,
-        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+        CC: IntoIterator<Item = CW> + Clone + Debug,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W> + Debug,
     {
         let box_handler = RegularBoxHandler::new(cweights, self.nb_intervals.clone());
         self.box_handler = Some(box_handler);
@@ -670,14 +678,20 @@ where
     T: PositiveInteger,
     W: PositiveWeight,
 {
-    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
-    where
-        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
+    fn optimize<CC, CP, CW>(
+        &mut self,
+        partition: &'a mut CP,
+        cweights: CC,
+        // cached: Option<CachedOptimizeMove<T>>,
+        // ) -> Option<CachedOptimizeMove<T>>
+    ) where
+        CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW> + Debug,
         CP: IntoIterator<Item = PartId>
             + std::ops::Index<usize, Output = PartId>
             + IndexMut<usize>
-            + Clone,
-        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+            + Clone
+            + Debug,
+        CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W> + Debug,
     {
         if self.box_handler.is_none() {
             self.setup_default_box_handler(cweights.clone());
@@ -688,6 +702,7 @@ where
         let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
 
         let mut look_for_movement = true;
+        let mut cached_move: Option<CachedOptimizeMove<T>> = None;
         while look_for_movement {
             // Setup target part and most imbalanced criteria
             let (most_imbalanced_criterion, part_source) =
@@ -706,8 +721,11 @@ where
                     },
                 )
                 .collect();
+            print!("\rTarget gain {:?}", target_gain);
+            io::stdout().flush().unwrap();
 
             let origin = box_handler.box_indices(target_gain.clone());
+            // println!("Origin = {:?}", origin);
             let option_valid_move = box_handler.find_valid_move(
                 &origin,
                 part_source,
@@ -718,10 +736,27 @@ where
 
             if option_valid_move.is_some() {
                 let (id_cweight, target_part) = option_valid_move.unwrap();
+                // println!("Found move in origin");
+                // println!("Moving {} to {}", id_cweight, target_part);
                 partition[id_cweight] = target_part;
             } else {
-                let mut increase_offset = true;
                 let mut offset = 1;
+                let mut increase_offset = true;
+                match &cached_move {
+                    Some((cached_origin, cached_part_taget, cached_offset)) => {
+                        if cached_origin.clone() == origin.clone()
+                            && *cached_part_taget == (1 - part_source)
+                        {
+                            offset = *cached_offset;
+                        }
+                    }
+                    None => {}
+                }
+                // println!(
+                //     "Move not found with origin, start searching with offset {}",
+                //     offset
+                // );
+
                 while increase_offset {
                     // println!("Increasing offset to {}", offset);
                     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
@@ -740,14 +775,17 @@ where
                     {
                         increase_offset = false;
                         let (id_cweight, target_part) = option_valid_move.unwrap();
+                        // print!("Found move with offset {}", offset);
+                        // print!("Moving {} to {}", id_cweight, target_part);
                         partition[id_cweight] = target_part;
+                        cached_move = Some((origin.clone(), target_part, offset));
                     } else {
                         offset += 1;
                         let partition_imbalance =
                             partition_imbalances[most_imbalanced_criterion][part_source];
                         let bound_indices =
                             box_handler.box_indices(vec![partition_imbalance; nb_criteria]);
-                        increase_offset = (0..nb_criteria).all(|criterion| {
+                        increase_offset = (0..nb_criteria).any(|criterion| {
                             origin.indices[criterion] - T::from(offset).unwrap() >= T::zero()
                                 || origin.indices[criterion] + T::from(offset).unwrap()
                                     <= bound_indices.indices[criterion]
@@ -757,13 +795,115 @@ where
                 }
             }
         }
+
+        // let mut offset = 1;
+        // let mut look_for_movement = true;
+        // let mut res = None;
+
+        // println!("Optimizing");
+        // if self.box_handler.is_none() {
+        //     self.setup_default_box_handler(cweights.clone());
+        // }
+        // let box_handler = self.box_handler.as_ref().unwrap();
+
+        // // Setup search strat
+        // let search_strat = NeighborSearchStrat::new(self.nb_intervals.clone());
+
+        // // Setup target part and most imbalanced criteria
+        // let (most_imbalanced_criterion, part_source) =
+        //     self.process_imbalance(partition, cweights.clone());
+
+        // // Setup target gain
+        // let partition_imbalances = self.compute_imbalances(partition, cweights.clone());
+        // let nb_criteria = partition_imbalances.len();
+        // let target_gain: Vec<W> = partition_imbalances
+        //     .clone()
+        //     .into_iter()
+        //     .map(
+        //         |criterion_imbalances| match criterion_imbalances[part_source].positive_or() {
+        //             Some(val) => val,
+        //             None => W::zero(),
+        //         },
+        //     )
+        //     .collect();
+        // println!("Target gain {:?}", target_gain);
+
+        // let origin = box_handler.box_indices(target_gain.clone());
+        // println!("Origin = {:?}", origin);
+        // let option_valid_move = box_handler.find_valid_move(
+        //     &origin,
+        //     part_source,
+        //     partition_imbalances.clone(),
+        //     partition,
+        //     cweights.clone(),
+        // );
+
+        // // Look into the origin box
+        // if option_valid_move.is_some() {
+        //     let (id_cweight, target_part) = option_valid_move.unwrap();
+        //     println!("Found move in origin");
+        //     println!("Moving {} to {}", id_cweight, target_part);
+        //     partition[id_cweight] = target_part;
+        //     res = Some((origin.clone(), target_part, 0));
+        //     look_for_movement = false;
+        // }
+        // // Look through the weight boxes
+        // else {
+        //     // Update offset according to cached if needed
+        //     match cached {
+        //         Some((cached_origin, cached_part_taget, cached_offset)) => {
+        //             if cached_origin == origin.clone() && cached_part_taget == (1 - part_source) {
+        //                 offset = cached_offset;
+        //             }
+        //         }
+        //         None => {}
+        //     }
+        // }
+
+        // while look_for_movement {
+        //     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
+        //     if let Some(option_valid_move) = iter_indices
+        //         .into_iter()
+        //         .map(|box_indices| {
+        //             box_handler.find_valid_move(
+        //                 &box_indices,
+        //                 part_source,
+        //                 partition_imbalances.clone(),
+        //                 partition,
+        //                 cweights.clone(),
+        //             )
+        //         })
+        //         .find(|option_valid_move| option_valid_move.is_some())
+        //     {
+        //         let (id_cweight, target_part) = option_valid_move.unwrap();
+        //         println!("Found move with offset {}", offset);
+        //         println!("Moving {} to {}", id_cweight, target_part);
+        //         partition[id_cweight] = target_part;
+        //         res = Some((origin.clone(), target_part, offset));
+        //     } else {
+        //         offset += 1;
+        //         let partition_imbalance =
+        //             partition_imbalances[most_imbalanced_criterion][part_source];
+        //         let bound_indices = box_handler.box_indices(vec![partition_imbalance; nb_criteria]);
+        //         let increase_offset = (0..nb_criteria).any(|criterion| {
+        //             origin.indices[criterion] - T::from(offset).unwrap() >= T::zero()
+        //                 || origin.indices[criterion] + T::from(offset).unwrap()
+        //                     <= bound_indices.indices[criterion]
+        //         });
+        //         look_for_movement = increase_offset;
+        //     }
+        // }
+        // // }
+        // // }
+        // return res;
+        // // }
     }
 }
 
 impl<'a, T: PositiveInteger, W: PositiveWeight, CC, CW> crate::Partition<CC> for TargetorWIP<T, W>
 where
-    CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-    CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
+    CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW> + Debug,
+    CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W> + Debug,
 {
     // impl<'a, T: PositiveInteger, W: PositiveWeight, CC> crate::Partition<CC> for TargetorWIP<T, W>
     // where
