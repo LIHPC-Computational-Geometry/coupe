@@ -790,7 +790,6 @@ where
     //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
     //     // CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
-        println!("Running partition");
         let partition_len = part_ids.iter().count();
         let nb_cweights = cweights.clone().into_iter().count();
         if partition_len != nb_cweights {

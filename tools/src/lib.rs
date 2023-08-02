@@ -500,7 +500,6 @@ where
             // let parts_target_loads = vec![vec![10, 10], vec![15, 5]];
             let mut wip_nb_intervals: Vec<i64> = Vec::new();
             let mut wip_parts_target_loads: Vec<Vec<i64>> = Vec::new();
-            println!("couocu");
 
             while true {
                 // if let Some(tolerance) = tolerance {
@@ -521,7 +520,6 @@ where
                 wip_nb_intervals.push(nb_split.unwrap().into());
                 wip_parts_target_loads
                     .push(vec![criterion_load_p0.unwrap(), criterion_load_p1.unwrap()]);
-                println!("Added {}", nb_split.unwrap());
             }
 
             // let nb_intervals = raw_nb_intervals.unwrap().split('-');
