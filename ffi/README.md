@@ -13,11 +13,6 @@ sudo make install
 
 Both a static (`libcoupe.a`) and a dynamic (`libcoupe.so`) library are produced.
 
-**Note:** while we try our best to limit panics, coupe is not free of them. We
-recommend packagers to keep the default `panic = "unwind"` or
-`RUSTFLAGS="-Cpanic=unwind"` flag, so that they can be caught and do not abort
-the whole process.
-
 ## Usage
 
 These bindings target C99, but should work with later versions of the language.

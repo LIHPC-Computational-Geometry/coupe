@@ -67,7 +67,7 @@ where
 }
 
 #[no_mangle]
-pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
+pub extern "C-unwind" fn coupe_strerror(err: Error) -> *const c_char {
     match err {
         Error::Ok => {
             static MSG: &[u8] = b"success\0";
@@ -110,7 +110,7 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
+pub unsafe extern "C-unwind" fn coupe_data_free(data: *mut Data) {
     if !data.is_null() {
         let data = Box::from_raw(data);
         drop(data);
@@ -118,7 +118,11 @@ pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
 }
 
 #[no_mangle]
-pub extern "C" fn coupe_data_array(len: usize, type_: Type, array: *const c_void) -> *mut Data {
+pub extern "C-unwind" fn coupe_data_array(
+    len: usize,
+    type_: Type,
+    array: *const c_void,
+) -> *mut Data {
     let data = Data::Array(data::Array { len, type_, array });
     match box_try_new(data) {
         Some(v) => Box::into_raw(v),
@@ -127,7 +131,11 @@ pub extern "C" fn coupe_data_array(len: usize, type_: Type, array: *const c_void
 }
 
 #[no_mangle]
-pub extern "C" fn coupe_data_constant(len: usize, type_: Type, value: *const c_void) -> *mut Data {
+pub extern "C-unwind" fn coupe_data_constant(
+    len: usize,
+    type_: Type,
+    value: *const c_void,
+) -> *mut Data {
     let data = Data::Constant(data::Constant { len, type_, value });
     match box_try_new(data) {
         Some(v) => Box::into_raw(v),
@@ -136,11 +144,11 @@ pub extern "C" fn coupe_data_constant(len: usize, type_: Type, value: *const c_v
 }
 
 #[no_mangle]
-pub extern "C" fn coupe_data_fn(
+pub extern "C-unwind" fn coupe_data_fn(
     context: *const c_void,
     len: usize,
     type_: Type,
-    i_th: extern "C" fn(*const c_void, usize) -> *const c_void,
+    i_th: extern "C-unwind" fn(*const c_void, usize) -> *const c_void,
 ) -> *mut Data {
     let data = Data::Fn(data::Fn {
         len,
@@ -161,7 +169,7 @@ pub enum Adjncy<'a> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_adjncy_free(adjncy: *mut Adjncy) {
+pub unsafe extern "C-unwind" fn coupe_adjncy_free(adjncy: *mut Adjncy) {
     if !adjncy.is_null() {
         let adjncy = Box::from_raw(adjncy);
         drop(adjncy);
@@ -204,7 +212,7 @@ fn adjncy_ptr(adjacency: Adjncy<'_>) -> *mut Adjncy<'_> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_adjncy_csr(
+pub unsafe extern "C-unwind" fn coupe_adjncy_csr(
     size: usize,
     xadj: *const usize,
     adjncy: *const usize,
@@ -233,7 +241,7 @@ pub unsafe extern "C" fn coupe_adjncy_csr(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_adjncy_csr_unchecked(
+pub unsafe extern "C-unwind" fn coupe_adjncy_csr_unchecked(
     size: usize,
     xadj: *const usize,
     adjncy: *const usize,
@@ -260,7 +268,7 @@ unsafe fn coupe_rcb_d<const D: usize>(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_rcb(
+pub unsafe extern "C-unwind" fn coupe_rcb(
     partition: *mut usize,
     dimension: usize,
     points: *const Data,
@@ -316,7 +324,7 @@ where
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_rib(
+pub unsafe extern "C-unwind" fn coupe_rib(
     partition: *mut usize,
     dimension: usize,
     points: *const Data,
@@ -348,7 +356,7 @@ pub unsafe extern "C" fn coupe_rib(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_hilbert(
+pub unsafe extern "C-unwind" fn coupe_hilbert(
     partition: *mut usize,
     points: *const Data,
     weights: *const Data,
@@ -389,7 +397,7 @@ pub unsafe extern "C" fn coupe_hilbert(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_greedy(
+pub unsafe extern "C-unwind" fn coupe_greedy(
     partition: *mut usize,
     weights: *const Data,
     part_count: usize,
@@ -407,7 +415,7 @@ pub unsafe extern "C" fn coupe_greedy(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_karmarkar_karp(
+pub unsafe extern "C-unwind" fn coupe_karmarkar_karp(
     partition: *mut usize,
     weights: *const Data,
     part_count: usize,
@@ -440,7 +448,7 @@ pub unsafe extern "C" fn coupe_karmarkar_karp(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_karmarkar_karp_complete(
+pub unsafe extern "C-unwind" fn coupe_karmarkar_karp_complete(
     partition: *mut usize,
     weights: *const Data,
     tolerance: f64,
@@ -458,7 +466,7 @@ pub unsafe extern "C" fn coupe_karmarkar_karp_complete(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn coupe_fiduccia_mattheyses(
+pub unsafe extern "C-unwind" fn coupe_fiduccia_mattheyses(
     partition: *mut usize,
     adjncy: *const Adjncy<'_>,
     weights: *const Data,

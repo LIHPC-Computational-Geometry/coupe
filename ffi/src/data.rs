@@ -96,7 +96,7 @@ pub struct Fn {
     pub len: usize,
     pub type_: Type,
     pub context: *const c_void,
-    pub i_th: extern "C" fn(*const c_void, usize) -> *const c_void,
+    pub i_th: extern "C-unwind" fn(*const c_void, usize) -> *const c_void,
 }
 
 unsafe impl Send for Fn {}
