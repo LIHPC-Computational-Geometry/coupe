@@ -6,6 +6,12 @@ pub struct PointND<const D: usize> {
     coords: [i32; D],
 }
 
+impl<const D: usize> Default for PointND<D> {
+    fn default() -> Self {
+        Self { coords: [0; D] }
+    }
+}
+
 pub type Point2D = PointND<2>;
 impl Point2D {
     pub fn new(x: i32, y: i32) -> Self {
