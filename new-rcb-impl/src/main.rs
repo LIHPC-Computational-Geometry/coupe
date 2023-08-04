@@ -1,4 +1,5 @@
 mod bounding_box;
+mod grid;
 mod point_nd;
 
 use crate::bounding_box::BBox2D;
