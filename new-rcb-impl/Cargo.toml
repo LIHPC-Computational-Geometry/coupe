@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cust = { version = "0.3.2", path = "../rust-cuda/crates/cust" }
+cust = { version = "0.3.2", path = "../../rust-cuda/crates/cust" }
 itertools = "0.11.0"
