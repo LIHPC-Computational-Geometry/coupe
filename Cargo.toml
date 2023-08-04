@@ -2,6 +2,7 @@
 members = [
     ".",
     "ffi",
+    "ffi/wrap",
     "tools",
     "tools/mesh-io",
     "tools/mesh-io/ffi",

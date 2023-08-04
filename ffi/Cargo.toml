@@ -21,3 +21,4 @@ crate-type = [
 
 [dependencies]
 coupe = { version = "0.1", path = ".." }
+wrap = { path = "wrap" }

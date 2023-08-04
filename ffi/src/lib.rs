@@ -20,6 +20,7 @@ use std::os::raw::c_char;
 use std::os::raw::c_int;
 use std::ptr;
 use std::slice;
+use wrap::wrap;
 
 #[macro_use]
 mod data;
@@ -268,6 +269,7 @@ unsafe fn coupe_rcb_d<const D: usize>(
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_rcb(
     partition: *mut usize,
     dimension: usize,
@@ -289,14 +291,12 @@ pub unsafe extern "C-unwind" fn coupe_rcb(
         tolerance,
     };
 
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        match dimension {
-            2 => coupe_rcb_d::<2>(partition, points, weights, algo),
-            3 => coupe_rcb_d::<3>(partition, points, weights, algo),
-            _ => Error::BadDimension,
-        }
-    })
+    let partition = slice::from_raw_parts_mut(partition, element_count);
+    match dimension {
+        2 => coupe_rcb_d::<2>(partition, points, weights, algo),
+        3 => coupe_rcb_d::<3>(partition, points, weights, algo),
+        _ => Error::BadDimension,
+    }
 }
 
 unsafe fn coupe_rib_d<const D: usize>(
@@ -324,6 +324,7 @@ where
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_rib(
     partition: *mut usize,
     dimension: usize,
@@ -345,17 +346,16 @@ pub unsafe extern "C-unwind" fn coupe_rib(
         tolerance,
     };
 
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        match dimension {
-            2 => coupe_rib_d::<2>(partition, points, weights, algo),
-            3 => coupe_rib_d::<3>(partition, points, weights, algo),
-            _ => Error::BadDimension,
-        }
-    })
+    let partition = slice::from_raw_parts_mut(partition, element_count);
+    match dimension {
+        2 => coupe_rib_d::<2>(partition, points, weights, algo),
+        3 => coupe_rib_d::<3>(partition, points, weights, algo),
+        _ => Error::BadDimension,
+    }
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_hilbert(
     partition: *mut usize,
     points: *const Data,
@@ -374,29 +374,27 @@ pub unsafe extern "C-unwind" fn coupe_hilbert(
         return Error::BadType;
     }
 
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
+    let partition = slice::from_raw_parts_mut(partition, element_count);
 
-        let points = match points.to_slice::<Point2D>() {
-            Ok(v) => v,
-            Err(_) => return Error::Alloc,
-        };
-        let weights = match weights.to_slice::<f64>() {
-            Ok(v) => v,
-            Err(_) => return Error::Alloc,
-        };
+    let points = match points.to_slice::<Point2D>() {
+        Ok(v) => v,
+        Err(_) => return Error::Alloc,
+    };
+    let weights = match weights.to_slice::<f64>() {
+        Ok(v) => v,
+        Err(_) => return Error::Alloc,
+    };
 
-        let res =
-            coupe::HilbertCurve { part_count, order }.partition(partition, (&*points, weights));
+    let res = coupe::HilbertCurve { part_count, order }.partition(partition, (&*points, weights));
 
-        match res {
-            Ok(()) => Error::Ok,
-            Err(_) => Error::NotFound, // TODO use a proper error code
-        }
-    })
+    match res {
+        Ok(()) => Error::Ok,
+        Err(_) => Error::NotFound, // TODO use a proper error code
+    }
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_greedy(
     partition: *mut usize,
     weights: *const Data,
@@ -404,17 +402,16 @@ pub unsafe extern "C-unwind" fn coupe_greedy(
 ) -> Error {
     let weights = &*weights;
     let element_count = weights.len();
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        let mut algo = coupe::Greedy { part_count };
-        match with_iter!(weights, { algo.partition(partition, weights) }) {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
-        }
-    })
+    let partition = slice::from_raw_parts_mut(partition, element_count);
+    let mut algo = coupe::Greedy { part_count };
+    match with_iter!(weights, { algo.partition(partition, weights) }) {
+        Ok(()) => Error::Ok,
+        Err(err) => Error::from(err),
+    }
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_karmarkar_karp(
     partition: *mut usize,
     weights: *const Data,
@@ -423,31 +420,30 @@ pub unsafe extern "C-unwind" fn coupe_karmarkar_karp(
     let weights = &*weights;
     let element_count = weights.len();
 
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
+    let partition = slice::from_raw_parts_mut(partition, element_count);
 
-        let mut algo = coupe::KarmarkarKarp { part_count };
+    let mut algo = coupe::KarmarkarKarp { part_count };
 
-        let res = match weights.type_() {
-            Type::Int => {
-                with_iter!(weights, c_int, { algo.partition(partition, weights) })
-            }
-            Type::Int64 => {
-                with_iter!(weights, i64, { algo.partition(partition, weights) })
-            }
-            Type::Double => {
-                with_iter!(weights, Real, { algo.partition(partition, weights) })
-            }
-        };
-
-        match res {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
+    let res = match weights.type_() {
+        Type::Int => {
+            with_iter!(weights, c_int, { algo.partition(partition, weights) })
         }
-    })
+        Type::Int64 => {
+            with_iter!(weights, i64, { algo.partition(partition, weights) })
+        }
+        Type::Double => {
+            with_iter!(weights, Real, { algo.partition(partition, weights) })
+        }
+    };
+
+    match res {
+        Ok(()) => Error::Ok,
+        Err(err) => Error::from(err),
+    }
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_karmarkar_karp_complete(
     partition: *mut usize,
     weights: *const Data,
@@ -455,17 +451,16 @@ pub unsafe extern "C-unwind" fn coupe_karmarkar_karp_complete(
 ) -> Error {
     let weights = &*weights;
     let element_count = weights.len();
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        let mut algo = coupe::CompleteKarmarkarKarp { tolerance };
-        match with_iter!(weights, { algo.partition(partition, weights) }) {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
-        }
-    })
+    let partition = slice::from_raw_parts_mut(partition, element_count);
+    let mut algo = coupe::CompleteKarmarkarKarp { tolerance };
+    match with_iter!(weights, { algo.partition(partition, weights) }) {
+        Ok(()) => Error::Ok,
+        Err(err) => Error::from(err),
+    }
 }
 
 #[no_mangle]
+#[wrap(catch_unwind)]
 pub unsafe extern "C-unwind" fn coupe_fiduccia_mattheyses(
     partition: *mut usize,
     adjncy: *const Adjncy<'_>,
@@ -502,16 +497,14 @@ pub unsafe extern "C-unwind" fn coupe_fiduccia_mattheyses(
         _ => return Error::BadType,
     };
 
-    catch_unwind(move || {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
+    let partition = slice::from_raw_parts_mut(partition, element_count);
 
-        let res = with_slice!(weights, {
-            algo.partition(partition, (adjacency, weights.as_ref()))
-        });
+    let res = with_slice!(weights, {
+        algo.partition(partition, (adjacency, weights.as_ref()))
+    });
 
-        match res {
-            Ok(_) => Error::Ok, // TODO use metadata
-            Err(err) => Error::from(err),
-        }
-    })
+    match res {
+        Ok(_) => Error::Ok, // TODO use metadata
+        Err(err) => Error::from(err),
+    }
 }
