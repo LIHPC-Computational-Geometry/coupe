@@ -244,7 +244,17 @@ impl<'a, T: PositiveInteger, W: PositiveWeight> RegularDeltaHandler<'a, T, W>
             .zip(max_weights.into_iter())
             .zip(nb_intervals.into_iter())
             .map(|((min_val, max_val), nb_interval)| {
-                (max_val - min_val).to_f64().unwrap() / nb_interval.to_f64().unwrap()
+                let mut res = f64::zero();
+                if max_val == min_val {
+                    assert_eq!(
+                        T::zero(),
+                        nb_interval,
+                        "zero interval is expected for constant values"
+                    );
+                } else {
+                    res = (max_val - min_val).to_f64().unwrap() / nb_interval.to_f64().unwrap();
+                }
+                res
             })
             .collect();
 
@@ -402,10 +412,17 @@ where
                 .zip(self.deltas.iter())
                 .zip(self.nb_intervals.iter())
                 .map(|((diff, delta), nb_interval)| match diff.positive_or() {
-                    Some(_) => cmp::min(
+                    Some(_) => {
+                        let mut index = T::zero();
+                        // NOTE: Delta is allowed to be zero iff weights are constant
+                        if *delta != f64::zero() {
+                            index = cmp::min(
                         T::from((diff.to_f64().unwrap() / delta).floor()).unwrap(),
                         T::from(*nb_interval - T::from(1).unwrap()).unwrap(),
-                    ),
+                            );
+                        }
+                        index
+                    }
                     None => T::zero(),
                 })
                 .collect(),
@@ -795,7 +812,13 @@ where
                             }
                         }
                         let max_diff = max_diffs.iter().max().unwrap().to_usize().unwrap();
-                        let max_offset = nb_criteria * max_diff;
+                        let nb_cst_crit = self
+                            .nb_intervals
+                            .clone()
+                            .into_iter()
+                            .filter(|&nb_interval| nb_interval == T::zero())
+                            .count();
+                        let max_offset = (nb_criteria - nb_cst_crit) * max_diff;
                         increase_offset = offset < max_offset;
                         look_for_movement = increase_offset;
                     }
