@@ -250,10 +250,7 @@ fn index_fn_3d(points: &[Point3D], order: usize) -> impl Fn(&Point3D) -> u64 {
 ///
 /// Taken from Marot, Célestin. "Parallel tetrahedral mesh generation." Prom:
 /// Remacle, Jean-François <http://hdl.handle.net/2078.1/240626>.
-///
-/// TODO: once const-fn are more mature, take the "order" argument into account,
-/// though it is only set to 6 for the purpose of building the lookup table.
-const fn encode_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, usize) {
+const fn encode_2d_slow(zorder: u64, order: usize, mut config: usize) -> (u64, usize) {
     // BASE_PATTERN[i][j] is the hilbert index given:
     // - i: the current configuration,
     // - j: the quadrant in row-major order.
@@ -278,33 +275,13 @@ const fn encode_2d_slow(zorder: u64, _order: usize, mut config: usize) -> (u64, 
     ];
 
     let mut hilbert = 0;
-
-    // TODO replace unrolled loop by "for i in (0..order).rev()" once for loops
-    // are allowed in const fns.
-    let mut i = 5;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
-    i -= 1;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
-    i -= 1;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
-    i -= 1;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
-    i -= 1;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
-    i -= 1;
-    let quadrant = (zorder >> (2 * i)) as usize & 3;
-    hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
-    config = CONFIGURATION[config][quadrant];
+    let mut i = order;
+    while i > 0 {
+        i -= 1;
+        let quadrant = (zorder >> (2 * i)) as usize & 3;
+        hilbert = (hilbert << 2) | BASE_PATTERN[config][quadrant];
+        config = CONFIGURATION[config][quadrant];
+    }
 
     (hilbert, config)
 }
