@@ -151,7 +151,7 @@ impl<const D: usize> BoundingBox<D> {
                 .iter()
                 .zip(self.p_max.iter())
                 .zip(point.iter())
-                .zip(center.into_iter())
+                .zip(&center)
                 .map(|(((min, max), point), center)| {
                     if point > center {
                         (max - point).abs()
@@ -533,7 +533,7 @@ mod tests {
         let obb = OrientedBoundingBox::from_points(&points).unwrap();
 
         let none = obb.region(&Point3D::from([0., 0., 0.]));
-        let octants = vec![
+        let octants = [
             obb.region(&Point3D::from([1.2, 1.2, 0.3])),
             obb.region(&Point3D::from([5.8, 4.9, 0.3])),
             obb.region(&Point3D::from([0.2, 1.1, 0.3])),
