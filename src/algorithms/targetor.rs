@@ -14,7 +14,7 @@ type CWeightMove = (CWeightId, PartId);
 
 pub trait GainValue:
     Copy
-    + std::fmt::Debug
+    + Debug
     + FromPrimitive
     + ToPrimitive
     + Zero
@@ -26,7 +26,7 @@ pub trait GainValue:
 
 impl<T> GainValue for T
 where
-    Self: Copy + std::fmt::Debug,
+    Self: Copy + Debug,
     Self: FromPrimitive + ToPrimitive + Zero,
     Self: Add<Output = Self>,
     Self: Sub<Output = Self>,
@@ -125,9 +125,7 @@ where
 
 impl<'a, T: PositiveInteger> SearchStrat<'a, T> for NeighborSearchStrat<T> {
     fn new(nb_intervals: Vec<T>) -> Self {
-        let out = Self {
-            nb_intervals: nb_intervals,
-        };
+        let out = Self { nb_intervals };
 
         out
     }
@@ -321,8 +319,8 @@ where
         let mut res = Self {
             min_weights: min_values,
             nb_intervals: nb_intervals.into_iter().collect(),
-            deltas: deltas,
-            boxes: boxes,
+            deltas,
+            boxes,
         };
 
         cweights_iter = cweights.clone().into_iter();
@@ -852,11 +850,10 @@ mod tests {
                     &partition.clone(),
                     instance.cweights.clone(),
                 );
-                assert!(
-                    *expected_move == candidate_move,
+                assert_eq!(
+                    *expected_move, candidate_move,
                     "Moves are not equal. Expected {:?} but returned {:?} ",
-                    *expected_move,
-                    candidate_move,
+                    *expected_move, candidate_move
                 );
             });
     }
@@ -883,11 +880,10 @@ mod tests {
         //     expected_partition_res,
         //     targetor.partition
         // );
-        assert!(
-            partition == expected_partition_res,
+        assert_eq!(
+            partition, expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
-            expected_partition_res,
-            partition
+            expected_partition_res, partition
         );
     }
 
@@ -912,11 +908,10 @@ mod tests {
 
         targetor.optimize(&mut partition, instance.cweights.clone());
         let expected_partition_res = vec![0, 0, 0, 1];
-        assert!(
-            partition == expected_partition_res,
+        assert_eq!(
+            partition, expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
-            expected_partition_res,
-            partition
+            expected_partition_res, partition
         );
     }
 }
