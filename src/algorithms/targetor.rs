@@ -77,7 +77,7 @@ pub trait PositiveInteger: PrimInt + Zero + Add<Self, Output = Self> + Debug {}
 
 impl<T: PrimInt + Zero + Add<Output = Self> + Debug> PositiveInteger for T {}
 
-// // Structure encapsulating the indices associated with a box in the discretised solution space
+// Structure encapsulating the indices associated with a box in the discrete solution space
 #[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct BoxIndices<T>
 where
@@ -686,15 +686,14 @@ where
                 cweights.clone(),
             );
 
-            if option_valid_move.is_some() {
-                let (id_cweight, target_part) = option_valid_move.unwrap();
+            if let Some((id_cweight, target_part)) = option_valid_move {
                 partition[id_cweight] = target_part;
             } else {
                 let mut increase_offset = true;
                 let mut offset = 1;
                 while increase_offset {
                     let iter_indices = search_strat.gen_indices(&origin, T::from(offset).unwrap());
-                    if let Some(option_valid_move) = iter_indices
+                    let option_valid_move = iter_indices
                         .into_iter()
                         .map(|box_indices| {
                             box_handler.find_valid_move(
@@ -705,10 +704,9 @@ where
                                 cweights.clone(),
                             )
                         })
-                        .find(|option_valid_move| option_valid_move.is_some())
-                    {
+                        .find_map(|option_valid_move| option_valid_move);
+                    if let Some((id_cweight, target_part)) = option_valid_move {
                         increase_offset = false;
-                        let (id_cweight, target_part) = option_valid_move.unwrap();
                         partition[id_cweight] = target_part;
                     } else {
                         offset += 1;
