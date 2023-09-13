@@ -4,7 +4,7 @@ use num_traits::{ToPrimitive, Zero};
 use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::ops::{AddAssign, Deref, DerefMut, Sub, SubAssign};
+use std::ops::{AddAssign, Sub, SubAssign};
 use std::ops::{IndexMut, RangeInclusive};
 
 type CWeightId = usize;
@@ -12,6 +12,13 @@ type PartId = usize;
 type CriterionId = usize;
 type CWeightMove = (CWeightId, PartId);
 type BoxOneIndex = u32;
+
+mod multi_weights;
+use multi_weights::MultiWeights;
+
+mod discrete_box;
+use crate::algorithms::targetor::discrete_box::IterBoxIndices;
+use discrete_box::BoxIndex;
 
 pub trait PositiveWeight:
     Sized
@@ -37,54 +44,6 @@ impl PositiveWeight for i32 {
         } else {
             None
         }
-    }
-}
-
-#[derive(PartialOrd, PartialEq, Ord, Eq, Debug)]
-struct BoxIndex<const NUM_CRITERIA: usize>([BoxOneIndex; NUM_CRITERIA]);
-
-impl<const NUM_CRITERIA: usize> Deref for BoxIndex<NUM_CRITERIA> {
-    type Target = [BoxOneIndex; NUM_CRITERIA];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<const NUM_CRITERIA: usize> DerefMut for BoxIndex<NUM_CRITERIA> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<const NUM_CRITERIA: usize> From<[BoxOneIndex; NUM_CRITERIA]> for BoxIndex<NUM_CRITERIA> {
-    fn from(value: [BoxOneIndex; NUM_CRITERIA]) -> Self {
-        Self(value)
-    }
-}
-
-impl<const NUM_CRITERIA: usize> TryFrom<&[u32]> for BoxIndex<NUM_CRITERIA> {
-    type Error = std::array::TryFromSliceError;
-
-    fn try_from(value: &[u32]) -> Result<Self, Self::Error> {
-        Ok(Self(value.try_into()?))
-    }
-}
-
-impl<const NUM_CRITERIA: usize> Default for BoxIndex<NUM_CRITERIA> {
-    fn default() -> Self {
-        Self([BoxOneIndex::zero(); NUM_CRITERIA])
-    }
-}
-
-struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
-    inner: Box<dyn Iterator<Item = BoxIndex<NUM_CRITERIA>> + 'a>,
-}
-impl<'a, const NUM_CRITERIA: usize> Iterator for IterBoxIndices<'a, NUM_CRITERIA> {
-    type Item = BoxIndex<NUM_CRITERIA>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
     }
 }
 
@@ -131,7 +90,8 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
                 indices.iter().map(|i| i.abs()).sum::<isize>() == dist.to_isize().unwrap()
             })
             .map(move |indices| {
-                let mut box_indices = BoxIndex([BoxOneIndex::zero(); NUM_CRITERIA]);
+                let mut box_indices: BoxIndex<NUM_CRITERIA> =
+                    [BoxOneIndex::zero(); NUM_CRITERIA].into();
                 (0..NUM_CRITERIA).for_each(|criterion| {
                     box_indices[criterion] =
                         (indices[criterion] + (origin[criterion] as isize)) as BoxOneIndex;
@@ -142,61 +102,6 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
         IterBoxIndices {
             inner: Box::new(indices_generator.into_iter()),
         }
-    }
-}
-
-#[derive(PartialOrd, PartialEq, Ord, Eq, Debug, Copy, Clone)]
-struct MultiWeights<W, const NUM_CRITERIA: usize>([W; NUM_CRITERIA]);
-
-impl<W, const NUM_CRITERIA: usize> Deref for MultiWeights<W, NUM_CRITERIA> {
-    type Target = [W; NUM_CRITERIA];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<W, const NUM_CRITERIA: usize> DerefMut for MultiWeights<W, NUM_CRITERIA> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<W, const NUM_CRITERIA: usize> From<[W; NUM_CRITERIA]> for MultiWeights<W, NUM_CRITERIA> {
-    fn from(value: [W; NUM_CRITERIA]) -> Self {
-        Self(value)
-    }
-}
-
-impl<'a, W, const NUM_CRITERIA: usize> TryFrom<&'a [W]> for MultiWeights<W, NUM_CRITERIA>
-where
-    [W; NUM_CRITERIA]: TryFrom<&'a [W]>,
-{
-    type Error = <[W; NUM_CRITERIA] as TryFrom<&'a [W]>>::Error;
-
-    fn try_from(value: &'a [W]) -> Result<Self, Self::Error> {
-        Ok(Self(value.try_into()?))
-    }
-}
-
-impl<W, const NUM_CRITERIA: usize> Default for MultiWeights<W, NUM_CRITERIA>
-where
-    W: Zero + Copy,
-{
-    fn default() -> Self {
-        Self([W::zero(); NUM_CRITERIA])
-    }
-}
-
-impl<W, const NUM_CRITERIA: usize> SubAssign for MultiWeights<W, NUM_CRITERIA>
-where
-    W: SubAssign + Copy,
-{
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0
-            .iter_mut()
-            .zip(rhs.0.iter())
-            .for_each(|(me, other)| *me -= *other);
     }
 }
 
