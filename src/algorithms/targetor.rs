@@ -167,16 +167,14 @@ trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
         max_weights: impl IntoIterator<Item = W>,
         nb_intervals: impl IntoIterator<Item = BoxIndex>,
     ) -> Vec<f64> {
-        let res = min_weights
+        min_weights
             .into_iter()
-            .zip(max_weights.into_iter())
-            .zip(nb_intervals.into_iter())
+            .zip(max_weights)
+            .zip(nb_intervals)
             .map(|((min_val, max_val), nb_interval)| {
                 (max_val - min_val).to_f64().unwrap() / nb_interval.to_f64().unwrap()
             })
-            .collect();
-
-        res
+            .collect()
     }
 }
 
@@ -307,7 +305,7 @@ where
     }
 }
 
-impl<'a, W, const NUM_CRITERIA: usize> Debug for RegularBoxHandler<W, NUM_CRITERIA>
+impl<W, const NUM_CRITERIA: usize> Debug for RegularBoxHandler<W, NUM_CRITERIA>
 where
     W: PositiveWeight,
 {
@@ -392,8 +390,8 @@ where
         let strict_positive_gain = |id| {
             max_imbalances
                 .iter()
-                .zip(cweights[id].clone().into_iter())
-                .zip(partition_imbalances.clone().into_iter())
+                .zip(cweights[id].clone())
+                .zip(partition_imbalances.clone())
                 // .map(|((max, cweight), criterion_imbalances)| {
                 //     *max == partition_imbalance
                 //         && cweight >= (partition_imbalance + partition_imbalance)
@@ -559,7 +557,7 @@ where
     }
 }
 
-impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> {
+impl<W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> {
     //FIXME:Allow partition imbalance to be composed of float values while cweights are integers
     pub fn new<CC, CT, CW>(
         // partition: Vec<PartId>,
@@ -584,8 +582,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITER
                     .unwrap()
             })
             .collect();
-
-        let res = Self {
+        Self {
             nb_intervals: nb_intervals
                 .into_iter()
                 .collect::<Vec<_>>()
@@ -593,9 +590,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITER
                 .unwrap(),
             parts_target_loads: res_target_loads,
             box_handler: None,
-        };
-
-        res
+        }
     }
 
     pub fn setup_default_box_handler<CC, CW>(&mut self, cweights: CC)
@@ -705,7 +700,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
     }
 }
 
-impl<'a, W: PositiveWeight, CC, CW, const NUM_CRITERIA: usize> crate::Partition<CC>
+impl<W: PositiveWeight, CC, CW, const NUM_CRITERIA: usize> crate::Partition<CC>
     for TargetorWIP<W, NUM_CRITERIA>
 where
     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
@@ -752,7 +747,7 @@ where
         let mut vec_partition = part_ids.to_vec();
         self.optimize(&mut vec_partition, cweights);
 
-        return Ok(0);
+        Ok(0)
     }
 }
 
