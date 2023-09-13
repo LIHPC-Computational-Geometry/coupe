@@ -47,23 +47,12 @@ pub trait PositiveWeight:
     + SubAssign
     + AddAssign
 {
-    fn try_into_positive(self) -> Result<Self, NonPositiveError>;
     fn positive_or(self) -> Option<Self>;
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct NonPositiveError;
-
 // For the moment we only implement this for i32 values
+// FIXME: should not be implemented for signed type!
 impl PositiveWeight for i32 {
-    fn try_into_positive(self) -> Result<Self, NonPositiveError> {
-        if self >= 0 {
-            Ok(self)
-        } else {
-            Err(NonPositiveError)
-        }
-    }
-
     fn positive_or(self) -> Option<Self> {
         if self >= 0 {
             Some(self)
@@ -80,9 +69,9 @@ struct BoxIndices<const NUM_CRITERIA: usize> {
 }
 
 impl<const NUM_CRITERIA: usize> BoxIndices<NUM_CRITERIA> {
-    fn new(indices: Vec<BoxIndex>) -> Self {
+    fn new(indices: &[BoxIndex]) -> Self {
         Self {
-            indices: indices.as_slice().try_into().unwrap(),
+            indices: indices.try_into().unwrap(),
         }
     }
 }
@@ -196,10 +185,11 @@ where
     W: PositiveWeight,
 {
     // Values related to the instance to be improved
-    min_weights: Vec<W>,
-    // Parameters related to the discretization of the solution space
-    nb_intervals: Vec<BoxIndex>,
-    deltas: Vec<f64>,
+    min_weights: [W; NUM_CRITERIA],
+    // How many boxes for the discrete solution space
+    nb_intervals: [BoxIndex; NUM_CRITERIA],
+    // Discrete steps, depending on the criterion
+    deltas: [f64; NUM_CRITERIA],
     // Mapping used to search moves of specific gain from a discretization of the cweight space
     pub boxes: BTreeMap<BoxIndices<NUM_CRITERIA>, Vec<CWeightId>>,
 }
@@ -290,9 +280,14 @@ where
             Self::process_deltas(min_values.clone(), max_values.clone(), nb_intervals.clone());
 
         let mut res = Self {
-            min_weights: min_values,
-            nb_intervals: nb_intervals.into_iter().collect(),
-            deltas,
+            min_weights: min_values.as_slice().try_into().unwrap(),
+            nb_intervals: nb_intervals
+                .into_iter()
+                .collect::<Vec<_>>()
+                .as_slice()
+                .try_into()
+                .unwrap(),
+            deltas: deltas.as_slice().try_into().unwrap(),
             boxes,
         };
 
@@ -345,7 +340,8 @@ where
                     ),
                     None => 0u32,
                 })
-                .collect(),
+                .collect::<Vec<_>>()
+                .as_slice(),
         );
 
         res
@@ -810,12 +806,12 @@ mod tests {
         let partition = vec![part_source; instance.cweights.len()];
         let partition_imbalances = vec![[10, -10], [9, -8]];
         let space_box_indices = vec![
-            BoxIndices::new(vec![0, 0]),
-            BoxIndices::new(vec![1, 0]),
-            BoxIndices::new(vec![2, 0]),
-            BoxIndices::new(vec![0, 1]),
-            BoxIndices::new(vec![1, 1]),
-            BoxIndices::new(vec![2, 1]),
+            BoxIndices::new(&[0, 0]),
+            BoxIndices::new(&[1, 0]),
+            BoxIndices::new(&[2, 0]),
+            BoxIndices::new(&[0, 1]),
+            BoxIndices::new(&[1, 1]),
+            BoxIndices::new(&[2, 1]),
         ];
         let iter_box_indices = space_box_indices.iter();
 
