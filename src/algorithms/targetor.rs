@@ -77,8 +77,6 @@ impl<const NUM_CRITERIA: usize> Default for BoxIndex<NUM_CRITERIA> {
     }
 }
 
-type MultiWeights<W, const NUM_CRITERIA: usize> = [W; NUM_CRITERIA];
-
 struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
     inner: Box<dyn Iterator<Item = BoxIndex<NUM_CRITERIA>> + 'a>,
 }
@@ -147,6 +145,61 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
     }
 }
 
+#[derive(PartialOrd, PartialEq, Ord, Eq, Debug, Copy, Clone)]
+struct MultiWeights<W, const NUM_CRITERIA: usize>([W; NUM_CRITERIA]);
+
+impl<W, const NUM_CRITERIA: usize> Deref for MultiWeights<W, NUM_CRITERIA> {
+    type Target = [W; NUM_CRITERIA];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<W, const NUM_CRITERIA: usize> DerefMut for MultiWeights<W, NUM_CRITERIA> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<W, const NUM_CRITERIA: usize> From<[W; NUM_CRITERIA]> for MultiWeights<W, NUM_CRITERIA> {
+    fn from(value: [W; NUM_CRITERIA]) -> Self {
+        Self(value)
+    }
+}
+
+impl<'a, W, const NUM_CRITERIA: usize> TryFrom<&'a [W]> for MultiWeights<W, NUM_CRITERIA>
+where
+    [W; NUM_CRITERIA]: TryFrom<&'a [W]>,
+{
+    type Error = <[W; NUM_CRITERIA] as TryFrom<&'a [W]>>::Error;
+
+    fn try_from(value: &'a [W]) -> Result<Self, Self::Error> {
+        Ok(Self(value.try_into()?))
+    }
+}
+
+impl<W, const NUM_CRITERIA: usize> Default for MultiWeights<W, NUM_CRITERIA>
+where
+    W: Zero + Copy,
+{
+    fn default() -> Self {
+        Self([W::zero(); NUM_CRITERIA])
+    }
+}
+
+impl<W, const NUM_CRITERIA: usize> SubAssign for MultiWeights<W, NUM_CRITERIA>
+where
+    W: SubAssign + Copy,
+{
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0
+            .iter_mut()
+            .zip(rhs.0.iter())
+            .for_each(|(me, other)| *me -= *other);
+    }
+}
+
 //TODO:Update find_valid_move signature (refs and/or traits needs)
 /// Discrete weight space access
 trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
@@ -202,8 +255,9 @@ where
         let boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>> = BTreeMap::new();
         let mut weights_iter = weights.clone().into_iter();
         let first_weight = weights_iter.next().unwrap();
-        let mut min_values = [first_weight.into_iter().next().unwrap(); NUM_CRITERIA];
-        let mut max_values = min_values.clone();
+        let mut min_values: MultiWeights<W, NUM_CRITERIA> =
+            [first_weight.into_iter().next().unwrap(); NUM_CRITERIA].into();
+        let mut max_values: MultiWeights<W, NUM_CRITERIA> = min_values;
 
         for weight in weights_iter {
             weight
@@ -444,11 +498,9 @@ where
         CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone,
     {
-        let mut res: [MultiWeights<W, NUM_CRITERIA>; 2] = [[W::zero(); NUM_CRITERIA]; 2];
-        for criterion in 0..NUM_CRITERIA {
-            for part in 0..2 {
-                res[criterion][part] -= self.parts_target_loads[criterion][part];
-            }
+        let mut res: [MultiWeights<W, NUM_CRITERIA>; 2] = [Default::default(); 2];
+        for part in 0..2 {
+            res[part] -= self.parts_target_loads[part];
         }
 
         let weights_iter = weights.clone().into_iter();
@@ -460,7 +512,7 @@ where
                 weight
                     .into_iter()
                     .enumerate()
-                    .for_each(|(criterion, weight)| res[criterion][part] += weight)
+                    .for_each(|(criterion, weight)| res[part][criterion] += weight)
             });
         res.to_vec()
     }
@@ -522,6 +574,7 @@ impl<W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> 
                 criterion_target_loads
                     .into_iter()
                     .collect::<Vec<_>>()
+                    .as_slice()
                     .try_into()
                     .unwrap()
             })
@@ -727,7 +780,7 @@ mod tests {
 
         let part_source = 0;
         let partition = vec![part_source; instance.cweights.len()];
-        let partition_imbalances = vec![[10, -10], [9, -8]];
+        let partition_imbalances = vec![[10, -10].into(), [9, -8].into()];
         let space_box_indices: Vec<BoxIndex<2>> = vec![
             [0, 0].into(),
             [1, 0].into(),
