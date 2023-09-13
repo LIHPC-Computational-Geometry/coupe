@@ -40,11 +40,7 @@ impl PositiveWeight for i32 {
     }
 }
 
-// Structure encapsulating the indices associated with a box in the discrete solution space
-#[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-struct BoxIndex<const NUM_CRITERIA: usize> {
-    indices: [BoxOneIndex; NUM_CRITERIA],
-}
+type BoxIndex<const NUM_CRITERIA: usize> = [BoxOneIndex; NUM_CRITERIA];
 
 struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
     inner: Box<dyn Iterator<Item = BoxIndex<NUM_CRITERIA>> + 'a>,
@@ -85,15 +81,10 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
         // Compute a priori admissible displacement around origin
         let mut displacements = [EMPTY_RANGE; NUM_CRITERIA];
         for (criterion, displacement) in displacements.iter_mut().enumerate().take(NUM_CRITERIA) {
-            let lower_disp = -cmp::min(dist, origin.indices[criterion])
+            let lower_disp = -cmp::min(dist, origin[criterion]).to_isize().unwrap();
+            let upper_disp = cmp::min(dist, self.nb_intervals[criterion] - origin[criterion])
                 .to_isize()
                 .unwrap();
-            let upper_disp = cmp::min(
-                dist,
-                self.nb_intervals[criterion] - origin.indices[criterion],
-            )
-            .to_isize()
-            .unwrap();
             *displacement = lower_disp..=upper_disp;
         }
 
@@ -108,11 +99,9 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
                 let mut box_indices = [BoxOneIndex::zero(); NUM_CRITERIA];
                 (0..NUM_CRITERIA).for_each(|criterion| {
                     box_indices[criterion] =
-                        (indices[criterion] + (origin.indices[criterion] as isize)) as BoxOneIndex;
+                        (indices[criterion] + (origin[criterion] as isize)) as BoxOneIndex;
                 });
-                BoxIndex {
-                    indices: box_indices,
-                }
+                box_indices
             });
 
         IterBoxIndices {
@@ -245,8 +234,8 @@ where
 {
     // This function can be simpler as it is a regular decomposition of weight space
     fn box_index(&self, weight: impl IntoIterator<Item = W>) -> BoxIndex<NUM_CRITERIA> {
-        BoxIndex::<NUM_CRITERIA> {
-            indices: weight
+        {
+            weight
                 .into_iter()
                 .zip(self.min_weights.iter())
                 .map(|(val, min)| val - *min)
@@ -262,7 +251,7 @@ where
                 .collect::<Vec<_>>()
                 .as_slice()
                 .try_into()
-                .unwrap(),
+                .unwrap()
         }
     }
 
@@ -613,9 +602,8 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
                         let bound_indices =
                             box_handler.box_index(vec![partition_imbalance; nb_criteria]);
                         increase_offset = (0..nb_criteria).all(|criterion| {
-                            (origin.indices[criterion] as isize - offset as isize).is_positive()
-                                || origin.indices[criterion] + offset
-                                    <= bound_indices.indices[criterion]
+                            (origin[criterion] as isize - offset as isize).is_positive()
+                                || origin[criterion] + offset <= bound_indices[criterion]
                         });
                     }
                 }
@@ -698,7 +686,7 @@ mod tests {
                 assert!(
                     box_indices
                         .iter()
-                        .zip(values.indices.iter())
+                        .zip(values.iter())
                         .all(|(expected_val, computed_val)| expected_val == computed_val),
                     "Indices are not equal {:?}, {:?} ",
                     box_indices,
@@ -709,14 +697,8 @@ mod tests {
         let part_source = 0;
         let partition = vec![part_source; instance.cweights.len()];
         let partition_imbalances = vec![[10, -10], [9, -8]];
-        let space_box_indices = vec![
-            BoxIndex { indices: [0, 0] },
-            BoxIndex { indices: [1, 0] },
-            BoxIndex { indices: [2, 0] },
-            BoxIndex { indices: [0, 1] },
-            BoxIndex { indices: [1, 1] },
-            BoxIndex { indices: [2, 1] },
-        ];
+        let space_box_indices: Vec<BoxIndex<2>> =
+            vec![[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]];
         let iter_box_indices = space_box_indices.iter();
 
         let expected_moves = vec![Some((0, 1)), None, None, None, Some((1, 1)), Some((2, 1))];
