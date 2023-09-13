@@ -197,57 +197,6 @@ impl<W, const NUM_CRITERIA: usize> RegularBoxHandler<W, NUM_CRITERIA>
 where
     W: PositiveWeight,
 {
-    // pub fn setup_from_instance<C, I>(&mut self, cweights: C)
-    // where
-    //     C: IntoIterator<Item = I> + Clone,
-    //     I: IntoIterator<Item = W>,
-    // {
-    //     let mut cweights_iter = cweights.clone().into_iter();
-    //     let first_cweight = cweights_iter.next().unwrap();
-    //     let mut min_values = first_cweight.into_iter().collect::<Vec<_>>();
-    //     let mut max_values = min_values.clone();
-
-    //     // Set up min_weights
-    //     for cweight in cweights_iter {
-    //         cweight
-    //             .into_iter()
-    //             .zip(min_values.iter_mut())
-    //             .zip(max_values.iter_mut())
-    //             .for_each(|((current_val, min_val), max_val)| {
-    //                 if current_val < *min_val {
-    //                     *min_val = current_val.clone();
-    //                 }
-    //                 if current_val > *max_val {
-    //                     *max_val = current_val.clone();
-    //                 }
-    //             })
-    //     }
-    //     self.min_weights = min_values.clone();
-
-    //     // Set up regular deltas
-    //     let deltas = Self::process_deltas(
-    //         min_values.clone(),
-    //         max_values.clone(),
-    //         self.nb_intervals.clone(),
-    //     );
-    //     self.deltas = deltas;
-
-    //     // Set up boxes mapping
-    //     let boxes: BTreeMap<BoxIndices<T>, Vec<CWeightId>> = BTreeMap::new();
-    //     cweights_iter = cweights.clone().into_iter();
-    //     cweights_iter.enumerate().for_each(|(cweight_id, cweight)| {
-    //         let indices: BoxIndices<T> = Self::box_indices(self, cweight);
-    //         match self.boxes.get_mut(&indices) {
-    //             Some(vect_box_indices) => vect_box_indices.push(cweight_id),
-    //             None => {
-    //                 let vect_box_indices: Vec<usize> = vec![cweight_id];
-    //                 self.boxes.insert(indices, vect_box_indices);
-    //             }
-    //         }
-    //     });
-    //     self.boxes = boxes;
-    // }
-
     pub fn new<C, I>(cweights: C, nb_intervals: impl IntoIterator<Item = BoxIndex> + Clone) -> Self
     where
         C: IntoIterator<Item = I> + Clone,
@@ -392,14 +341,6 @@ where
                 .iter()
                 .zip(cweights[id].clone())
                 .zip(partition_imbalances.clone())
-                // .map(|((max, cweight), criterion_imbalances)| {
-                //     *max == partition_imbalance
-                //         && cweight >= (partition_imbalance + partition_imbalance)
-                //         || *max != partition_imbalance
-                //             && cweight
-                //                 >= partition_imbalance - criterion_imbalances[1 - part_source]
-                // })
-                // .any(|invalid_gain| !invalid_gain)
                 .map(|((max, cweight), criterion_imbalances)| {
                     *max == partition_imbalance
                         && cweight < (partition_imbalance + partition_imbalance)
