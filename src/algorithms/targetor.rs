@@ -11,7 +11,7 @@ type CWeightId = usize;
 type PartId = usize;
 type CriterionId = usize;
 type CWeightMove = (CWeightId, PartId);
-type BoxIndex = u32;
+type BoxOneIndex = u32;
 
 pub trait PositiveWeight:
     Sized
@@ -42,22 +42,15 @@ impl PositiveWeight for i32 {
 
 // Structure encapsulating the indices associated with a box in the discrete solution space
 #[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-struct BoxIndices<const NUM_CRITERIA: usize> {
-    indices: [BoxIndex; NUM_CRITERIA],
+struct BoxIndex<const NUM_CRITERIA: usize> {
+    indices: [BoxOneIndex; NUM_CRITERIA],
 }
 
-impl<const NUM_CRITERIA: usize> BoxIndices<NUM_CRITERIA> {
-    fn new(indices: &[BoxIndex]) -> Self {
-        Self {
-            indices: indices.try_into().unwrap(),
-        }
-    }
-}
 struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
-    inner: Box<dyn Iterator<Item = BoxIndices<NUM_CRITERIA>> + 'a>,
+    inner: Box<dyn Iterator<Item = BoxIndex<NUM_CRITERIA>> + 'a>,
 }
 impl<'a, const NUM_CRITERIA: usize> Iterator for IterBoxIndices<'a, NUM_CRITERIA> {
-    type Item = BoxIndices<NUM_CRITERIA>;
+    type Item = BoxIndex<NUM_CRITERIA>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -69,13 +62,13 @@ trait SearchStrat<'a, const NUM_CRITERIA: usize> {
     /// Generate indices that are at a distance dist from origin
     fn gen_indices(
         &'a self,
-        origin: &'a BoxIndices<NUM_CRITERIA>,
-        dist: BoxIndex,
+        origin: &'a BoxIndex<NUM_CRITERIA>,
+        dist: BoxOneIndex,
     ) -> IterBoxIndices<'a, NUM_CRITERIA>;
 }
 
 struct NeighborSearchStrat<const NUM_CRITERIA: usize> {
-    nb_intervals: [BoxIndex; NUM_CRITERIA],
+    nb_intervals: [BoxOneIndex; NUM_CRITERIA],
 }
 
 const EMPTY_RANGE: RangeInclusive<isize> = 0..=0;
@@ -86,8 +79,8 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
     /// Generate indices that are located at distance at dist from origin
     fn gen_indices(
         &self,
-        origin: &'a BoxIndices<NUM_CRITERIA>,
-        dist: BoxIndex,
+        origin: &'a BoxIndex<NUM_CRITERIA>,
+        dist: BoxOneIndex,
     ) -> IterBoxIndices<'a, NUM_CRITERIA> {
         // Compute a priori admissible displacement around origin
         let mut displacements = [EMPTY_RANGE; NUM_CRITERIA];
@@ -112,12 +105,12 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
                 indices.iter().map(|i| i.abs()).sum::<isize>() == dist.to_isize().unwrap()
             })
             .map(move |indices| {
-                let mut box_indices = [BoxIndex::zero(); NUM_CRITERIA];
+                let mut box_indices = [BoxOneIndex::zero(); NUM_CRITERIA];
                 (0..NUM_CRITERIA).for_each(|criterion| {
                     box_indices[criterion] =
-                        (indices[criterion] + (origin.indices[criterion] as isize)) as BoxIndex;
+                        (indices[criterion] + (origin.indices[criterion] as isize)) as BoxOneIndex;
                 });
-                BoxIndices {
+                BoxIndex {
                     indices: box_indices,
                 }
             });
@@ -132,12 +125,12 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
 /// Discrete weight space access
 trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
     /// Compute the index of the box that contains a given point
-    fn box_indices(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndices<NUM_CRITERIA>;
+    fn box_index(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndex<NUM_CRITERIA>;
 
     /// Find a valid move
     fn find_valid_move<CC, CP, CW>(
         &self,
-        origin: &'a BoxIndices<NUM_CRITERIA>,
+        origin: &'a BoxIndex<NUM_CRITERIA>,
         part_source: PartId,
         partition_imbalances: Vec<[W; NUM_CRITERIA]>,
         partition: &'a CP,
@@ -152,7 +145,7 @@ trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
     fn process_deltas(
         min_weights: [W; NUM_CRITERIA],
         max_weights: [W; NUM_CRITERIA],
-        nb_intervals: [BoxIndex; NUM_CRITERIA],
+        nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     ) -> [f64; NUM_CRITERIA];
 }
 
@@ -163,11 +156,11 @@ where
     // Values related to the instance to be improved
     min_weights: [W; NUM_CRITERIA],
     // How many boxes for the discrete solution space
-    nb_intervals: [BoxIndex; NUM_CRITERIA],
+    nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     // Discrete steps, depending on the criterion
     deltas: [f64; NUM_CRITERIA],
     // Mapping used to search moves of specific gain from a discretization of the cweight space
-    pub boxes: BTreeMap<BoxIndices<NUM_CRITERIA>, Vec<CWeightId>>,
+    pub boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>>,
 }
 
 //FIXME:Refact this code to avoid clone calls.
@@ -175,12 +168,12 @@ impl<W, const NUM_CRITERIA: usize> RegularBoxHandler<W, NUM_CRITERIA>
 where
     W: PositiveWeight,
 {
-    pub fn new<C, I>(cweights: C, nb_intervals: [BoxIndex; NUM_CRITERIA]) -> Self
+    pub fn new<C, I>(cweights: C, nb_intervals: [BoxOneIndex; NUM_CRITERIA]) -> Self
     where
         C: IntoIterator<Item = I> + Clone,
         I: IntoIterator<Item = W>,
     {
-        let boxes: BTreeMap<BoxIndices<NUM_CRITERIA>, Vec<CWeightId>> = BTreeMap::new();
+        let boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>> = BTreeMap::new();
         let mut cweights_iter = cweights.clone().into_iter();
         let first_cweight = cweights_iter.next().unwrap();
         let mut min_values = [first_cweight.into_iter().next().unwrap(); NUM_CRITERIA];
@@ -215,9 +208,10 @@ where
             boxes,
         };
 
+        // Assign each weight to a box
         cweights_iter = cweights.clone().into_iter();
         cweights_iter.enumerate().for_each(|(cweight_id, cweight)| {
-            let indices = Self::box_indices(&res, cweight);
+            let indices = Self::box_index(&res, cweight);
             match res.boxes.get_mut(&indices) {
                 Some(vect_box_indices) => vect_box_indices.push(cweight_id),
                 None => {
@@ -250,9 +244,9 @@ where
     W: Sub<W, Output = W> + Zero + ToPrimitive,
 {
     // This function can be simpler as it is a regular decomposition of weight space
-    fn box_indices(&self, weight: impl IntoIterator<Item = W>) -> BoxIndices<NUM_CRITERIA> {
-        let res = BoxIndices::new(
-            weight
+    fn box_index(&self, weight: impl IntoIterator<Item = W>) -> BoxIndex<NUM_CRITERIA> {
+        BoxIndex::<NUM_CRITERIA> {
+            indices: weight
                 .into_iter()
                 .zip(self.min_weights.iter())
                 .map(|(val, min)| val - *min)
@@ -260,23 +254,23 @@ where
                 .zip(self.nb_intervals.iter())
                 .map(|((diff, delta), nb_interval)| match diff.positive_or() {
                     Some(_) => cmp::min(
-                        (diff.to_f64().unwrap() / delta).floor() as BoxIndex,
+                        (diff.to_f64().unwrap() / delta).floor() as BoxOneIndex,
                         *nb_interval - 1,
                     ),
                     None => 0u32,
                 })
                 .collect::<Vec<_>>()
-                .as_slice(),
-        );
-
-        res
+                .as_slice()
+                .try_into()
+                .unwrap(),
+        }
     }
 
     //FIXME:Allow partition imbalance to be composed of float values while cweights are integers
     //TODO:Create some struct encapsulating partition/solution state
     fn find_valid_move<CC, CP, CW>(
         &self,
-        origin: &'a BoxIndices<NUM_CRITERIA>,
+        origin: &'a BoxIndex<NUM_CRITERIA>,
         part_source: PartId,
         partition_imbalances: Vec<[W; NUM_CRITERIA]>,
         partition: &'a CP,
@@ -344,7 +338,7 @@ where
     fn process_deltas(
         min_weights: [W; NUM_CRITERIA],
         max_weights: [W; NUM_CRITERIA],
-        nb_intervals: [BoxIndex; NUM_CRITERIA],
+        nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     ) -> [f64; NUM_CRITERIA] {
         let mut steps = [0f64; NUM_CRITERIA];
         for (criterion, step) in steps.iter_mut().enumerate().take(NUM_CRITERIA) {
@@ -406,7 +400,7 @@ where
     W: PositiveWeight,
 {
     // Instance data
-    nb_intervals: [BoxIndex; NUM_CRITERIA],
+    nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     parts_target_loads: Vec<[W; NUM_CRITERIA]>,
 
     // // Partition state
@@ -494,7 +488,7 @@ impl<W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> 
         // partition: Vec<PartId>,
         // cweights: CC,
         // Targetor specific parameter
-        nb_intervals: [BoxIndex; NUM_CRITERIA],
+        nb_intervals: [BoxOneIndex; NUM_CRITERIA],
         parts_target_loads: CC,
     ) -> Self
     where
@@ -581,7 +575,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
                 )
                 .collect();
 
-            let origin = box_handler.box_indices(target_gain);
+            let origin = box_handler.box_index(target_gain);
             let option_valid_move = box_handler.find_valid_move(
                 &origin,
                 part_source,
@@ -594,7 +588,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
                 partition[id_cweight] = target_part;
             } else {
                 let mut increase_offset = true;
-                let mut offset = 1 as BoxIndex;
+                let mut offset = 1 as BoxOneIndex;
                 while increase_offset {
                     let iter_indices = search_strat.gen_indices(&origin, offset);
                     let option_valid_move = iter_indices
@@ -617,7 +611,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
                         let partition_imbalance =
                             partition_imbalances[most_imbalanced_criterion][part_source];
                         let bound_indices =
-                            box_handler.box_indices(vec![partition_imbalance; nb_criteria]);
+                            box_handler.box_index(vec![partition_imbalance; nb_criteria]);
                         increase_offset = (0..nb_criteria).all(|criterion| {
                             (origin.indices[criterion] as isize - offset as isize).is_positive()
                                 || origin.indices[criterion] + offset
@@ -637,31 +631,15 @@ where
     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
 {
-    // impl<'a, T: PositiveInteger, W: PositiveWeight, CC> crate::Partition<CC> for TargetorWIP<T, W>
-    // where
-    //     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-    //     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
-    // {
     type Metadata = usize;
     type Error = Error;
-
-    // fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
-    // where
-    //     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-    //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
-    //     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
         // part_ids: &mut CP,
         cweights: CC,
-    ) -> Result<Self::Metadata, Self::Error>
-// where
-    //     // CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
-    //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
-    //     // CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
-    {
+    ) -> Result<Self::Metadata, Self::Error> {
         let partition_len = part_ids.iter().count();
         let weights_len = cweights.clone().into_iter().count();
         if partition_len != weights_len {
@@ -716,7 +694,7 @@ mod tests {
             .iter()
             .zip(instance.cweights.clone())
             .for_each(|(box_indices, cweight)| {
-                let values = rbh.box_indices(cweight);
+                let values = rbh.box_index(cweight);
                 assert!(
                     box_indices
                         .iter()
@@ -732,12 +710,12 @@ mod tests {
         let partition = vec![part_source; instance.cweights.len()];
         let partition_imbalances = vec![[10, -10], [9, -8]];
         let space_box_indices = vec![
-            BoxIndices::new(&[0, 0]),
-            BoxIndices::new(&[1, 0]),
-            BoxIndices::new(&[2, 0]),
-            BoxIndices::new(&[0, 1]),
-            BoxIndices::new(&[1, 1]),
-            BoxIndices::new(&[2, 1]),
+            BoxIndex { indices: [0, 0] },
+            BoxIndex { indices: [1, 0] },
+            BoxIndex { indices: [2, 0] },
+            BoxIndex { indices: [0, 1] },
+            BoxIndex { indices: [1, 1] },
+            BoxIndex { indices: [2, 1] },
         ];
         let iter_box_indices = space_box_indices.iter();
 
@@ -769,21 +747,11 @@ mod tests {
             RegularBoxHandler::new(instance.cweights.clone(), instance.nb_intervals);
         let partition_target_loads = vec![vec![10, 10], vec![9, 8]];
 
-        let mut targetor: TargetorWIP<i32, 2> = TargetorWIP::new(
-            // partition.clone(),
-            rbh.nb_intervals.clone(),
-            // instance.cweights.clone(),
-            partition_target_loads,
-        );
+        let mut targetor: TargetorWIP<i32, 2> =
+            TargetorWIP::new(rbh.nb_intervals.clone(), partition_target_loads);
 
         targetor.optimize(&mut partition, instance.cweights.clone());
         let expected_partition_res = vec![0, 1, 1, 0];
-        // assert!(
-        //     targetor.partition == expected_partition_res,
-        //     "Partition are not equal. Expected {:?}, returned {:?}",
-        //     expected_partition_res,
-        //     targetor.partition
-        // );
         assert_eq!(
             partition, expected_partition_res,
             "Partition are not equal. Expected {:?}, returned {:?}",
@@ -804,12 +772,8 @@ mod tests {
         let rbh: RegularBoxHandler<i32, 2> =
             RegularBoxHandler::new(instance.cweights.clone(), nb_intervals);
 
-        let mut targetor: TargetorWIP<i32, 2> = TargetorWIP::new(
-            // partition.clone(),
-            rbh.nb_intervals.clone(),
-            // instance.cweights.clone(),
-            partition_target_loads,
-        );
+        let mut targetor: TargetorWIP<i32, 2> =
+            TargetorWIP::new(rbh.nb_intervals.clone(), partition_target_loads);
 
         targetor.optimize(&mut partition, instance.cweights.clone());
         let expected_partition_res = vec![0, 0, 0, 1];
