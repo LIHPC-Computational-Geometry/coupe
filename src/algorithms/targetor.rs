@@ -215,10 +215,10 @@ where
                 .zip(max_values.iter_mut())
                 .for_each(|((current_val, min_val), max_val)| {
                     if current_val < *min_val {
-                        *min_val = current_val.clone();
+                        *min_val = current_val;
                     }
                     if current_val > *max_val {
-                        *max_val = current_val.clone();
+                        *max_val = current_val;
                     }
                 })
         }
@@ -351,8 +351,8 @@ where
                 .all(|valid_gain| valid_gain)
         };
 
-        let candidates = self.boxes.get(&origin);
-        let candidate_move = candidates
+        let candidates = self.boxes.get(origin);
+        candidates
             .unwrap_or(&vec![])
             .iter()
             // Filter moves
@@ -361,9 +361,6 @@ where
             // to a higher partition imbalance
             .find(|id| strict_positive_gain(**id))
             .map(|id| (*id, 1 - part_source))
-            .clone();
-
-        candidate_move
     }
 }
 
@@ -441,9 +438,9 @@ where
         CW: IntoIterator<Item = W> + Clone,
     {
         let mut res = [[W::zero(); NUM_CRITERIA]; 2];
-        for criterion in 0..NUM_CRITERIA {
-            for part in 0..2 {
-                res[criterion][part] -= self.parts_target_loads[criterion][part];
+        for (criterion, res_val) in res.iter_mut().enumerate().take(NUM_CRITERIA) {
+            for part in 0usize..2 {
+                (*res_val)[part] -= self.parts_target_loads[criterion][part];
             }
         }
 
@@ -539,7 +536,7 @@ impl<W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> 
         CC: IntoIterator<Item = CW> + Clone,
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
-        let box_handler = RegularBoxHandler::new(cweights, self.nb_intervals.clone());
+        let box_handler = RegularBoxHandler::new(cweights, self.nb_intervals);
         self.box_handler = Some(box_handler);
     }
 }
@@ -574,7 +571,8 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
 
             // Setup search strat
             let search_strat = NeighborSearchStrat {
-                nb_intervals: self.nb_intervals.clone(),
+                // Array implements copy traits!
+                nb_intervals: self.nb_intervals,
             };
 
             // Setup target gain
