@@ -4,7 +4,7 @@ use num_traits::{ToPrimitive, Zero};
 use std::cmp::{self, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::ops::{AddAssign, Sub, SubAssign};
+use std::ops::{AddAssign, Deref, DerefMut, Sub, SubAssign};
 use std::ops::{IndexMut, RangeInclusive};
 
 type CWeightId = usize;
@@ -40,7 +40,43 @@ impl PositiveWeight for i32 {
     }
 }
 
-type BoxIndex<const NUM_CRITERIA: usize> = [BoxOneIndex; NUM_CRITERIA];
+#[derive(PartialOrd, PartialEq, Ord, Eq, Debug)]
+struct BoxIndex<const NUM_CRITERIA: usize>([BoxOneIndex; NUM_CRITERIA]);
+
+impl<const NUM_CRITERIA: usize> Deref for BoxIndex<NUM_CRITERIA> {
+    type Target = [BoxOneIndex; NUM_CRITERIA];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<const NUM_CRITERIA: usize> DerefMut for BoxIndex<NUM_CRITERIA> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<const NUM_CRITERIA: usize> From<[BoxOneIndex; NUM_CRITERIA]> for BoxIndex<NUM_CRITERIA> {
+    fn from(value: [BoxOneIndex; NUM_CRITERIA]) -> Self {
+        Self(value)
+    }
+}
+
+impl<const NUM_CRITERIA: usize> TryFrom<&[u32]> for BoxIndex<NUM_CRITERIA> {
+    type Error = std::array::TryFromSliceError;
+
+    fn try_from(value: &[u32]) -> Result<Self, Self::Error> {
+        Ok(Self(value.try_into()?))
+    }
+}
+
+impl<const NUM_CRITERIA: usize> Default for BoxIndex<NUM_CRITERIA> {
+    fn default() -> Self {
+        Self([BoxOneIndex::zero(); NUM_CRITERIA])
+    }
+}
+
 type MultiWeights<W, const NUM_CRITERIA: usize> = [W; NUM_CRITERIA];
 
 struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
@@ -97,7 +133,7 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
                 indices.iter().map(|i| i.abs()).sum::<isize>() == dist.to_isize().unwrap()
             })
             .map(move |indices| {
-                let mut box_indices = [BoxOneIndex::zero(); NUM_CRITERIA];
+                let mut box_indices = BoxIndex([BoxOneIndex::zero(); NUM_CRITERIA]);
                 (0..NUM_CRITERIA).for_each(|criterion| {
                     box_indices[criterion] =
                         (indices[criterion] + (origin[criterion] as isize)) as BoxOneIndex;
@@ -692,8 +728,14 @@ mod tests {
         let part_source = 0;
         let partition = vec![part_source; instance.cweights.len()];
         let partition_imbalances = vec![[10, -10], [9, -8]];
-        let space_box_indices: Vec<BoxIndex<2>> =
-            vec![[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]];
+        let space_box_indices: Vec<BoxIndex<2>> = vec![
+            [0, 0].into(),
+            [1, 0].into(),
+            [2, 0].into(),
+            [0, 1].into(),
+            [1, 1].into(),
+            [2, 1].into(),
+        ];
         let iter_box_indices = space_box_indices.iter();
 
         let expected_moves = vec![Some((0, 1)), None, None, None, Some((1, 1)), Some((2, 1))];
