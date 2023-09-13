@@ -41,6 +41,7 @@ impl PositiveWeight for i32 {
 }
 
 type BoxIndex<const NUM_CRITERIA: usize> = [BoxOneIndex; NUM_CRITERIA];
+type MultiWeights<W, const NUM_CRITERIA: usize> = [W; NUM_CRITERIA];
 
 struct IterBoxIndices<'a, const NUM_CRITERIA: usize> {
     inner: Box<dyn Iterator<Item = BoxIndex<NUM_CRITERIA>> + 'a>,
@@ -114,16 +115,16 @@ impl<'a, const NUM_CRITERIA: usize> SearchStrat<'a, NUM_CRITERIA>
 /// Discrete weight space access
 trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
     /// Compute the index of the box that contains a given point
-    fn box_index(&self, cweight: impl IntoIterator<Item = W>) -> BoxIndex<NUM_CRITERIA>;
+    fn box_index(&self, weight: impl IntoIterator<Item = W>) -> BoxIndex<NUM_CRITERIA>;
 
     /// Find a valid move
     fn find_valid_move<CC, CP, CW>(
         &self,
         origin: &'a BoxIndex<NUM_CRITERIA>,
         part_source: PartId,
-        partition_imbalances: Vec<[W; NUM_CRITERIA]>,
+        partition_imbalances: Vec<MultiWeights<W, NUM_CRITERIA>>,
         partition: &'a CP,
-        cweights: CC,
+        weights: CC,
     ) -> Option<CWeightMove>
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
@@ -132,8 +133,8 @@ trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
 
     /// Compute the regular discrete steps associated with each criterion
     fn process_deltas(
-        min_weights: [W; NUM_CRITERIA],
-        max_weights: [W; NUM_CRITERIA],
+        min_weights: MultiWeights<W, NUM_CRITERIA>,
+        max_weights: MultiWeights<W, NUM_CRITERIA>,
         nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     ) -> [f64; NUM_CRITERIA];
 }
@@ -143,7 +144,7 @@ where
     W: PositiveWeight,
 {
     // Values related to the instance to be improved
-    min_weights: [W; NUM_CRITERIA],
+    min_weights: MultiWeights<W, NUM_CRITERIA>,
     // How many boxes for the discrete solution space
     nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     // Discrete steps, depending on the criterion
@@ -157,27 +158,26 @@ impl<W, const NUM_CRITERIA: usize> RegularBoxHandler<W, NUM_CRITERIA>
 where
     W: PositiveWeight,
 {
-    pub fn new<C, I>(cweights: C, nb_intervals: [BoxOneIndex; NUM_CRITERIA]) -> Self
+    pub fn new<C, I>(weights: C, nb_intervals: [BoxOneIndex; NUM_CRITERIA]) -> Self
     where
         C: IntoIterator<Item = I> + Clone,
         I: IntoIterator<Item = W>,
     {
         let boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>> = BTreeMap::new();
-        let mut cweights_iter = cweights.clone().into_iter();
-        let first_cweight = cweights_iter.next().unwrap();
-        let mut min_values = [first_cweight.into_iter().next().unwrap(); NUM_CRITERIA];
+        let mut weights_iter = weights.clone().into_iter();
+        let first_weight = weights_iter.next().unwrap();
+        let mut min_values = [first_weight.into_iter().next().unwrap(); NUM_CRITERIA];
         let mut max_values = min_values.clone();
 
-        for cweight in cweights_iter {
-            cweight
+        for weight in weights_iter {
+            weight
                 .into_iter()
                 .zip(min_values.iter_mut())
                 .zip(max_values.iter_mut())
                 .for_each(|((current_val, min_val), max_val)| {
                     if current_val < *min_val {
                         *min_val = current_val;
-                    }
-                    if current_val > *max_val {
+                    } else if current_val > *max_val {
                         *max_val = current_val;
                     }
                 })
@@ -187,24 +187,19 @@ where
 
         let mut res = Self {
             min_weights: min_values.as_slice().try_into().unwrap(),
-            nb_intervals: nb_intervals
-                .into_iter()
-                .collect::<Vec<_>>()
-                .as_slice()
-                .try_into()
-                .unwrap(),
+            nb_intervals,
             deltas: deltas.as_slice().try_into().unwrap(),
             boxes,
         };
 
         // Assign each weight to a box
-        cweights_iter = cweights.clone().into_iter();
-        cweights_iter.enumerate().for_each(|(cweight_id, cweight)| {
-            let indices = Self::box_index(&res, cweight);
+        weights_iter = weights.clone().into_iter();
+        weights_iter.enumerate().for_each(|(id, weight)| {
+            let indices = Self::box_index(&res, weight);
             match res.boxes.get_mut(&indices) {
-                Some(vect_box_indices) => vect_box_indices.push(cweight_id),
+                Some(vect_box_indices) => vect_box_indices.push(id),
                 None => {
-                    let vect_box_indices: Vec<usize> = vec![cweight_id];
+                    let vect_box_indices: Vec<usize> = vec![id];
                     res.boxes.insert(indices, vect_box_indices);
                 }
             }
@@ -261,7 +256,7 @@ where
         &self,
         origin: &'a BoxIndex<NUM_CRITERIA>,
         part_source: PartId,
-        partition_imbalances: Vec<[W; NUM_CRITERIA]>,
+        partition_imbalances: Vec<MultiWeights<W, NUM_CRITERIA>>,
         partition: &'a CP,
         cweights: CC,
     ) -> Option<CWeightMove>
@@ -325,8 +320,8 @@ where
     }
 
     fn process_deltas(
-        min_weights: [W; NUM_CRITERIA],
-        max_weights: [W; NUM_CRITERIA],
+        min_weights: MultiWeights<W, NUM_CRITERIA>,
+        max_weights: MultiWeights<W, NUM_CRITERIA>,
         nb_intervals: [BoxOneIndex; NUM_CRITERIA],
     ) -> [f64; NUM_CRITERIA] {
         let mut steps = [0f64; NUM_CRITERIA];
@@ -345,7 +340,7 @@ where
     W: PositiveWeight,
 {
     // TODO: Add a builder for generic Repartitioning
-    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, cweights: CC)
+    fn optimize<CC, CP, CW>(&mut self, partition: &'a mut CP, weights: CC)
     where
         CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW>,
         CP: IntoIterator<Item = PartId>
@@ -362,8 +357,8 @@ where
     fn compute_imbalances<CC, CP, CW>(
         &self,
         partition: &'a CP,
-        cweights: CC,
-    ) -> Vec<[W; NUM_CRITERIA]>
+        weights: CC,
+    ) -> Vec<MultiWeights<W, NUM_CRITERIA>>
     where
         CC: IntoIterator<Item = CW> + Clone,
         CP: IntoIterator<Item = PartId> + Clone,
@@ -390,7 +385,7 @@ where
 {
     // Instance data
     nb_intervals: [BoxOneIndex; NUM_CRITERIA],
-    parts_target_loads: Vec<[W; NUM_CRITERIA]>,
+    parts_target_loads: Vec<MultiWeights<W, NUM_CRITERIA>>,
 
     // // Partition state
     // partition: Vec<PartId>,
@@ -406,27 +401,27 @@ where
     fn compute_imbalances<CC, CP, CW>(
         &self,
         partition: &'a CP,
-        cweights: CC,
-    ) -> Vec<[W; NUM_CRITERIA]>
+        weights: CC,
+    ) -> Vec<MultiWeights<W, NUM_CRITERIA>>
     where
         CC: IntoIterator<Item = CW> + Clone,
         CP: IntoIterator<Item = PartId> + Clone,
         CW: IntoIterator<Item = W> + Clone,
     {
-        let mut res = [[W::zero(); NUM_CRITERIA]; 2];
-        for (criterion, res_val) in res.iter_mut().enumerate().take(NUM_CRITERIA) {
-            for part in 0usize..2 {
-                (*res_val)[part] -= self.parts_target_loads[criterion][part];
+        let mut res: [MultiWeights<W, NUM_CRITERIA>; 2] = [[W::zero(); NUM_CRITERIA]; 2];
+        for criterion in 0..NUM_CRITERIA {
+            for part in 0..2 {
+                res[criterion][part] -= self.parts_target_loads[criterion][part];
             }
         }
 
-        let cweights_iter = cweights.clone().into_iter();
+        let weights_iter = weights.clone().into_iter();
         partition
             .clone()
             .into_iter()
-            .zip(cweights_iter)
-            .for_each(|(part, cweight)| {
-                cweight
+            .zip(weights_iter)
+            .for_each(|(part, weight)| {
+                weight
                     .into_iter()
                     .enumerate()
                     .for_each(|(criterion, weight)| res[criterion][part] += weight)
@@ -485,7 +480,7 @@ impl<W: PositiveWeight, const NUM_CRITERIA: usize> TargetorWIP<W, NUM_CRITERIA> 
         CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
         // let res_rbh = RegularBoxHandler::new(cweights, nb_intervals.clone());
-        let res_target_loads: Vec<[W; NUM_CRITERIA]> = parts_target_loads
+        let res_target_loads: Vec<MultiWeights<W, NUM_CRITERIA>> = parts_target_loads
             .into_iter()
             .map(|criterion_target_loads| {
                 criterion_target_loads
