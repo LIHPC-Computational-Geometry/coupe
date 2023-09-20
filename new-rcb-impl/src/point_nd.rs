@@ -1,7 +1,7 @@
-use cust::memory::DeviceCopy;
+// use cust::memory::DeviceCopy;
 
 #[repr(C)]
-#[derive(Clone, Copy, DeviceCopy, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub struct PointND<const D: usize> {
     coords: [i32; D],
 }
