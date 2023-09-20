@@ -1,10 +1,10 @@
-use crate::point_nd::{Point2D, PointND};
+pub(crate) use crate::point_nd::{Point2D, PointND};
 
-use cust::DeviceCopy;
+// use cust::DeviceCopy;
 use itertools::Itertools;
 use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
 
-#[derive(Clone, Copy, DeviceCopy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct BoundingBox<const D: usize> {
     p_min: PointND<D>,
     p_max: PointND<D>,
@@ -22,6 +22,10 @@ impl<const D: usize> BoundingBox<D> {
 
 pub type BBox2D = BoundingBox<2>;
 impl BBox2D {
+    pub fn from_coord(p_min: Point2D, p_max: Point2D) -> Self {
+        Self { p_min, p_max }
+    }
+
     pub fn from_points(points: &[Point2D]) -> Option<Self> {
         let x_minmax = match points.iter().map(|p| p.x()).minmax() {
             NoElements => None,
