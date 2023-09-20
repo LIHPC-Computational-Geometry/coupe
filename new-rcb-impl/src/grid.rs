@@ -3,21 +3,26 @@ use crate::{
     point_nd::Point2D,
 };
 
+use itertools::{
+    FoldWhile::{Continue, Done},
+    Itertools,
+};
+
 use std::{
     cmp,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Div},
 };
 
 /// Marker trait for a point's weight.
-pub trait RcbWeight: Clone + Copy + Default + Add + AddAssign {}
+pub trait RcbWeight: Clone + Copy + Default + PartialOrd + PartialEq {}
 
 impl RcbWeight for i32 {}
 
 /// Cartesian grid laid over a random set of points.
 #[derive(Debug)]
-struct Grid<const D: usize, W: RcbWeight + Copy> {
+pub struct Grid<const D: usize, W: RcbWeight + Copy> {
     /// Imaginary bounding box of the grid that encapsulates all points within it.
-    bounding_box: BoundingBox<D>,
+    _bounding_box: BoundingBox<D>,
     /// Number of columns of the grid.
     ncols: usize,
     /// Number of rows of the grid.
@@ -27,7 +32,7 @@ struct Grid<const D: usize, W: RcbWeight + Copy> {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct Cell<W: RcbWeight> {
+pub struct Cell<W: RcbWeight> {
     /// Offset of the cell in the linear arrays of reordered points and weights.
     pub offset: usize,
     /// Number of points in the cell.
@@ -46,13 +51,27 @@ impl<const D: usize, W: RcbWeight + std::fmt::Debug> Grid<D, W> {
     }
 }
 
-impl<W: RcbWeight + std::fmt::Debug> Grid<2, W> {
+#[derive(Debug)]
+pub struct WeightedMedian<W: RcbWeight> {
+    position: usize,
+    _left_weight: W,
+}
+
+impl<W> Grid<2, W>
+where
+    W: RcbWeight + std::fmt::Debug + Add<Output = W> + Div<i32, Output = W> + AddAssign,
+{
     /// Obtain the index of the cell in which a given point is located.
     fn cell_idx(point: &Point2D, ncols: usize, nrows: usize) -> usize {
         // Safety: conversion to `usize` of the maximum is safe because it is always at least 0
         let grid_x = cmp::min(cmp::max(point.x(), 0) as usize, ncols - 1);
         let grid_y = cmp::min(cmp::max(point.y(), 0) as usize, nrows - 1);
         grid_x + ncols * grid_y
+    }
+
+    /// Obtain the index of the cell in which a given point is located.
+    fn get_cell_coords(&self, index: usize) -> (usize, usize) {
+        (index / self.ncols, index % self.nrows)
     }
 
     /// Creates a `Grid` from a given set of points and their weights.
@@ -77,7 +96,7 @@ impl<W: RcbWeight + std::fmt::Debug> Grid<2, W> {
         }
 
         Self {
-            bounding_box,
+            _bounding_box: bounding_box,
             ncols,
             nrows,
             cells,
@@ -101,6 +120,92 @@ impl<W: RcbWeight + std::fmt::Debug> Grid<2, W> {
         }
 
         (new_points, new_weights)
+    }
+
+    fn find_weighted_median(&self) -> WeightedMedian<W> {
+        let ideal_partition_weight = self
+            .cells
+            .iter()
+            .fold(W::default(), |acc, cell| acc + cell.weight_sum);
+        let ideal_partition_weight = ideal_partition_weight / 2;
+
+        let mut idx: usize = 0;
+        let weighted_median = self
+            .cells
+            .iter()
+            .fold_while(W::default(), |acc, cell| {
+                if acc >= ideal_partition_weight {
+                    Done(acc)
+                } else {
+                    idx += 1;
+                    Continue(acc + cell.weight_sum)
+                }
+            })
+            .into_inner();
+
+        WeightedMedian {
+            position: idx,
+            _left_weight: weighted_median,
+        }
+    }
+
+    pub fn rcb(
+        &self,
+        level: usize,
+        points: &[Point2D],
+        part_ids: &mut [usize],
+        axis: usize,
+        bbox: BBox2D,
+    ) {
+        if level == 0 {
+            return;
+        }
+
+        let _points_1d: Vec<i32> = points.iter().map(|point| point[axis]).collect();
+        let WeightedMedian {
+            position: pivot,
+            _left_weight: _,
+        } = self.find_weighted_median();
+        let cell_coords = self.get_cell_coords(pivot);
+
+        // Compute lower
+        let new_p = if axis == 0 {
+            Point2D::new(
+                bbox.p_min().x()
+                    + ((bbox.p_max().x() - bbox.p_min().x())
+                        / (self.ncols * cell_coords.0 + 1) as i32),
+                bbox.p_max().y(),
+            )
+        } else {
+            Point2D::new(
+                bbox.p_max().x(),
+                bbox.p_min().y()
+                    + ((bbox.p_max().y() - bbox.p_min().y())
+                        / (self.nrows * cell_coords.1 + 1) as i32),
+            )
+        };
+        let bbox_lower = BBox2D::from_coord(*bbox.p_min(), new_p);
+        self.rcb(
+            level - 1,
+            &points[..pivot],
+            &mut part_ids[..pivot],
+            (axis + 1) % 2,
+            bbox_lower,
+        );
+
+        // Compute upper
+        let bbox_upper = BBox2D::from_coord(new_p, *bbox.p_max());
+        let new_id = part_ids[0] + 2_usize.pow((level - 1) as u32);
+        for id in part_ids[pivot..].iter_mut() {
+            *id = new_id;
+        }
+        self.rcb(
+            level - 1,
+            &points[pivot..],
+            &mut part_ids[pivot..],
+            (axis + 1) % 2,
+            bbox_upper,
+        );
     }
 }
 
