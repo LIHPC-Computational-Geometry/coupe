@@ -255,15 +255,16 @@ where
 
 /// FiducciaMattheyses
 ///
-/// An implementation of the Fiduccia Mattheyses topologic algorithm
-/// for graph partitioning. This implementation is an extension of the
-/// original algorithm to handle partitioning into more than two parts.
+/// An implementation of the original Fiduccia Mattheyses topologic algorithm
+/// for graph partitioning.
 ///
 /// This algorithm repeats an iterative pass during which a set of graph
 /// vertices are assigned to a new part, reducing the overall cutsize of the
 /// partition. As opposed to the Kernighan-Lin algorithm, during each pass
 /// iteration, only one vertex is moved at a time. The algorithm thus does not
 /// preserve partition weights balance and may produce an unbalanced partition.
+///
+/// For partitioning in more than two parts, see [`ArcSwap`][crate::ArcSwap].
 ///
 /// # Example
 ///
