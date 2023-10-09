@@ -198,6 +198,8 @@ where
             algorithm.to_runner(&problem)
         })
         .collect();
+    std::mem::drop(problem); // free memory from mesh
+
     let mut benchmark = || {
         let _task = coupe_tools::ittapi::begin(&intel_domain, "benchmark-iteration");
 

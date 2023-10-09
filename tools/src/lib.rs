@@ -13,7 +13,6 @@ use coupe::num_traits::PrimInt;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
 use coupe::sprs::CsMat;
-use coupe::sprs::CsMatView;
 use coupe::sprs::CSR;
 use coupe::Partition as _;
 use coupe::PointND;
@@ -32,6 +31,7 @@ use std::io;
 use std::iter::Sum;
 use std::mem;
 use std::ops::AddAssign;
+use std::sync::Arc;
 
 #[cfg(feature = "metis")]
 mod metis;
@@ -43,17 +43,17 @@ pub mod ittapi;
 
 pub struct Problem<const D: usize> {
     mesh: Mesh,
-    weights: weight::Array,
+    weights: Arc<weight::Array>,
     edge_weights: EdgeWeightDistribution,
-    points: OnceCell<Vec<PointND<D>>>,
-    adjacency: OnceCell<CsMat<f64>>,
+    points: OnceCell<Arc<Vec<PointND<D>>>>,
+    adjacency: OnceCell<Arc<CsMat<f64>>>,
 }
 
 impl<const D: usize> Problem<D> {
     pub fn new(mesh: Mesh, weights: weight::Array, edge_weights: EdgeWeightDistribution) -> Self {
         Self {
             mesh,
-            weights,
+            weights: Arc::new(weights),
             edge_weights,
             points: OnceCell::new(),
             adjacency: OnceCell::new(),
@@ -63,31 +63,37 @@ impl<const D: usize> Problem<D> {
     pub fn without_mesh(weights: weight::Array) -> Self {
         Self {
             mesh: Mesh::default(),
-            weights,
+            weights: Arc::new(weights),
             edge_weights: EdgeWeightDistribution::Uniform,
             points: OnceCell::new(),
             adjacency: OnceCell::new(),
         }
     }
 
-    pub fn points(&self) -> &[PointND<D>] {
-        self.points.get_or_init(|| barycentres(&self.mesh))
+    pub fn points(&self) -> Arc<Vec<PointND<D>>> {
+        let rc = self
+            .points
+            .get_or_init(|| Arc::new(barycentres(&self.mesh)));
+        Arc::clone(rc)
     }
 
-    pub fn adjacency(&self) -> CsMatView<f64> {
-        self.adjacency
-            .get_or_init(|| {
-                let mut adjacency = dual(&self.mesh);
-                if self.edge_weights != EdgeWeightDistribution::Uniform {
-                    set_edge_weights(&mut adjacency, &self.weights, self.edge_weights);
-                }
-                adjacency
-            })
-            .view()
+    pub fn adjacency(&self) -> Arc<CsMat<f64>> {
+        let rc = self.adjacency.get_or_init(|| {
+            let mut adjacency = dual(&self.mesh);
+            if self.edge_weights != EdgeWeightDistribution::Uniform {
+                set_edge_weights(&mut adjacency, &self.weights, self.edge_weights);
+            }
+            Arc::new(adjacency)
+        });
+        Arc::clone(rc)
     }
 
-    pub fn weights(&self) -> &weight::Array {
-        &self.weights
+    pub fn weights(&self) -> Arc<weight::Array> {
+        Arc::clone(&self.weights)
+    }
+
+    pub fn free_mesh(&mut self) {
+        self.mesh = Mesh::default();
     }
 }
 
@@ -100,14 +106,14 @@ fn runner_error(message: &'static str) -> Runner {
 }
 
 pub trait ToRunner<const D: usize> {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a>;
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a>;
 }
 
 impl<const D: usize, R> ToRunner<D> for coupe::Random<R>
 where
     R: 'static + rand::Rng + Send + Sync,
 {
-    fn to_runner<'a>(&'a mut self, _: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, _: &Problem<D>) -> Runner<'a> {
         Box::new(move |partition| {
             self.partition(partition, ())?;
             Ok(None)
@@ -116,10 +122,11 @@ where
 }
 
 impl<const D: usize> ToRunner<D> for coupe::Greedy {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
+        let weights = problem.weights();
         Box::new(move |partition| {
-            match &problem.weights {
+            match &*weights {
                 Integers(is) => {
                     let weights = is.iter().map(|weight| weight[0]);
                     self.partition(partition, weights)?;
@@ -135,10 +142,11 @@ impl<const D: usize> ToRunner<D> for coupe::Greedy {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::KarmarkarKarp {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
+        let weights = problem.weights();
         Box::new(move |partition| {
-            match &problem.weights {
+            match &*weights {
                 Integers(is) => {
                     let weights = is.iter().map(|weight| weight[0]);
                     self.partition(partition, weights)?;
@@ -154,10 +162,11 @@ impl<const D: usize> ToRunner<D> for coupe::KarmarkarKarp {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::CompleteKarmarkarKarp {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
+        let weights = problem.weights();
         Box::new(move |partition| {
-            match &problem.weights {
+            match &*weights {
                 Integers(is) => {
                     let weights = is.iter().map(|weight| weight[0]);
                     self.partition(partition, weights)?;
@@ -173,10 +182,11 @@ impl<const D: usize> ToRunner<D> for coupe::CompleteKarmarkarKarp {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::VnBest {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
+        let weights = problem.weights();
         Box::new(move |partition| {
-            let algo_iterations = match &problem.weights {
+            let algo_iterations = match &*weights {
                 Integers(is) => {
                     let weights = is.iter().map(|weight| weight[0]);
                     self.partition(partition, weights)
@@ -192,9 +202,10 @@ impl<const D: usize> ToRunner<D> for coupe::VnBest {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::VnFirst {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
-        match &problem.weights {
+        let weights = problem.weights();
+        match &*weights {
             Integers(is) => {
                 let weights: Vec<_> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
@@ -214,11 +225,13 @@ impl<const D: usize> ToRunner<D> for coupe::VnFirst {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::Rcb {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
+        let points = problem.points();
+        let weights = problem.weights();
         Box::new(move |partition| {
-            let points = problem.points().par_iter().cloned();
-            match &problem.weights {
+            let points = points.par_iter().cloned();
+            match &*weights {
                 Integers(is) => {
                     let weights = is.par_iter().map(|weight| weight[0]);
                     self.partition(partition, (points, weights))?;
@@ -234,32 +247,36 @@ impl<const D: usize> ToRunner<D> for coupe::Rcb {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::HilbertCurve {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         if D == 2 {
             // SAFETY: is a noop since D == 2
-            let points =
-                unsafe { mem::transmute::<&[PointND<D>], &[PointND<2>]>(problem.points()) };
-            match &problem.weights {
+            let points = unsafe {
+                mem::transmute::<Arc<Vec<PointND<D>>>, Arc<Vec<PointND<2>>>>(problem.points())
+            };
+            let weights = problem.weights();
+            match &*weights {
                 Integers(_) => runner_error("hilbert is only implemented for floats"),
                 Floats(fs) => {
                     let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                     Box::new(move |partition| {
-                        self.partition(partition, (points, &weights))?;
+                        self.partition(partition, (&**points, &weights))?;
                         Ok(None)
                     })
                 }
             }
         } else if D == 3 {
             // SAFETY: is a noop since D == 3
-            let points =
-                unsafe { mem::transmute::<&[PointND<D>], &[PointND<3>]>(problem.points()) };
-            match &problem.weights {
+            let points = unsafe {
+                mem::transmute::<Arc<Vec<PointND<D>>>, Arc<Vec<PointND<3>>>>(problem.points())
+            };
+            let weights = problem.weights();
+            match &*weights {
                 Integers(_) => runner_error("hilbert is only implemented for floats"),
                 Floats(fs) => {
                     let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                     Box::new(move |partition| {
-                        self.partition(partition, (points, &weights))?;
+                        self.partition(partition, (&**points, &weights))?;
                         Ok(None)
                     })
                 }
@@ -276,14 +293,16 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
         + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
 {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
-        match &problem.weights {
+        let points = problem.points();
+        let weights = problem.weights();
+        match &*weights {
             Integers(_) => runner_error("kmeans is only implemented for floats"),
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (problem.points(), &weights))?;
+                    self.partition(partition, (&*points, &weights))?;
                     Ok(None)
                 })
             }
@@ -292,15 +311,17 @@ where
 }
 
 impl<const D: usize> ToRunner<D> for coupe::ArcSwap {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         let adjacency = {
-            let shape = problem.adjacency().shape();
-            let (indptr, indices, f64_data) = problem.adjacency().into_raw_storage();
+            let adjacency = problem.adjacency();
+            let shape = adjacency.shape();
+            let (indptr, indices, f64_data) = adjacency.view().into_raw_storage();
             let i64_data = f64_data.iter().map(|f| *f as i64).collect();
             CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
         };
-        match &problem.weights {
+        let weights = problem.weights();
+        match &*weights {
             Integers(is) => {
                 let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
@@ -320,15 +341,17 @@ impl<const D: usize> ToRunner<D> for coupe::ArcSwap {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         let adjacency = {
-            let shape = problem.adjacency().shape();
-            let (indptr, indices, f64_data) = problem.adjacency().into_raw_storage();
+            let adjacency = problem.adjacency();
+            let shape = adjacency.shape();
+            let (indptr, indices, f64_data) = adjacency.view().into_raw_storage();
             let i64_data = f64_data.iter().map(|f| *f as i64).collect();
             CsMat::new(shape, indptr.to_vec(), indices.to_vec(), i64_data)
         };
-        match &problem.weights {
+        let weights = problem.weights();
+        match &*weights {
             Integers(is) => {
                 let weights: Vec<i64> = is.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
@@ -348,15 +371,16 @@ impl<const D: usize> ToRunner<D> for coupe::FiducciaMattheyses {
 }
 
 impl<const D: usize> ToRunner<D> for coupe::KernighanLin {
-    fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
+    fn to_runner<'a>(&'a mut self, problem: &Problem<D>) -> Runner<'a> {
         use weight::Array::*;
         let adjacency = problem.adjacency();
-        match &problem.weights {
+        let weights = problem.weights();
+        match &*weights {
             Integers(_) => runner_error("kl is only implemented for floats"),
             Floats(fs) => {
                 let weights: Vec<f64> = fs.iter().map(|weight| weight[0]).collect();
                 Box::new(move |partition| {
-                    self.partition(partition, (adjacency, &weights))?;
+                    self.partition(partition, (adjacency.view(), &weights))?;
                     Ok(None)
                 })
             }
