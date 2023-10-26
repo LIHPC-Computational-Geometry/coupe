@@ -485,9 +485,45 @@ where
         }
 
         #[cfg(feature = "scotch")]
-        "scotch:std" => Box::new(scotch::Standard {
-            part_count: require(parse(args.next()))?,
-        }),
+        "scotch:std" => {
+            let part_count = require(parse(args.next()))?;
+            let strategy = args
+                .next()
+                .map(|s| -> anyhow::Result<_> {
+                    let s = s.replace(';', ",");
+                    let cs =
+                        std::ffi::CString::new(s).context("extra nul byte in strategy string")?;
+                    let mut s = ::scotch::Strategy::new();
+                    s.graph_map(cs).context("invalid strategy string")?;
+                    Ok(s)
+                })
+                .transpose()?
+                .unwrap_or_else(::scotch::Strategy::new);
+            Box::new(scotch::Standard {
+                part_count,
+                strategy,
+            })
+        }
+        #[cfg(feature = "scotch")]
+        "scotch:remap" => {
+            let part_count = require(parse(args.next()))?;
+            let strategy = args
+                .next()
+                .map(|s| -> anyhow::Result<_> {
+                    let s = s.replace(';', ",");
+                    let cs =
+                        std::ffi::CString::new(s).context("extra nul byte in strategy string")?;
+                    let mut s = ::scotch::Strategy::new();
+                    s.graph_map(cs).context("invalid strategy string")?;
+                    Ok(s)
+                })
+                .transpose()?
+                .unwrap_or_else(::scotch::Strategy::new);
+            Box::new(scotch::Remap {
+                part_count,
+                strategy,
+            })
+        }
 
         _ => anyhow::bail!("unknown algorithm {:?}", name),
     })
