@@ -12,7 +12,7 @@ repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 
 [features]
-default = ["scotch", "metis"]
+default = ["scotch"]
 
 # Implicit features
 # - ittapi: enable integration with Intel performance tools
@@ -22,7 +22,7 @@ default = ["scotch", "metis"]
 
 # Partitioners
 coupe = { version = "0.1", path = ".." }
-scotch = { version = "0.1", optional = true }
+scotch = { version = "0.2", optional = true, path = "../../scotch-rs" }
 metis = { version = "0.1", optional = true }
 
 # Better tracing and profiling in Intel tools
