@@ -67,11 +67,7 @@ impl One for Real {
 
 impl PartialOrd for Real {
     fn partial_cmp(&self, other: &Real) -> Option<Ordering> {
-        Some(
-            self.0
-                .partial_cmp(&other.0)
-                .expect("cannot compare with NaN"),
-        )
+        Some(self.cmp(other))
     }
 }
 
