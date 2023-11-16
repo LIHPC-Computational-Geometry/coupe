@@ -30,7 +30,7 @@ scotch = ["dep:scotch"]
 # Partitioners
 coupe = { version = "0.1", path = ".." }
 scotch = { version = "0.1", optional = true }
-metis = { version = "0.1", optional = true }
+metis = { version = "0.1", optional = true, path = "../../metis-rs" }
 
 # Better tracing and profiling in Intel tools
 ittapi = { version = "0.3", optional = true }

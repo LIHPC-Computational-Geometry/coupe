@@ -201,6 +201,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coupe-metis"
+version = "0.1.0"
+dependencies = [
+ "coupe",
+ "libc",
+ "sprs",
+]
+
+[[package]]
 name = "coupe-tools"
 version = "0.1.0"
 dependencies = [
@@ -642,8 +651,6 @@ dependencies = [
 [[package]]
 name = "metis"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "969c4e429931766d84c38226ddade79db95dfd71ca85ebae2995ddc97369655c"
 dependencies = [
  "metis-sys",
 ]
@@ -651,8 +658,6 @@ dependencies = [
 [[package]]
 name = "metis-sys"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab50927ac85eab34371c8caa5a13c1e2e308db6b125e167608d87037c167bd7b"
 dependencies = [
  "bindgen",
 ]
