@@ -6,7 +6,6 @@ use mesh_io::Mesh;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::collections::HashSet;
-use std::env;
 use std::io;
 
 const USAGE: &str = "Usage: mesh-svg [options] [in-mesh [out-svg]] <in.mesh >out.svg";
@@ -318,27 +317,13 @@ where
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optflag(
         "o",
         "no-optimize",
         "do not merge elements of the same ref together",
     );
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("mesg-svg version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if matches.free.len() > 2 {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 2)?;
 
     let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
     let output = coupe_tools::writer(matches.free.get(1))?;

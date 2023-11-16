@@ -747,6 +747,63 @@ impl std::str::FromStr for MeshFormat {
     }
 }
 
+/// Helper to handle help and version options automatically.
+///
+/// Also returns an error when the number of free arguments is higher than
+/// `max_args`.
+pub fn parse_args(
+    mut options: getopts::Options,
+    help: &str,
+    max_args: usize,
+) -> Result<getopts::Matches> {
+    options.optflag("h", "help", "print this help menu");
+    options.optflag("", "version", "print version information");
+
+    let matches = options.parse(std::env::args().skip(1))?;
+
+    if matches.opt_present("h") {
+        println!("{}", options.usage(help));
+        std::process::exit(0);
+    }
+
+    if matches.opt_present("version") {
+        let arg0 = std::env::args_os().next().unwrap();
+        let arg0 = std::path::PathBuf::from(arg0);
+        let bin = arg0.file_name().unwrap().to_string_lossy();
+        let ver = env!("COUPE_VERSION");
+
+        println!("{bin} version {ver}");
+        print!("Features:");
+
+        #[cfg(feature = "ittapi")]
+        print!(" +ittapi");
+        #[cfg(not(feature = "ittapi"))]
+        print!(" -ittapi");
+
+        #[cfg(feature = "metis")]
+        print!(" +metis");
+        #[cfg(not(feature = "metis"))]
+        print!(" -metis");
+
+        #[cfg(feature = "scotch")]
+        print!(" +scotch");
+        #[cfg(not(feature = "scotch"))]
+        print!(" -scotch");
+
+        println!();
+        std::process::exit(0);
+    }
+
+    if matches.free.len() > max_args {
+        anyhow::bail!(
+            "too many arguments, expected at most {max_args}\n\n{}",
+            options.usage(help),
+        );
+    }
+
+    Ok(matches)
+}
+
 /// Helper to read a mesh either from stdin or from a file.
 pub fn read_mesh(filename: Option<&String>) -> Result<Mesh> {
     Ok(match filename.cloned().as_deref() {

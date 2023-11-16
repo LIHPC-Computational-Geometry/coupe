@@ -14,7 +14,6 @@ use rayon::iter::IntoParallelIterator as _;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::collections::HashSet;
-use std::env;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -194,8 +193,6 @@ where
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optopt(
         "E",
         "edge-weights",
@@ -207,19 +204,7 @@ fn main() -> Result<()> {
     options.optopt("p", "partition", "partition file", "FILE");
     options.optopt("w", "weights", "path to a weight file", "FILE");
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage("Usage: part-info [options]"));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("part-info version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if !matches.free.is_empty() {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 0)?;
 
     let edge_weights = matches
         .opt_get("E")

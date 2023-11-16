@@ -9,7 +9,6 @@ use coupe::nalgebra::DimSub;
 use coupe::nalgebra::ToTypenum;
 use mesh_io::weight;
 use mesh_io::Mesh;
-use std::env;
 use std::fs;
 use std::io;
 use tracing_subscriber::filter::EnvFilter;
@@ -76,8 +75,6 @@ where
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optmulti(
         "a",
         "algorithm",
@@ -95,19 +92,7 @@ fn main() -> Result<()> {
     options.optflag("v", "verbose", "print diagnostic data");
     options.optopt("w", "weights", "weight file", "FILE");
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("mesh-part version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if matches.free.len() > 1 {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 1)?;
 
     let registry = Registry::default().with(EnvFilter::from_env("LOG")).with(
         HierarchicalLayer::new(4)
