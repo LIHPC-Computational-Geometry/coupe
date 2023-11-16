@@ -10,7 +10,6 @@ use coupe::nalgebra::ToTypenum;
 use criterion::Criterion;
 use mesh_io::weight;
 use mesh_io::Mesh;
-use std::env;
 use std::fs;
 use std::io;
 use std::iter;
@@ -245,8 +244,6 @@ fn main() -> Result<()> {
     eprintln!("Warning: This is a debug build of part-bench, benchmarks will not reflect real-world performance.");
 
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optmulti(
         "a",
         "algorithm",
@@ -264,19 +261,7 @@ fn main() -> Result<()> {
     options.optopt("w", "weights", "weight file", "FILE");
     criterion_options(&mut options);
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("part-bench version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if !matches.free.is_empty() {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 0)?;
 
     let edge_weights = matches
         .opt_get("E")

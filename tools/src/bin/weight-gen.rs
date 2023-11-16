@@ -5,7 +5,6 @@ use mesh_io::Mesh;
 use rayon::iter::IntoParallelRefIterator as _;
 use rayon::iter::ParallelIterator as _;
 use std::cmp;
-use std::env;
 
 const USAGE: &str = "Usage: weight-gen [options] [in-mesh [out-weights]] <in.mesh >out.weights";
 
@@ -188,8 +187,6 @@ fn weight_gen<const D: usize>(
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optmulti(
         "d",
         "distribution",
@@ -202,19 +199,7 @@ fn main() -> Result<()> {
         "generate integers instead of floating-point numbers",
     );
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("weight-gen version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if matches.free.len() > 2 {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 2)?;
 
     let distributions = matches.opt_strs("d");
     if distributions.is_empty() {

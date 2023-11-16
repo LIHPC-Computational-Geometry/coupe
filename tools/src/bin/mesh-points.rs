@@ -1,7 +1,6 @@
 use anyhow::Result;
 use mesh_io::ElementType;
 use mesh_io::Mesh;
-use std::env;
 use std::io;
 
 const USAGE: &str = "Usage: mesh-points [options] [in-mesh [out-plot]] <in.mesh >out.plot";
@@ -50,18 +49,9 @@ fn write_points<const D: usize>(mut w: impl io::Write, mesh: &Mesh, with_ids: bo
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
     options.optflag("", "with-ids", "add a column with the cell id");
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        eprintln!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.free.len() > 2 {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 2)?;
 
     let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
     let output = coupe_tools::writer(matches.free.get(1))?;

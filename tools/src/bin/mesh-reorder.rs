@@ -1,7 +1,6 @@
 use anyhow::Context as _;
 use anyhow::Result;
 use mesh_io::Mesh;
-use std::env;
 
 const USAGE: &str = "Usage: mesh-reorder [options] [in-mesh [out-mesh]] <in.mesh >out.mesh";
 
@@ -62,23 +61,9 @@ where
 
 fn main() -> Result<()> {
     let mut options = getopts::Options::new();
-    options.optflag("h", "help", "print this help menu");
-    options.optflag("", "version", "print version information");
     options.optopt("f", "format", "output format", "EXT");
 
-    let matches = options.parse(env::args().skip(1))?;
-
-    if matches.opt_present("h") {
-        println!("{}", options.usage(USAGE));
-        return Ok(());
-    }
-    if matches.opt_present("version") {
-        println!("mesh-reorder version {}", env!("COUPE_VERSION"));
-        return Ok(());
-    }
-    if matches.free.len() > 2 {
-        anyhow::bail!("too many arguments\n\n{}", options.usage(USAGE));
-    }
+    let matches = coupe_tools::parse_args(options, USAGE, 2)?;
 
     let format = matches
         .opt_get("f")
