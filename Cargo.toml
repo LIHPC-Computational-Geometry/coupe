@@ -46,6 +46,7 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 rand = "0.8"
 sprs = { version = "0.11", optional = true, default-features = false, features = ["multi_thread"] }
 ittapi = "0.3"
+arrayfire = { version = "3", default-features = false, features = ["algorithm", "arithmetic", "data", "indexing", "macros"] }
 
 [dev-dependencies]
 affinity = { version = "0.1", default-features = false }

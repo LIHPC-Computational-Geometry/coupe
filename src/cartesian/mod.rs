@@ -1,4 +1,8 @@
 use crate::topology::Topology;
+use arrayfire::Array;
+use arrayfire::Dim4;
+use arrayfire::Fromf64;
+use arrayfire::HasAfEnum;
 use num_traits::AsPrimitive;
 use num_traits::Num;
 use num_traits::One;
@@ -10,6 +14,7 @@ use std::iter::Sum;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::ops::Range;
+use arrayfire::ConstGenerator;
 
 mod rcb;
 
@@ -131,12 +136,18 @@ impl Grid<2> {
     where
         W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
         f64: AsPrimitive<W>,
+        W: HasAfEnum<AggregateOutType = W, BaseType = W> + Fromf64 + ConstGenerator<OutType =W>,
     {
-        let total_weight: W = weights.par_iter().cloned().sum();
+        let [width, height] = self.size;
+        let dim = [usize::from(width) as u64, usize::from(height) as u64, 1, 1];
+        let weights = Array::new(weights, Dim4::new(&dim));
+
+        let (total_weight, _) = arrayfire::sum_all(&weights);
+
         let iters = rcb::recurse_2d(
             self,
             self.into_subgrid(),
-            weights,
+            &weights,
             total_weight,
             iter_count,
             1,
