@@ -1,6 +1,7 @@
 use super::Problem;
 use super::Runner;
 use super::ToRunner;
+use crate::zoom_in::zoom_in;
 use anyhow::Context;
 use mesh_io::weight;
 use metis::Idx;
@@ -15,12 +16,12 @@ impl<const D: usize> ToRunner<D> for Recursive {
         let (ncon, mut weights) = match &problem.weights {
             weight::Array::Integers(is) => {
                 let ncon = is.first().map_or(1, Vec::len) as Idx;
-                let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
+                let weights = zoom_in(is.iter().map(|v| v.iter().cloned()));
                 (ncon, weights)
             }
             weight::Array::Floats(fs) => {
                 let ncon = fs.first().map_or(1, Vec::len) as Idx;
-                let weights = crate::zoom_in(fs.iter().map(|v| v.iter().cloned()));
+                let weights = zoom_in(fs.iter().map(|v| v.iter().cloned()));
                 (ncon, weights)
             }
         };
@@ -28,7 +29,7 @@ impl<const D: usize> ToRunner<D> for Recursive {
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
-        let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
+        let mut adjwgt: Vec<_> = zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let tolerance = self.tolerance.map(|f| (f * 1000.0) as Idx);
 
@@ -61,12 +62,12 @@ impl<const D: usize> ToRunner<D> for KWay {
         let (ncon, mut weights) = match &problem.weights {
             weight::Array::Integers(is) => {
                 let ncon = is.first().map_or(1, Vec::len) as Idx;
-                let weights = crate::zoom_in(is.iter().map(|v| v.iter().cloned()));
+                let weights = zoom_in(is.iter().map(|v| v.iter().cloned()));
                 (ncon, weights)
             }
             weight::Array::Floats(fs) => {
                 let ncon = fs.first().map_or(1, Vec::len) as Idx;
-                let weights = crate::zoom_in(fs.iter().map(|v| v.iter().cloned()));
+                let weights = zoom_in(fs.iter().map(|v| v.iter().cloned()));
                 (ncon, weights)
             }
         };
@@ -74,7 +75,7 @@ impl<const D: usize> ToRunner<D> for KWay {
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let mut xadj: Vec<_> = xadj.iter().map(|i| *i as Idx).collect();
         let mut adjncy: Vec<_> = adjncy.iter().map(|i| *i as Idx).collect();
-        let mut adjwgt: Vec<_> = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
+        let mut adjwgt: Vec<_> = zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let tolerance = self.tolerance.map(|f| (f * 1000.0) as Idx);
 
