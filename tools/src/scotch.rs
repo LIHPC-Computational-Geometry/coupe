@@ -1,6 +1,7 @@
 use super::runner_error;
 use super::Problem;
 use super::ToRunner;
+use crate::zoom_in::zoom_in;
 use anyhow::Context as _;
 use mesh_io::weight;
 use scotch::graph::Data;
@@ -18,20 +19,20 @@ impl<const D: usize> ToRunner<D> for Standard {
                 if is.first().map_or(1, Vec::len) != 1 {
                     return runner_error("SCOTCH cannot do multi-criteria partitioning");
                 }
-                crate::zoom_in(is.iter().map(|v| Some(v[0])))
+                zoom_in(is.iter().map(|v| Some(v[0])))
             }
             weight::Array::Floats(fs) => {
                 if fs.first().map_or(1, Vec::len) != 1 {
                     return runner_error("SCOTCH cannot do multi-criteria partitioning");
                 }
-                crate::zoom_in(fs.iter().map(|v| Some(v[0])))
+                zoom_in(fs.iter().map(|v| Some(v[0])))
             }
         };
 
         let (xadj, adjncy, adjwgt) = problem.adjacency().into_raw_storage();
         let xadj: Vec<_> = xadj.iter().map(|i| *i as Num).collect();
         let adjncy: Vec<_> = adjncy.iter().map(|i| *i as Num).collect();
-        let adjwgt = crate::zoom_in(adjwgt.iter().map(|v| Some(*v)));
+        let adjwgt = zoom_in(adjwgt.iter().map(|v| Some(*v)));
 
         let mut strat = scotch::Strategy::new();
         let arch = scotch::Architecture::complete(self.part_count as Num);
