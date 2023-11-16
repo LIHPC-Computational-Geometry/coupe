@@ -775,10 +775,10 @@ pub fn parse_args(
         println!("{bin} version {ver}");
         print!("Features:");
 
-        #[cfg(feature = "ittapi")]
-        print!(" +ittapi");
-        #[cfg(not(feature = "ittapi"))]
-        print!(" -ittapi");
+        #[cfg(feature = "intel-perf")]
+        print!(" +intel-perf");
+        #[cfg(not(feature = "intel-perf"))]
+        print!(" -intel-perf");
 
         #[cfg(feature = "metis")]
         print!(" +metis");
