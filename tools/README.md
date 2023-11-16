@@ -60,15 +60,13 @@ cargo build -p mesh-io-ffi
 ### Integration with other partitioners
 
 The `mesh-part` and `part-bench` tools have optional support for [METIS] and
-[SCOTCH] that is enabled by default.  To disable these features, use the
-`--no-default-features` command-line flag.
+[SCOTCH] that is disabled by default.  To enable these features, use the
+`--features` command-line flag as shown below. Note that these features require
+a working clang install (version 5.0 or higher).
 
-```
-# Disable SCOTCH and METIS support
-cargo build --bins --no-default-features
-
-# Enable METIS support only
-cargo build --bins --no-default-features --features metis
+```sh
+# Enable SCOTCH and METIS algorithms
+cargo build --bins --features metis,scotch
 ```
 
 ### Integration with Intel performance tools
@@ -76,10 +74,10 @@ cargo build --bins --no-default-features --features metis
 The `mesh-part` and `part-bench` tools can better integrate with Intel VTune and
 Advisor through the use of *Instrumentation and Tracing Technology APIs*.
 
-To enable this integration, do so through the `ittapi` cargo feature:
+To enable this integration, do so through the `intel-perf` cargo feature:
 
-```
-cargo build --bins --feature ittapi
+```sh
+cargo build --bins --feature intel-perf
 ```
 
 When enabled, `mesh-part` and `part-bench` will wrap algorithm calls into

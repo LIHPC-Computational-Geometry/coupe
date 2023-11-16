@@ -12,10 +12,17 @@ repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
 
 
 [features]
-default = ["scotch", "metis"]
+default = []
 
-# Implicit features
-# - ittapi: enable integration with Intel performance tools
+# Integrate with Intel performance tools
+# See tools/README.md for details.
+intel-perf = ["dep:ittapi"]
+
+# Add METIS partitioning procedures as algorithms
+metis = ["dep:metis"]
+
+# Add SCOTCH partitioning procedures as algorithms
+scotch = ["dep:scotch"]
 
 
 [dependencies]
