@@ -10,7 +10,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends libclang-dev
 
 ARG BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include/scotch"
 
-RUN cargo install --path tools --root /builder/install
+RUN cargo install --path tools --root /builder/install --features metis,scotch,intel-perf
 
 # FINAL IMAGE
 
