@@ -15,6 +15,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -23,14 +24,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - {
-            name: "coupe",
-            base_image: "rust:latest",
-          }
 
     steps:
       - name: Checkout repository
@@ -40,7 +33,8 @@ jobs:
         uses: hadolint/hadolint-action@master
         with:
           dockerfile: "Dockerfile"
-          ignore: 'DL3006,DL3008' # DL3006: false positive, rust image has a tag
+          ignore: 'DL3008'
+          #ignore: 'DL3006,DL3008' # DL3006: false positive, rust image has a tag
 
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
@@ -58,7 +52,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: ${{ env.REGISTRY }}/lihpc-computational-geometry/${{ matrix.config.name }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: |
             org.opencontainers.image.title=Coupe
             org.opencontainers.image.description=Coupe Image
@@ -70,8 +64,6 @@ jobs:
       - name: Build and push nightly Docker image
         uses: docker/build-push-action@v3
         with:
-          build-args: |
-            BASEIMAGE=${{ matrix.config.base_image }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
