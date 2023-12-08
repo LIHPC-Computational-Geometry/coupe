@@ -11,7 +11,7 @@ on:
       tag_name:
         description: 'Tag name for image'
         required: true
-        default: 'main'
+        default: 'master'
 
 env:
   REGISTRY: ghcr.io
