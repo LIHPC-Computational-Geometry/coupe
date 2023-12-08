@@ -1,8 +1,6 @@
-ARG BASEIMAGE=rust:slim-bullseye
-
 # BUILDER PATTERN
 
-FROM $BASEIMAGE AS builder
+FROM rust:1 AS builder
 
 WORKDIR /builder
 
@@ -16,11 +14,10 @@ RUN cargo install --path tools --root /builder/install
 
 # FINAL IMAGE
 
-FROM debian:bullseye-slim
+FROM debian:stable-slim
 
 WORKDIR /coupe
 
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libscotch* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libmetis* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /builder/install/bin /usr/bin
-
