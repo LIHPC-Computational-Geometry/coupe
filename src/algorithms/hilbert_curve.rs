@@ -652,10 +652,9 @@ mod tests {
             for y in 0..(1 << 6) {
                 let fast_encode = encode_2d(x, y, ORDER);
                 let slow_encode = {
-                    let zorder = unsafe {
-                        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
-                            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
-                    };
+                    let zorder = pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+                        | pdep_u64(y, 0x5555_5555_5555_5555);
+
                     let config = 0;
                     encode_2d_slow(zorder, ORDER, config).0
                 };
