@@ -14,7 +14,7 @@ pub fn bench(c: &mut Criterion) {
     let weights: Vec<f64> = (0..count).map(|i| i as f64).collect();
     let mut partition = vec![0; count];
 
-    let core_count = affinity::get_core_num();
+    let core_count = num_cpus::get();
     let mut group = c.benchmark_group("rcb_cartesian");
 
     for thread_count in [1, 2, 4, 8, 16, 24, 32, 40] {
@@ -30,7 +30,7 @@ pub fn bench(c: &mut Criterion) {
                 }
                 b.spawn(move || {
                     let core_idx = thread.index() % core_count;
-                    affinity::set_thread_affinity([core_idx]).unwrap();
+                    core_affinity::set_for_current(core_affinity::CoreId { id: core_idx });
                     thread.run();
                 })?;
                 Ok(())

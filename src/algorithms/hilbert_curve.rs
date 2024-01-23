@@ -21,6 +21,36 @@ use rayon::prelude::*;
 use std::fmt;
 use std::iter::Sum;
 
+fn pdep_u64(src: u64, mask: u64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("bmi2") {
+            return unsafe { std::arch::x86_64::_pdep_u64(src, mask) };
+        }
+    }
+    pdep_u64_fallback(src, mask)
+}
+
+// Naive implementation of pdep for non x86_64 and avx2 archs
+fn pdep_u64_fallback(src: u64, mask: u64) -> u64 {
+    let mut result = 0;
+    let mut bitmask = mask;
+    let mut srcbit = src;
+
+    for _ in 0..64 {
+        if bitmask != 0 {
+            // Isolate the rightmost set bit
+            let rightmost = bitmask & bitmask.wrapping_neg();
+            // Clear that from the future consideration
+            bitmask = bitmask & (bitmask - 1);
+            //and set corresponding bit in result
+            result |= (srcbit & 1) * rightmost;
+            srcbit >>= 1;
+        }
+    }
+    result
+}
+
 /// Divide `points` into `n` parts of similar weights.
 ///
 /// The result is an array of `n` elements, the ith element is the the ???est
@@ -314,10 +344,7 @@ fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
         lut
     };
 
-    let zorder = unsafe {
-        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
-            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
-    };
+    let zorder = pdep_u64(x, 0x5555_5555_5555_5555 << 1) | pdep_u64(y, 0x5555_5555_5555_5555);
 
     let mut config: u16 = 0;
     let mut hilbert: u64 = 0;
@@ -372,11 +399,9 @@ fn encode_3d(x: u64, y: u64, z: u64, order: usize) -> u64 {
         0b0010_110, 0b0110_111, 0b0010_101, 0b1000_100, 0b0111_001, 0b0101_000, 0b0111_010, 0b1000_011,
     ];
 
-    let zorder = unsafe {
-        std::arch::x86_64::_pdep_u64(x, 0x9249_2492_4924_9249 << 2)
-            | std::arch::x86_64::_pdep_u64(y, 0x9249_2492_4924_9249 << 1)
-            | std::arch::x86_64::_pdep_u64(z, 0x9249_2492_4924_9249)
-    };
+    let zorder = pdep_u64(x, 0x9249_2492_4924_9249 << 2)
+        | pdep_u64(y, 0x9249_2492_4924_9249 << 1)
+        | pdep_u64(z, 0x9249_2492_4924_9249);
 
     let mut config = 0;
     let mut hilbert = 0;
@@ -561,6 +586,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_pdep_u64() {
+        assert_eq!(pdep_u64(0, 0), 0);
+        assert_eq!(pdep_u64(0, 123456), 0);
+        assert_eq!(pdep_u64(123456, 0), 0);
+        assert_eq!(pdep_u64(1, 0x5), 1);
+        assert_eq!(pdep_u64(1, 0x5 << 1), 2);
+
+        let n = 0b1011_1110_1001_0011u64;
+
+        let m0 = 0b0110_0011_1000_0101u64;
+        let s0 = 0b0000_0010_0000_0101u64;
+
+        let m1 = 0b1110_1011_1110_1111u64;
+        let s1 = 0b1110_1001_0010_0011u64;
+
+        assert_eq!(pdep_u64(n, m0), s0);
+        assert_eq!(pdep_u64(n, m1), s1);
+
+        let m3 = 0xff00fff0u64;
+        let n3 = 0x00012567u64;
+        assert_eq!(0x12005670u64, pdep_u64(n3, m3));
+    }
+
+    #[test]
     fn test_segment_to_segment() {
         let mapping = segment_to_segment(0.0, 8.0, 3);
 
@@ -627,10 +676,9 @@ mod tests {
             for y in 0..(1 << 6) {
                 let fast_encode = encode_2d(x, y, ORDER);
                 let slow_encode = {
-                    let zorder = unsafe {
-                        std::arch::x86_64::_pdep_u64(x, 0x5555_5555_5555_5555 << 1)
-                            | std::arch::x86_64::_pdep_u64(y, 0x5555_5555_5555_5555)
-                    };
+                    let zorder = pdep_u64(x, 0x5555_5555_5555_5555 << 1)
+                        | pdep_u64(y, 0x5555_5555_5555_5555);
+
                     let config = 0;
                     encode_2d_slow(zorder, ORDER, config).0
                 };

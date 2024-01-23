@@ -83,49 +83,30 @@ fn configure_criterion(mut c: Criterion, matches: &getopts::Matches) -> Result<C
     Ok(c)
 }
 
-fn build_global_pool() {
-    let core_count = affinity::get_core_num();
-    rayon::ThreadPoolBuilder::new()
-        .spawn_handler(|thread| {
-            let mut b = std::thread::Builder::new();
-            if let Some(name) = thread.name() {
-                b = b.name(name.to_owned());
-            }
-            if let Some(stack_size) = thread.stack_size() {
-                b = b.stack_size(stack_size);
-            }
-            b.spawn(move || {
-                let core_idx = thread.index() % core_count;
-                affinity::set_thread_affinity([core_idx]).unwrap();
-                thread.run();
-            })?;
-            Ok(())
-        })
-        .build()
-        .unwrap();
-}
+fn build_pool(thread_count: Option<usize>) -> rayon::ThreadPool {
+    let core_count = num_cpus::get();
+    let mut tb = rayon::ThreadPoolBuilder::new();
 
-fn build_pool(thread_count: usize) -> rayon::ThreadPool {
-    let core_count = affinity::get_core_num();
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(thread_count)
-        .spawn_handler(|thread| {
-            let mut b = std::thread::Builder::new();
-            if let Some(name) = thread.name() {
-                b = b.name(name.to_owned());
-            }
-            if let Some(stack_size) = thread.stack_size() {
-                b = b.stack_size(stack_size);
-            }
-            b.spawn(move || {
-                let core_idx = thread.index() % core_count;
-                affinity::set_thread_affinity([core_idx]).unwrap();
-                thread.run();
-            })?;
-            Ok(())
-        })
-        .build()
-        .unwrap()
+    if let Some(thread_count) = thread_count {
+        tb = tb.num_threads(thread_count);
+    }
+    tb.spawn_handler(|thread| {
+        let mut b = std::thread::Builder::new();
+        if let Some(name) = thread.name() {
+            b = b.name(name.to_owned());
+        }
+        if let Some(stack_size) = thread.stack_size() {
+            b = b.stack_size(stack_size);
+        }
+        b.spawn(move || {
+            let core_idx = thread.index() % core_count;
+            core_affinity::set_for_current(core_affinity::CoreId { id: core_idx });
+            thread.run();
+        })?;
+        Ok(())
+    })
+    .build()
+    .unwrap()
 }
 
 fn measure_efficiency(
@@ -150,7 +131,7 @@ fn measure_efficiency(
     let mut thread_counts = thread_counts.peekable();
 
     while let Some(thread_count) = thread_counts.next() {
-        let pool = build_pool(thread_count);
+        let pool = build_pool(Some(thread_count));
         let benchmark_name = format!("threads={thread_count}");
         g.bench_function(&benchmark_name, |b| pool.install(|| b.iter(&mut benchmark)));
         if thread_counts.peek().is_some() {
@@ -280,7 +261,7 @@ fn main() -> Result<()> {
     let weights = fs::File::open(weight_file).context("failed to open weight file")?;
     let weights = io::BufReader::new(weights);
 
-    build_global_pool();
+    build_pool(None);
 
     let (mesh, weights) = rayon::join(
         || Mesh::from_reader(mesh_file).context("failed to read mesh file"),
