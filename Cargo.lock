@@ -212,11 +212,13 @@ name = "coupe"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "core_affinity",
  "criterion",
  "itertools",
  "ittapi",
  "nalgebra",
  "num-traits",
+ "num_cpus",
  "proptest",
  "rand",
  "rayon",
