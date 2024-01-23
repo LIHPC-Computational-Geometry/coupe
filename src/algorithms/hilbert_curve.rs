@@ -586,6 +586,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_pdep_u64_fallback() {
+        assert_eq!(pdep_u64_fallback(0, 0), 0);
+        assert_eq!(pdep_u64_fallback(0, 123456), 0);
+        assert_eq!(pdep_u64_fallback(123456, 0), 0);
+
+        let n = 0b1011_1110_1001_0011u64;
+
+        let m0 = 0b0110_0011_1000_0101u64;
+        let s0 = 0b0000_0010_0000_0101u64;
+
+        let m1 = 0b1110_1011_1110_1111u64;
+        let s1 = 0b1110_1001_0010_0011u64;
+
+        assert_eq!(pdep_u64_fallback(m0, n), s0);
+        assert_eq!(pdep_u64_fallback(m1, n), s1);
+    }
+
+    #[test]
     fn test_segment_to_segment() {
         let mapping = segment_to_segment(0.0, 8.0, 3);
 
