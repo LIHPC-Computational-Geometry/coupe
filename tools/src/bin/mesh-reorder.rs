@@ -70,7 +70,7 @@ fn main() -> Result<()> {
         .context("invalid value for option 'format'")?;
 
     eprintln!("Reading mesh...");
-    let mut mesh = coupe_tools::read_mesh(matches.free.get(0))?;
+    let mut mesh = coupe_tools::read_mesh(matches.free.first())?;
 
     eprintln!("Shuffling mesh...");
     mesh = shuffle(rand::thread_rng(), mesh);

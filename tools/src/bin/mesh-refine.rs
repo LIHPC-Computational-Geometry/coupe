@@ -25,7 +25,7 @@ fn main() -> Result<()> {
         .unwrap_or(1);
 
     eprintln!("Reading mesh...");
-    let mut mesh = coupe_tools::read_mesh(matches.free.get(0))?;
+    let mut mesh = coupe_tools::read_mesh(matches.free.first())?;
     eprintln!(" -> Dimension: {}", mesh.dimension());
     eprintln!(" -> Nodes: {}", mesh.node_count());
     eprintln!(" -> Elements: {}", mesh.element_count());

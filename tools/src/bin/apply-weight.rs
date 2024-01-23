@@ -56,7 +56,7 @@ fn main() -> Result<()> {
         }
     }
 
-    coupe_tools::write_mesh(&mesh, format, matches.free.get(0))?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.first())?;
 
     Ok(())
 }

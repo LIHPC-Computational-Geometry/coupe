@@ -45,7 +45,7 @@ fn main() -> Result<()> {
             .for_each(|((_, _, element_ref), part)| *element_ref = part as isize);
     }
 
-    coupe_tools::write_mesh(&mesh, format, matches.free.get(0))?;
+    coupe_tools::write_mesh(&mesh, format, matches.free.first())?;
 
     Ok(())
 }
