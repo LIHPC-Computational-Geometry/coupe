@@ -19,7 +19,7 @@ fn main() -> Result<()> {
         .context("invalid value for option 'times'")?
         .unwrap_or(2);
 
-    let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
+    let mesh = coupe_tools::read_mesh(matches.free.first())?;
     let mesh = mesh.duplicate(n);
     coupe_tools::write_mesh(&mesh, format, matches.free.get(1))?;
 
