@@ -21,18 +21,18 @@ use rayon::prelude::*;
 use std::fmt;
 use std::iter::Sum;
 
-fn pdep_u64(mask: u64, src: u64) -> u64 {
+fn pdep_u64(src: u64, mask: u64) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("bmi2") {
-            return unsafe { std::arch::x86_64::_pdep_u64(mask, src) };
+            return unsafe { std::arch::x86_64::_pdep_u64(src, mask) };
         }
     }
-    pdep_u64_fallback(mask, src)
+    pdep_u64_fallback(src, mask)
 }
 
 // Naive implementation of pdep for non x86_64 and avx2 archs
-fn pdep_u64_fallback(mask: u64, src: u64) -> u64 {
+fn pdep_u64_fallback(src: u64, mask: u64) -> u64 {
     let mut result = 0;
     let mut bitmask = mask;
     let mut srcbit = src;
@@ -586,10 +586,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pdep_u64_fallback() {
-        assert_eq!(pdep_u64_fallback(0, 0), 0);
-        assert_eq!(pdep_u64_fallback(0, 123456), 0);
-        assert_eq!(pdep_u64_fallback(123456, 0), 0);
+    fn test_pdep_u64() {
+        assert_eq!(pdep_u64(0, 0), 0);
+        assert_eq!(pdep_u64(0, 123456), 0);
+        assert_eq!(pdep_u64(123456, 0), 0);
+        assert_eq!(pdep_u64(1, 0x5), 1);
+        assert_eq!(pdep_u64(1, 0x5 << 1), 2);
 
         let n = 0b1011_1110_1001_0011u64;
 
@@ -599,8 +601,12 @@ mod tests {
         let m1 = 0b1110_1011_1110_1111u64;
         let s1 = 0b1110_1001_0010_0011u64;
 
-        assert_eq!(pdep_u64_fallback(m0, n), s0);
-        assert_eq!(pdep_u64_fallback(m1, n), s1);
+        assert_eq!(pdep_u64(n, m0), s0);
+        assert_eq!(pdep_u64(n, m1), s1);
+
+        let m3 = 0xff00fff0u64;
+        let n3 = 0x00012567u64;
+        assert_eq!(0x12005670u64, pdep_u64(n3, m3));
     }
 
     #[test]
