@@ -45,7 +45,7 @@ rayon = "1"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 rand = "0.8"
 sprs = { version = "0.11", optional = true, default-features = false, features = ["multi_thread"] }
-ittapi = "0.3"
+ittapi = "0.4"
 
 [dev-dependencies]
 criterion = "0.3"
