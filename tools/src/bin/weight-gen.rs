@@ -206,7 +206,7 @@ fn main() -> Result<()> {
         anyhow::bail!("missing required option 'distribution'");
     }
 
-    let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
+    let mesh = coupe_tools::read_mesh(matches.free.first())?;
 
     match mesh.dimension() {
         2 => weight_gen::<2>(mesh, distributions, matches),

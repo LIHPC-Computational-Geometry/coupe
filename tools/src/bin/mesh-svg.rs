@@ -325,7 +325,7 @@ fn main() -> Result<()> {
 
     let matches = coupe_tools::parse_args(options, USAGE, 2)?;
 
-    let mesh = coupe_tools::read_mesh(matches.free.get(0))?;
+    let mesh = coupe_tools::read_mesh(matches.free.first())?;
     let output = coupe_tools::writer(matches.free.get(1))?;
     let optimize = !matches.opt_present("o");
     match mesh.dimension() {
