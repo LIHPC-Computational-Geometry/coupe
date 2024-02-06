@@ -450,6 +450,47 @@ where
             max_bad_move_in_a_row: optional(parse(args.next()), 1)?,
             ..Default::default()
         }),
+        "targetor" => {
+            let raw_nb_intervals = parse(args.next()).transpose()?;
+            let nb_intervals = raw_nb_intervals.split('-');
+            nb_intervals
+                .iter_mut()
+                .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+
+            let raw_parts_target_loads = parse(args.next()).transpose()?;
+            let parts_target_loads = raw_parts_target_loads.split('-');
+            parts_target_loads
+                .iter_mut()
+                .map(|num| *num = num.parse::<usize>().unwrap().to_string());
+
+            let box_handler = RegularBoxHandler {
+                min_weights: vec![],
+                nb_intervals: nb_intervals.into_iter().collect(),
+                deltas: vec![],
+                boxes: BTreeMap::new(),
+            };
+
+            // let box_handler = RegularBoxHandler::new(instance.cweights, nb_intervals);
+            // let max_imbalance = parse(args.next()).transpose()?;
+            // let max_bad_move_in_a_row = optional(parse(args.next()), 0)?;
+            // let mut max_passes = parse(args.next()).transpose()?;
+            // if max_passes == Some(0) {
+            //     max_passes = None;
+            // }
+            // let mut max_moves_per_pass = parse(args.next()).transpose()?;
+            // if max_moves_per_pass == Some(0) {
+            //     max_moves_per_pass = None;
+            // }
+            Box::new(coupe::TargetorWIP {
+                nb_intervals,
+                parts_target_loads,
+                box_handler,
+                // max_imbalance,
+                // max_bad_move_in_a_row,
+                // max_passes,
+                // max_moves_per_pass,
+            })
+        }
 
         #[cfg(feature = "metis")]
         "metis:recursive" => {

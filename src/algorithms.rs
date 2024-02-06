@@ -11,6 +11,7 @@ mod kernighan_lin;
 mod kk;
 mod multi_jagged;
 mod recursive_bisection;
+mod targetor;
 mod vn;
 mod z_curve;
 
@@ -35,6 +36,7 @@ pub use multi_jagged::MultiJagged;
 pub use recursive_bisection::Rcb;
 pub use recursive_bisection::RcbWeight;
 pub use recursive_bisection::Rib;
+pub use targetor::TargetorWIP;
 pub use vn::VnBest;
 pub use vn::VnBestWeight;
 pub use vn::VnFirst;
