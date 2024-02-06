@@ -159,11 +159,7 @@ where
 
 impl<'a, T: PositiveInteger> SearchStrat<'a, T> for NeighborSearchStrat<T> {
     fn new(nb_intervals: Vec<T>) -> Self {
-        let out = Self {
-            nb_intervals: nb_intervals,
-        };
-
-        out
+        Self { nb_intervals }
     }
 
     fn gen_indices(&self, origin: &'a BoxIndices<T>, dist: T) -> IterBoxIndices<'a, T> {
@@ -239,7 +235,7 @@ impl<'a, T: PositiveInteger, W: PositiveWeight> RegularDeltaHandler<'a, T, W>
         max_weights: impl IntoIterator<Item = W>,
         nb_intervals: impl IntoIterator<Item = T>,
     ) -> Vec<f64> {
-        let res = min_weights
+        min_weights
             .into_iter()
             .zip(max_weights.into_iter())
             .zip(nb_intervals.into_iter())
@@ -256,9 +252,7 @@ impl<'a, T: PositiveInteger, W: PositiveWeight> RegularDeltaHandler<'a, T, W>
                 }
                 res
             })
-            .collect();
-
-        res
+            .collect()
     }
 }
 
@@ -351,10 +345,10 @@ where
                 .zip(max_values.iter_mut())
                 .for_each(|((current_val, min_val), max_val)| {
                     if current_val < *min_val {
-                        *min_val = current_val.clone();
+                        *min_val = current_val;
                     }
                     if current_val > *max_val {
-                        *max_val = current_val.clone();
+                        *max_val = current_val;
                     }
                 })
         }
@@ -365,8 +359,8 @@ where
         let mut res = Self {
             min_weights: min_values,
             nb_intervals: nb_intervals.into_iter().collect(),
-            deltas: deltas,
-            boxes: boxes,
+            deltas,
+            boxes,
         };
 
         cweights_iter = cweights.clone().into_iter();
@@ -385,7 +379,7 @@ where
     }
 }
 
-impl<'a, T, W> Debug for RegularBoxHandler<T, W>
+impl<T, W> Debug for RegularBoxHandler<T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
@@ -417,8 +411,8 @@ where
                         // NOTE: Delta is allowed to be zero iff weights are constant
                         if *delta != f64::zero() {
                             index = cmp::min(
-                        T::from((diff.to_f64().unwrap() / delta).floor()).unwrap(),
-                        T::from(*nb_interval - T::from(1).unwrap()).unwrap(),
+                                T::from((diff.to_f64().unwrap() / delta).floor()).unwrap(),
+                                T::from(*nb_interval - T::from(1).unwrap()).unwrap(),
                             );
                         }
                         index
@@ -477,7 +471,7 @@ where
             max_imbalances
                 .iter()
                 .zip(cweights[id].clone().into_iter())
-                .zip(partition_imbalances.clone().into_iter())
+                .zip(partition_imbalances.clone())
                 // .map(|((max, cweight), criterion_imbalances)| {
                 //     *max == partition_imbalance
                 //         && cweight >= (partition_imbalance + partition_imbalance)
@@ -496,7 +490,7 @@ where
                 .all(|valid_gain| valid_gain)
         };
 
-        let candidates = self.boxes.get(&origin);
+        let candidates = self.boxes.get(origin);
         // println!("The candidates are {:?}", candidates);
         let candidate_move = candidates
             .unwrap_or(&vec![])
@@ -506,8 +500,7 @@ where
             // Filter settled cweights, i.e. cweights whose move should leave
             // to a higher partition imbalance
             .find(|id| strict_positive_gain(**id))
-            .map(|id| (*id, 1 - part_source))
-            .clone();
+            .map(|id| (*id, 1 - part_source));
 
         candidate_move
     }
@@ -647,7 +640,7 @@ where
     }
 }
 
-impl<'a, T: PositiveInteger, W: PositiveWeight> TargetorWIP<T, W>
+impl<T: PositiveInteger, W: PositiveWeight> TargetorWIP<T, W>
 where
     T: PositiveInteger,
     W: PositiveWeight,
@@ -671,13 +664,11 @@ where
             .map(|criterion_target_loads| criterion_target_loads.into_iter().collect())
             .collect();
 
-        let res = Self {
+        Self {
             nb_intervals: nb_intervals.into_iter().collect(),
             parts_target_loads: res_target_loads,
             box_handler: None,
-        };
-
-        res
+        }
     }
 
     pub fn setup_default_box_handler<CC, CW>(&mut self, cweights: CC)
@@ -828,7 +819,7 @@ where
     }
 }
 
-impl<'a, T: PositiveInteger, W: PositiveWeight, CC, CW> crate::Partition<CC> for TargetorWIP<T, W>
+impl<T: PositiveInteger, W: PositiveWeight, CC, CW> crate::Partition<CC> for TargetorWIP<T, W>
 where
     CC: IntoIterator<Item = CW> + Clone + std::ops::Index<usize, Output = CW> + Debug,
     CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W> + Debug,
@@ -858,7 +849,7 @@ where
     //     CP: IntoIterator<Item = PartId> + Clone + std::ops::Index<usize, Output = PartId>,
     //     // CW: IntoIterator<Item = W> + Clone + std::ops::Index<usize, Output = W>,
     {
-        let partition_len = part_ids.iter().count();
+        let partition_len = part_ids.len();
         let nb_cweights = cweights.clone().into_iter().count();
         if partition_len != nb_cweights {
             return Err(Error::InputLenMismatch {
@@ -896,7 +887,7 @@ where
             part_ids[index] = *value;
         }
 
-        return Ok(0);
+        Ok(0)
     }
 }
 

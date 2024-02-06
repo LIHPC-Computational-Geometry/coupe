@@ -132,7 +132,7 @@ where
                 Integers(is) => {
                     let weights: Vec<Vec<W>> = is
                         .iter()
-                        .map(|inner_vec| inner_vec.iter().map(|value| *value).collect())
+                        .map(|inner_vec| inner_vec.to_vec())
                         .collect();
                     // let weights = is
                     //     .iter()
@@ -501,7 +501,7 @@ where
             let mut wip_nb_intervals: Vec<i64> = Vec::new();
             let mut wip_parts_target_loads: Vec<Vec<i64>> = Vec::new();
 
-            while true {
+            loop {
                 // if let Some(tolerance) = tolerance {
                 //     if tolerance < 0.001 {
                 //         anyhow::bail!("METIS does not support tolerances below 0.001");
