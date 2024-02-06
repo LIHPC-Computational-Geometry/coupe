@@ -72,7 +72,7 @@ fn criterion_options(options: &mut getopts::Options) {
 
 fn configure_criterion(mut c: Criterion, matches: &getopts::Matches) -> Result<Criterion> {
     if let Some(baseline) = matches.opt_str("b") {
-        c = c.retain_baseline(baseline);
+        c = c.retain_baseline(baseline, true);
     }
     if let Some(baseline) = matches.opt_str("s") {
         c = c.save_baseline(baseline);
