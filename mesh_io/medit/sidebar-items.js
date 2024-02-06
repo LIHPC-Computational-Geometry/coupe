@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["parse_ascii","parse_binary","test_format_ascii","test_format_binary"],"struct":["DisplayAscii","ParseError"]};

@@ -1,0 +1,19 @@
+var srcIndex = JSON.parse('{\
+"apply_part":["",[],["apply-part.rs"]],\
+"apply_weight":["",[],["apply-weight.rs"]],\
+"coupe":["",[["algorithms",[["vn",[],["best.rs","first.rs","mod.rs"]]],["arc_swap.rs","ckk.rs","fiduccia_mattheyses.rs","graph_growth.rs","greedy.rs","hilbert_curve.rs","k_means.rs","kernighan_lin.rs","kk.rs","multi_jagged.rs","recursive_bisection.rs","z_curve.rs"]],["cartesian",[],["mod.rs","rcb.rs"]],["topology",[],["mod.rs","sprs.rs"]]],["algorithms.rs","average.rs","defer.rs","geometry.rs","imbalance.rs","lib.rs","nextafter.rs","real.rs","work_share.rs"]],\
+"coupe_tools":["",[],["ittapi_stub.rs","lib.rs"]],\
+"mesh_dup":["",[],["mesh-dup.rs"]],\
+"mesh_io":["",[["medit",[],["mod.rs","parser.rs","serializer.rs"]]],["lib.rs","partition.rs","vtk.rs","weight.rs"]],\
+"mesh_part":["",[],["mesh-part.rs"]],\
+"mesh_points":["",[],["mesh-points.rs"]],\
+"mesh_refine":["",[],["mesh-refine.rs"]],\
+"mesh_reorder":["",[],["mesh-reorder.rs"]],\
+"mesh_svg":["",[],["mesh-svg.rs"]],\
+"meshio":["",[],["lib.rs"]],\
+"num_part":["",[["database",[],["mod.rs"]]],["main.rs"]],\
+"part_bench":["",[],["part-bench.rs"]],\
+"part_info":["",[],["part-info.rs"]],\
+"weight_gen":["",[],["weight-gen.rs"]]\
+}');
+createSrcSidebar();

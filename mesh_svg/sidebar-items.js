@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["USAGE"],"fn":["add_element_and_neighbors_to_path","blob_paths","element_lookup","elements","frontier","main","merge_paths","path_to_coords","paths","twobytwo","write_svg"],"struct":["Path"]};

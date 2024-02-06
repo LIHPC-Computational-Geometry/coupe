@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Array","Error"],"fn":["read","write_floats","write_integers"],"type":["Result"]};
