@@ -214,7 +214,7 @@ dependencies = [
  "approx",
  "core_affinity",
  "criterion",
- "itertools",
+ "itertools 0.12.1",
  "ittapi",
  "nalgebra",
  "num-traits",
@@ -245,7 +245,7 @@ dependencies = [
  "coupe",
  "criterion",
  "getopts",
- "itertools",
+ "itertools 0.12.1",
  "ittapi",
  "mesh-io",
  "metis",
@@ -281,7 +281,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "csv",
- "itertools",
+ "itertools 0.10.5",
  "lazy_static",
  "num-traits",
  "oorandom",
@@ -303,7 +303,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2673cc8207403546f45f5fd319a974b1e6983ad1a3ee7e6041650013be041876"
 dependencies = [
  "cast",
- "itertools",
+ "itertools 0.10.5",
 ]
 
 [[package]]
@@ -477,6 +477,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -628,7 +637,7 @@ checksum = "523dc4f511e55ab87b694dc30d0f820d60906ef06413f93d4d7a1385599cc149"
 name = "mesh-io"
 version = "0.1.0"
 dependencies = [
- "itertools",
+ "itertools 0.12.1",
  "vtkio",
 ]
 
@@ -779,7 +788,7 @@ dependencies = [
  "coupe",
  "coupe-tools",
  "getopts",
- "itertools",
+ "itertools 0.12.1",
  "mesh-io",
  "rand",
  "rand_distr",
