@@ -48,8 +48,8 @@ anyhow = { version = "1", default-features = false, features = ["std"] }
 
 # Debug output
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "std"] }
-tracing-chrome = { version = "0.4", default-features = false }
-tracing-tree = { version = "0.2", default-features = false }
+tracing-chrome = { version = "0.7", default-features = false }
+tracing-tree = { version = "0.3", default-features = false }
 
 # Benchmark framework
 criterion = { version = "0.3", default-features = false }

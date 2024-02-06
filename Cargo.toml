@@ -51,9 +51,9 @@ ittapi = "0.4"
 criterion = "0.3"
 proptest = { version = "1", default-features = false, features = ["std", "timeout"] }
 tracing-subscriber = "0.3"
-tracing-chrome = "0.4"
-tracing-tree = "0.2"
-num_cpus = "1.16"
+tracing-chrome = "0.7"
+tracing-tree = "0.3"
+num_cpus = "1"
 core_affinity = "0.8"
 
 
