@@ -38,7 +38,7 @@ avx512 = []
 
 [dependencies]
 approx = "0.5"
-itertools = "0.10"
+itertools = "0.12"
 nalgebra = { version = "0.32", default-features = false, features = ["rand", "std"] }
 num-traits = "0.2"
 rayon = "1"

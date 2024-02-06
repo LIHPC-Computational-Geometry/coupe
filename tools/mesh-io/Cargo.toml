@@ -22,7 +22,7 @@ compression = ["vtkio?/compression"]
 
 
 [dependencies]
-itertools = "0.10"
+itertools = "0.12"
 
 # VTK file formats
 vtkio = { version = "0.6", default-features = false, optional = true }
