@@ -1,4 +1,5 @@
 use super::Grid;
+use super::SplitTree;
 use super::SubGrid;
 use num_traits::AsPrimitive;
 use num_traits::Num;
@@ -7,39 +8,6 @@ use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use std::iter::Sum;
-
-#[derive(Debug)]
-pub enum IterationResult {
-    Whole,
-    Split {
-        position: usize,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-}
-
-impl IterationResult {
-    pub fn part_of<const D: usize>(&self, pos: [usize; D], mut start_coord: usize) -> usize {
-        let mut it = self;
-        let mut part_id = 0;
-        while let Self::Split {
-            position,
-            left,
-            right,
-        } = it
-        {
-            if pos[start_coord] < *position {
-                part_id *= 2;
-                it = left;
-            } else {
-                part_id = 2 * part_id + 1;
-                it = right;
-            }
-            start_coord = (start_coord + 1) % D;
-        }
-        part_id
-    }
-}
 
 const TOLERANCE: f64 = 0.01;
 
@@ -105,13 +73,13 @@ pub(super) fn recurse_2d<W>(
     total_weight: W,
     iter_count: usize,
     coord: usize,
-) -> IterationResult
+) -> SplitTree
 where
     W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
     f64: AsPrimitive<W>,
 {
     if subgrid.size[coord] == 0 || iter_count == 0 {
-        return IterationResult::Whole;
+        return SplitTree::Whole;
     }
 
     let axis_weights: Vec<W> = if coord == 0 {
@@ -170,7 +138,7 @@ where
         },
     );
 
-    IterationResult::Split {
+    SplitTree::Split {
         position: split_position,
         left: Box::new(left),
         right: Box::new(right),
@@ -184,13 +152,13 @@ pub(super) fn recurse_3d<W>(
     total_weight: W,
     iter_count: usize,
     coord: usize,
-) -> IterationResult
+) -> SplitTree
 where
     W: Send + Sync + PartialOrd + Num + Sum + AsPrimitive<f64>,
     f64: AsPrimitive<W>,
 {
     if subgrid.size[coord] == 0 || iter_count == 0 {
-        return IterationResult::Whole;
+        return SplitTree::Whole;
     }
 
     let axis_weights: Vec<W> = if coord == 0 {
@@ -273,7 +241,7 @@ where
         },
     );
 
-    IterationResult::Split {
+    SplitTree::Split {
         position: split_position,
         left: Box::new(left),
         right: Box::new(right),
