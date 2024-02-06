@@ -133,7 +133,7 @@ trait BoxHandler<'a, W: PositiveWeight, const NUM_CRITERIA: usize> {
     ) -> [f64; NUM_CRITERIA];
 }
 
-struct RegularBoxHandler<W, const NUM_CRITERIA: usize>
+pub struct RegularBoxHandler<W, const NUM_CRITERIA: usize>
 where
     W: PositiveWeight,
 {
@@ -144,7 +144,7 @@ where
     // Discrete steps, depending on the criterion
     deltas: [f64; NUM_CRITERIA],
     // Mapping used to search moves of specific gain from a discretization of the cweight space
-    pub boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>>,
+    boxes: BTreeMap<BoxIndex<NUM_CRITERIA>, Vec<CWeightId>>,
 }
 
 //FIXME:Refact this code to avoid clone calls.
@@ -546,10 +546,7 @@ impl<'a, W: PositiveWeight, const NUM_CRITERIA: usize> Repartitioning<'a, W>
                 .clone()
                 .into_iter()
                 .map(
-                    |criterion_imbalances| match criterion_imbalances[part_source].positive_or() {
-                        Some(val) => val,
-                        None => W::zero(),
-                    },
+                    |criterion_imbalances| criterion_imbalances[part_source].positive_or().unwrap_or_else(|| W::zero()),
                 )
                 .collect();
 
@@ -617,7 +614,7 @@ where
         // part_ids: &mut CP,
         cweights: CC,
     ) -> Result<Self::Metadata, Self::Error> {
-        let partition_len = part_ids.iter().count();
+        let partition_len = part_ids.len();
         let weights_len = cweights.clone().into_iter().count();
         if partition_len != weights_len {
             return Err(Error::InputLenMismatch {
