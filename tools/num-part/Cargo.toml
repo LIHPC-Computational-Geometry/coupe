@@ -27,7 +27,7 @@ itertools = { version = "0.12", default-features = false }
 coupe = { version = "0.1", path = "../.." }
 
 # SQLite interface to save experiments
-rusqlite = { version = "0.30", default-features = false }
+rusqlite = { version = "0.30", default-features = false, features = ["bundled"] }
 
 # Command-line interface
 getopts = { version = "0.2", default-features = false }
