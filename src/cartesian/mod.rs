@@ -78,7 +78,7 @@ impl<const D: usize> Grid<D> {
             _ => {
                 for (s, p) in self.size.into_iter().zip(&mut pos) {
                     *p = i % s;
-                    i = i / s;
+                    i /= s;
                 }
             }
         }
