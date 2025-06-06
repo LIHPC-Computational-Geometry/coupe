@@ -92,7 +92,7 @@ pub type Metadata = Option<Box<dyn std::fmt::Debug>>;
 
 pub type Runner<'a> = Box<dyn FnMut(&mut [usize]) -> Result<Metadata> + Send + Sync + 'a>;
 
-fn runner_error(message: &'static str) -> Runner {
+fn runner_error(message: &'static str) -> Runner<'static> {
     Box::new(move |_partition| Err(anyhow::anyhow!("{}", message)))
 }
 

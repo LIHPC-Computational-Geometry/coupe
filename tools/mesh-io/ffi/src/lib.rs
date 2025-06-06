@@ -5,7 +5,6 @@ use std::ffi::c_int;
 use std::fs;
 use std::io;
 use std::os::unix::io::FromRawFd as _;
-use std::os::unix::io::IntoRawFd as _;
 use std::ptr;
 
 const ERROR_OTHER: c_int = -1;
@@ -50,8 +49,8 @@ pub unsafe extern "C" fn mio_partition_write(fd: c_int, size: u64, partition: *c
         return ERROR_OTHER;
     }
     match w.into_inner() {
-        Ok(f) => {
-            f.into_raw_fd();
+        Ok(_) => {
+            //f.into_raw_fd();
             0
         }
         Err(_) => ERROR_OTHER,
