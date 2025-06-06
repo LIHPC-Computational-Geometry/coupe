@@ -45,8 +45,7 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `imbalance_tol`: the relative imbalance tolerance of the generated partitions, in `%` of the target weight of each partition.
 ///   - `delta_threshold`: the distance threshold for the cluster movements under which the algorithm stops.
 ///   - `max_iter`: the maximum number of times each cluster will move before stopping the algorithm
-///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
-///      influence can grow between each cluster movement.
+///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
@@ -126,7 +125,7 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     // Generate initial lower and upper bounds. These two variables represent bounds on
     // the effective distance between an point and the cluster it is assigned to.
     let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
-    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+    let mut ubs: Vec<_> = points.par_iter().map(|_| f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
         Inputs { points, weights },
@@ -477,8 +476,8 @@ fn best_values<const D: usize>(
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
 ) {
-    let mut best_value = std::f64::MAX;
-    let mut snd_best_value = std::f64::MAX;
+    let mut best_value = f64::MAX;
+    let mut snd_best_value = f64::MAX;
     let mut assignment = None;
 
     for (((center, id), distance_to_mbr), influence) in centers
