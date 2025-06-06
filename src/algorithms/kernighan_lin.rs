@@ -78,8 +78,7 @@ fn kernighan_lin_2_impl<T>(
         let mut locks = vec![false; initial_partition.len()];
 
         // pass loop
-        for _ in 0..(initial_partition.len() / 2).min(max_flips_per_pass.unwrap_or(usize::MAX))
-        {
+        for _ in 0..(initial_partition.len() / 2).min(max_flips_per_pass.unwrap_or(usize::MAX)) {
             // construct gains
             for (idx, gain) in gains.iter_mut().enumerate() {
                 for (j, w) in adjacency.neighbors(idx) {

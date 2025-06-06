@@ -117,7 +117,7 @@ impl Fn {
         Ok(v)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item=T> + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {

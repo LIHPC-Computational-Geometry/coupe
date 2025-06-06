@@ -98,7 +98,7 @@ fn add_piece(mesh: &mut Mesh, piece: UnstructuredGridPiece) {
     mesh.coordinates.extend(piece.points.iter().unwrap());
     // TODO extract attributes
     mesh.node_refs
-        .extend(iter::repeat(1).take(piece.num_points()));
+        .extend(std::iter::repeat_n(1, piece.num_points()));
     match piece.cells.cell_verts {
         VertexNumbers::Legacy {
             num_cells,
