@@ -265,7 +265,10 @@ impl<const D: usize, E> Topology<E> for Grid<D>
 where
     E: One,
 {
-    type Neighbors<'a> = GridNeighbors<D, E> where Self: 'a;
+    type Neighbors<'a>
+        = GridNeighbors<D, E>
+    where
+        Self: 'a;
 
     fn len(&self) -> usize {
         self.len()
