@@ -35,7 +35,7 @@ mod scotch;
 #[cfg(any(feature = "metis", feature = "scotch"))]
 mod zoom_in;
 
-#[cfg_attr(not(feature = "ittapi"), path = "ittapi_stub.rs")]
+#[cfg_attr(not(feature = "intel-perf"), path = "ittapi_stub.rs")]
 pub mod ittapi;
 
 pub struct Problem<const D: usize> {
