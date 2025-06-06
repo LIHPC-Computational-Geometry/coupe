@@ -48,7 +48,6 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
 ///      influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
-///   - `hilbert`: sets wheter or not an Hilbert curve is used to create the initial partition. If false, a Z curve is used instead.
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
 pub struct BalancedKmeansSettings {
@@ -58,7 +57,6 @@ pub struct BalancedKmeansSettings {
     pub max_iter: usize,
     pub max_balance_iter: usize,
     pub erode: bool,
-    pub hilbert: bool,
     pub mbr_early_break: bool,
 }
 
@@ -71,7 +69,6 @@ impl Default for BalancedKmeansSettings {
             max_iter: 50,
             max_balance_iter: 1, // for now, `max_balance_iter > 1` yields poor convergence time
             erode: false,        // for now, `erode` yields` enabled yields wrong results
-            hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
@@ -578,7 +575,6 @@ pub struct KMeans {
     pub max_iter: usize,
     pub max_balance_iter: usize,
     pub erode: bool,
-    pub hilbert: bool,
     pub mbr_early_break: bool,
 }
 
@@ -590,7 +586,6 @@ impl Default for KMeans {
             max_iter: 500,
             max_balance_iter: 20, // for now, `max_balance_iter > 1` yields poor convergence time
             erode: false,         // for now, `erode` yields` enabled yields wrong results
-            hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
@@ -621,7 +616,6 @@ where
             max_iter: self.max_iter,
             max_balance_iter: self.max_balance_iter,
             erode: self.erode,
-            hilbert: self.hilbert,
             mbr_early_break: self.mbr_early_break,
         };
         balanced_k_means_with_initial_partition(points, weights, settings, part_ids);
