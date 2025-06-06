@@ -10,7 +10,7 @@ use std::iter::Sum;
 use std::iter::Zip;
 use std::ops::Mul;
 
-impl<'a, E> Topology<E> for sprs::CsMatView<'a, E>
+impl<E> Topology<E> for sprs::CsMatView<'_, E>
 where
     E: Copy + Sync,
 {

@@ -118,7 +118,7 @@ pub struct GraphGrowth {
     pub part_count: usize,
 }
 
-impl<'a, W> crate::Partition<(CsMatView<'a, f64>, W)> for GraphGrowth
+impl<W> crate::Partition<(CsMatView<'_, f64>, W)> for GraphGrowth
 where
     W: AsRef<[f64]>,
 {
