@@ -37,7 +37,7 @@ pub fn bench(c: &mut Criterion) {
             })
             .build()
             .unwrap();
-        group.bench_function(&thread_count.to_string(), |b| {
+        group.bench_function(thread_count.to_string(), |b| {
             pool.install(|| {
                 b.iter(|| grid.rcb(black_box(&mut partition), black_box(&weights), 12))
             });

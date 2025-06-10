@@ -94,7 +94,7 @@ pub trait Topology<E> {
     }
 }
 
-impl<'a, T, E> Topology<E> for &'a T
+impl<T, E> Topology<E> for &T
 where
     E: Copy,
     T: Topology<E>,

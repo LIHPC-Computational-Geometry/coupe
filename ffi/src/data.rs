@@ -38,7 +38,7 @@ impl Constant {
         Ok(v)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {
@@ -73,7 +73,7 @@ impl Array {
         slice::from_raw_parts(self.array as *const T, self.len)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {
@@ -117,7 +117,7 @@ impl Fn {
         Ok(v)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {

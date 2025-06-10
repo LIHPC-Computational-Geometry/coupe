@@ -30,25 +30,25 @@ pub fn nextafter(from: f64, to: f64) -> f64 {
 mod tests {
     use super::*;
 
-    const POS_INF: f64 = std::f64::INFINITY;
-    const NEG_INF: f64 = std::f64::NEG_INFINITY;
+    const POS_INF: f64 = f64::INFINITY;
+    const NEG_INF: f64 = f64::NEG_INFINITY;
     const POS_ZERO: f64 = 0.0;
     const NEG_ZERO: f64 = -0.0;
 
     // Note: Not the same as f64::MIN_POSITIVE, because that is only the min *normal* number.
     const SMALLEST_POS: f64 = 5e-324;
     const SMALLEST_NEG: f64 = -5e-324;
-    const LARGEST_POS: f64 = std::f64::MAX;
-    const LARGEST_NEG: f64 = std::f64::MIN;
+    const LARGEST_POS: f64 = f64::MAX;
+    const LARGEST_NEG: f64 = f64::MIN;
 
     const POS_ONE: f64 = 1.0;
     const NEG_ONE: f64 = -1.0;
-    const NEXT_LARGER_THAN_ONE: f64 = 1.0 + std::f64::EPSILON;
+    const NEXT_LARGER_THAN_ONE: f64 = 1.0 + f64::EPSILON;
     const NEXT_SMALLER_THAN_ONE: f64 = 0.999_999_999_999_999_9;
 
     const SEQUENCE_BIG_NUM: (f64, f64) = (16_237_485_966.000_004, 16_237_485_966.000_006);
 
-    const NAN: f64 = std::f64::NAN;
+    const NAN: f64 = f64::NAN;
 
     fn is_pos_zero(x: f64) -> bool {
         x.to_bits() == POS_ZERO.to_bits()
