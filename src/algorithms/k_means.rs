@@ -46,7 +46,7 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `delta_threshold`: the distance threshold for the cluster movements under which the algorithm stops.
 ///   - `max_iter`: the maximum number of times each cluster will move before stopping the algorithm
 ///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
-///      influence can grow between each cluster movement.
+///     influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
 ///   - `hilbert`: sets wheter or not an Hilbert curve is used to create the initial partition. If false, a Z curve is used instead.
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
@@ -84,8 +84,8 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     initial_partition: &mut [usize],
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let settings = settings.into().unwrap_or_default();
 
@@ -129,7 +129,7 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     // Generate initial lower and upper bounds. These two variables represent bounds on
     // the effective distance between an point and the cluster it is assigned to.
     let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
-    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+    let mut ubs: Vec<_> = points.par_iter().map(|_| f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
         Inputs { points, weights },
@@ -182,8 +182,8 @@ fn balanced_k_means_iter<const D: usize>(
     current_iter: usize,
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let Inputs { points, weights } = inputs;
     let Clusters {
@@ -305,8 +305,8 @@ fn assign_and_balance<const D: usize>(
     settings: &BalancedKmeansSettings,
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let AlgorithmState {
         assignments,
@@ -480,8 +480,8 @@ fn best_values<const D: usize>(
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
 ) {
-    let mut best_value = std::f64::MAX;
-    let mut snd_best_value = std::f64::MAX;
+    let mut best_value = f64::MAX;
+    let mut snd_best_value = f64::MAX;
     let mut assignment = None;
 
     for (((center, id), distance_to_mbr), influence) in centers
@@ -599,8 +599,8 @@ impl Default for KMeans {
 impl<'a, const D: usize> crate::Partition<(&'a [PointND<D>], &'a [f64])> for KMeans
 where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     type Metadata = ();
     type Error = std::convert::Infallible;

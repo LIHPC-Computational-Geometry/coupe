@@ -331,7 +331,7 @@ fn encode_2d(x: u64, y: u64, order: usize) -> u64 {
         order,
     );
 
-    const LUT: [u16; 16_384] = {
+    static LUT: [u16; 16_384] = {
         let mut lut = [0; 16_384];
         let mut i: usize = 0;
         while i < 16_384 {

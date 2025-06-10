@@ -239,7 +239,7 @@ pub(crate) fn compute_split_positions(
     let mut scan = permutation
         .par_iter()
         .enumerate()
-        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
+        .fold_with((usize::MAX, 0.), |(low, acc), (idx, val)| {
             (usize::min(idx, low), acc + weights[*val])
         })
         .collect::<Vec<_>>()
