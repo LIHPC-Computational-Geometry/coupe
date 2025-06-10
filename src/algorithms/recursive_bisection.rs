@@ -835,8 +835,8 @@ fn rib<const D: usize, W>(
 ) -> Result<(), Error>
 where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
@@ -911,8 +911,8 @@ pub struct Rib {
 impl<'a, const D: usize, W> crate::Partition<(&'a [PointND<D>], W)> for Rib
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
