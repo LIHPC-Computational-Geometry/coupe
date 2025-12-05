@@ -17,16 +17,16 @@
 //! Finally, the points are reordered according to the order of their hash.
 
 use super::multi_jagged::split_at_mut_many;
-use crate::geometry::OrientedBoundingBox;
 use crate::PointND;
+use crate::geometry::OrientedBoundingBox;
 
-use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::ToTypenum;
+use nalgebra::allocator::Allocator;
 use rayon::prelude::*;
 
 use std::cmp::Ordering;

@@ -1,7 +1,6 @@
 //! A few useful geometric types
 
 use approx::Ulps;
-use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
 use nalgebra::DefaultAllocator;
@@ -9,6 +8,7 @@ use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::SMatrix;
 use nalgebra::SVector;
+use nalgebra::allocator::Allocator;
 use rayon::prelude::*;
 
 pub type Point2D = SVector<f64, 2>;

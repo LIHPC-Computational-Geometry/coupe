@@ -99,8 +99,10 @@ where
     E: Copy,
     T: Topology<E>,
 {
-    type Neighbors<'n> = T::Neighbors<'n>
-        where Self: 'n;
+    type Neighbors<'n>
+        = T::Neighbors<'n>
+    where
+        Self: 'n;
 
     fn len(&self) -> usize {
         T::len(self)

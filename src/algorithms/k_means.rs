@@ -2,22 +2,22 @@
 //! "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
 //! Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne)
 
+use crate::PointND;
 use crate::geometry;
 use crate::geometry::OrientedBoundingBox;
-use crate::PointND;
-use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
+use nalgebra::allocator::Allocator;
 use rayon::prelude::*;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-use itertools::iproduct;
 use itertools::Itertools;
+use itertools::iproduct;
 
 /// A wrapper type for ProcessUniqueId
 /// to enforce that it represents temporary ids
