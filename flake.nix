@@ -25,6 +25,9 @@
             "rustfmt"
           ])
 
+          # System dependencies
+          sqlite
+
           # Tools
           cargo-nextest
           taplo
