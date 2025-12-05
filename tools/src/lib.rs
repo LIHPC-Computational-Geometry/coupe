@@ -271,7 +271,7 @@ impl<const D: usize> ToRunner<D> for coupe::KMeans
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
     DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     fn to_runner<'a>(&'a mut self, problem: &'a Problem<D>) -> Runner<'a> {
         use weight::Array::*;
@@ -365,7 +365,7 @@ pub fn parse_algorithm<const D: usize>(spec: &str) -> Result<Box<dyn ToRunner<D>
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
     DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let mut args = spec.split(',');
     let name = args.next().context("it's empty")?;

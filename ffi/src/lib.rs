@@ -300,7 +300,7 @@ unsafe fn coupe_rib_d<const D: usize>(
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
     DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let points = match points.to_slice::<PointND<D>>() {
         Ok(v) => v,
