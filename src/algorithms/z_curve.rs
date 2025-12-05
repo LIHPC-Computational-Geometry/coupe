@@ -45,8 +45,8 @@ fn z_curve_partition<const D: usize>(
     order: u32,
 ) where
     Const<D>: DimSub<Const<1>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     debug_assert_eq!(partition.len(), points.len());
 
@@ -182,8 +182,8 @@ pub struct ZCurve {
 impl<'a, const D: usize> crate::Partition<&'a [PointND<D>]> for ZCurve
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     type Metadata = ();
     type Error = std::convert::Infallible;

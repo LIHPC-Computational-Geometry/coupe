@@ -210,8 +210,8 @@ impl<const D: usize> OrientedBoundingBox<D> {
     pub fn from_points(points: &[PointND<D>]) -> Option<Self>
     where
         Const<D>: DimSub<Const<1>>,
-        DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-            + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+        DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+            + Allocator<DimDiff<Const<D>, Const<1>>>,
     {
         let mat = inertia_matrix(points);
         let vec = inertia_vector(mat);
@@ -286,8 +286,8 @@ fn inertia_matrix<const D: usize>(points: &[PointND<D>]) -> Matrix<D> {
 pub(crate) fn inertia_vector<const D: usize>(mat: Matrix<D>) -> PointND<D>
 where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let sym_eigen = mat.symmetric_eigen();
     let mut indices = (0..D).collect::<Vec<_>>();
