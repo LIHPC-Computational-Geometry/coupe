@@ -1,0 +1,7 @@
+include = ["Cargo.toml", "./*/Cargo.toml", ".taplo.toml", ".typos.toml"]
+
+[formatting]
+align_comments = true
+align_entries  = true
+indent_string  = "    " # 4 space
+reorder_keys   = true

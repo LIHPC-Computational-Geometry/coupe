@@ -9,25 +9,25 @@ members = [
 ]
 
 [package]
-name = "coupe"
-version = "0.1.0"
 authors = [
-    "Armand Touminet <armand.touminet@protonmail.com>", 
+    "Armand Touminet <armand.touminet@protonmail.com>",
     "Hubert Hirtz <hubert@hirtz.pm>",
-    "Cédric Chevalier", 
-    "Sébastien Morais"
+    "Cédric Chevalier",
+    "Sébastien Morais",
 ]
-edition = "2024"
-license = "MIT OR Apache-2.0"
+autobenches = false
+categories = ["algorithms", "mathematics"]
 description = """
 Coupe is a mesh partitioning library. It implements composable
 geometric and topologic algorithms.  
 """
+edition = "2024"
 keywords = ["mesh", "partitioning"]
-categories = ["algorithms", "mathematics"]
+license = "MIT OR Apache-2.0"
+name = "coupe"
 readme = "README.md"
 repository = "https://github.com/LIHPC-Computational-Geometry/coupe"
-autobenches = false
+version = "0.1.0"
 
 [features]
 default = ["sprs"]
@@ -39,24 +39,32 @@ avx512 = []
 [dependencies]
 approx = "0.5"
 itertools = "0.12"
-nalgebra = { version = "0.32", default-features = false, features = ["rand", "std"] }
-num-traits = "0.2"
-rayon = "1"
-tracing = { version = "0.1", default-features = false, features = ["std"] }
-rand = "0.8"
-sprs = { version = "0.11", optional = true, default-features = false, features = ["multi_thread"] }
 ittapi = "0.4"
+nalgebra = { version = "0.32", default-features = false, features = [
+    "rand",
+    "std",
+] }
+num-traits = "0.2"
+rand = "0.8"
+rayon = "1"
+sprs = { version = "0.11", optional = true, default-features = false, features = [
+    "multi_thread",
+] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-criterion = "0.5"
-proptest = { version = "1", default-features = false, features = ["std", "timeout"] }
-tracing-subscriber = "0.3"
-tracing-chrome = "0.7"
-tracing-tree = "0.3"
-num_cpus = "1"
 core_affinity = "0.8"
+criterion = "0.5"
+num_cpus = "1"
+proptest = { version = "1", default-features = false, features = [
+    "std",
+    "timeout",
+] }
+tracing-chrome = "0.7"
+tracing-subscriber = "0.3"
+tracing-tree = "0.3"
 
 
 [[bench]]
-name = "rcb_cartesian"
 harness = false
+name    = "rcb_cartesian"
