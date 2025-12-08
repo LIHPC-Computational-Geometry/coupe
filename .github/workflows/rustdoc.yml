@@ -18,23 +18,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v6
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          components: rustfmt, rust-src
-      - uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --all --no-deps
-      - run: |
-          sudo apt-get -y install scdoc mandoc
-          ./docs/build.sh
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install dependencies
+        run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev scdoc mandoc
+      - name: Generate rustdoc
+        run: cargo +nightly doc --all --no-deps --all-features
+      - name: Aggregate files
+        run: sh ./docs/build.sh
       - name: Deploy Docs
-        uses: peaceiris/actions-gh-pages@364c31d33bb99327c77b3a5438a83a357a6729ad # v3.4.0
+        uses: peaceiris/actions-gh-pages@4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
