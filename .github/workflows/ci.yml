@@ -66,3 +66,17 @@ jobs:
               -D clippy::cargo_common_metadata \
               -D clippy::negative_feature_names \
               -D clippy::redundant_feature_names
+  build:
+    name: Builds
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
+      - name: Build crates
+        run: cargo build --all-targets
