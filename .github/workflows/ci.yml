@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - name: Run tests
-        run: cargo test --all-targets
+        run: cargo test --all
 
   fmt:
     name: Format
