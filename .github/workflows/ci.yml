@@ -13,65 +13,56 @@ env:
 
 jobs:
   test:
-    name: Test Suite
-    runs-on: ubuntu-22.04
+    name: Tests
+    runs-on: ubuntu-latest
     strategy:
-      matrix:
-        rust:
-          - stable
+      fail-fast: false
+
     steps:
-      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
-      - name: Build tests and benchmarks
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all --all-targets --no-run --locked
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all --locked
+        run: cargo test --all-targets
 
   fmt:
-    name: Rustfmt
-    runs-on: ubuntu-22.04
+    name: Format
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt
-      - uses: actions-rs/cargo@v1
+      - uses: Swatinem/rust-cache@v2
+      - name: Check format
+        run: cargo fmt --all --check
+      - uses: docker://docker.io/tamasfe/taplo:latest
         with:
-          command: fmt
-          args: --all --check
+          args: fmt --check --diff
 
   clippy:
-    name: Clippy
-    runs-on: ubuntu-22.04
+    name: Lints
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
     steps:
-      - run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: >
-            --all --all-targets --locked --
-            -D warnings
-            -D clippy::cargo_common_metadata
-            -D clippy::negative_feature_names
-            -D clippy::redundant_feature_names
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
+      - name: Run clippy
+        run: |
+          cargo clippy --all-targets -- \
+              -D warnings \
+              -D clippy::cargo_common_metadata \
+              -D clippy::negative_feature_names \
+              -D clippy::redundant_feature_names
