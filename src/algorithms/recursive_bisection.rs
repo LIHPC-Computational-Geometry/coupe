@@ -35,7 +35,7 @@ unsafe fn array_assume_init<T, const N: usize>(array: [MaybeUninit<T>; N]) -> [T
     // * `MaybeUninit` does not drop, so there are no double-frees
     // And thus the conversion is safe
     //std::intrinsics::assert_inhabited::<[T; N]>();
-    (&array as *const _ as *const [T; N]).read()
+    unsafe { (&array as *const _ as *const [T; N]).read() }
 }
 
 fn array_init<F, T, const N: usize>(mut f: F) -> [T; N]
