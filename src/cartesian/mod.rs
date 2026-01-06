@@ -78,7 +78,7 @@ impl<const D: usize> Grid<D> {
             _ => {
                 for (s, p) in self.size.into_iter().zip(&mut pos) {
                     *p = i % s;
-                    i = i / s;
+                    i /= s;
                 }
             }
         }
@@ -244,7 +244,7 @@ where
 
             let mut neighbor = self.vertex;
             let axis = i / 2;
-            let new_coord = if (i % 2) == 0 {
+            let new_coord = if i.is_multiple_of(2) {
                 usize::checked_sub(neighbor[axis], 1)
             } else {
                 Some(neighbor[axis] + 1)

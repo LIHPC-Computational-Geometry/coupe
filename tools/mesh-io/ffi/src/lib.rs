@@ -51,7 +51,7 @@ pub unsafe extern "C" fn mio_partition_write(fd: c_int, size: u64, partition: *c
     }
     match w.into_inner() {
         Ok(f) => {
-            f.into_raw_fd();
+            let _ = f.into_raw_fd(); // raw file descriptor is fd
             0
         }
         Err(_) => ERROR_OTHER,

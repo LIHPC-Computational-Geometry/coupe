@@ -73,7 +73,7 @@ fn main() -> Result<()> {
     let mut mesh = coupe_tools::read_mesh(matches.free.first())?;
 
     eprintln!("Shuffling mesh...");
-    mesh = shuffle(rand::thread_rng(), mesh);
+    mesh = shuffle(rand::rng(), mesh);
 
     eprintln!("Writing mesh...");
     coupe_tools::write_mesh(&mesh, format, matches.free.get(1))?;

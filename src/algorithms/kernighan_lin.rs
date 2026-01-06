@@ -59,10 +59,8 @@ fn kernighan_lin_2_impl<T>(
     let mut new_cut_size = cut_size;
 
     for iter in 0.. {
-        if let Some(max_passes) = max_passes {
-            if iter >= max_passes {
-                break;
-            }
+        if max_passes.is_some_and(|max| iter >= max) {
+            break;
         }
 
         cut_size = new_cut_size;
@@ -78,8 +76,7 @@ fn kernighan_lin_2_impl<T>(
         let mut locks = vec![false; initial_partition.len()];
 
         // pass loop
-        for _ in 0..(initial_partition.len() / 2).min(max_flips_per_pass.unwrap_or(std::usize::MAX))
-        {
+        for _ in 0..(initial_partition.len() / 2).min(max_flips_per_pass.unwrap_or(usize::MAX)) {
             // construct gains
             for (idx, gain) in gains.iter_mut().enumerate() {
                 for (j, w) in adjacency.neighbors(idx) {

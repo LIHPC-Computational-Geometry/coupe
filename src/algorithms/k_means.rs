@@ -46,9 +46,8 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `delta_threshold`: the distance threshold for the cluster movements under which the algorithm stops.
 ///   - `max_iter`: the maximum number of times each cluster will move before stopping the algorithm
 ///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
-///      influence can grow between each cluster movement.
+///     influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
-///   - `hilbert`: sets wheter or not an Hilbert curve is used to create the initial partition. If false, a Z curve is used instead.
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
 pub struct BalancedKmeansSettings {
@@ -58,7 +57,6 @@ pub struct BalancedKmeansSettings {
     pub max_iter: usize,
     pub max_balance_iter: usize,
     pub erode: bool,
-    pub hilbert: bool,
     pub mbr_early_break: bool,
 }
 
@@ -71,7 +69,6 @@ impl Default for BalancedKmeansSettings {
             max_iter: 50,
             max_balance_iter: 1, // for now, `max_balance_iter > 1` yields poor convergence time
             erode: false,        // for now, `erode` yields` enabled yields wrong results
-            hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
@@ -129,7 +126,7 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     // Generate initial lower and upper bounds. These two variables represent bounds on
     // the effective distance between an point and the cluster it is assigned to.
     let mut lbs: Vec<_> = points.par_iter().map(|_| 0.).collect();
-    let mut ubs: Vec<_> = points.par_iter().map(|_| std::f64::MAX).collect(); // we use f64::MAX to represent infinity
+    let mut ubs: Vec<_> = points.par_iter().map(|_| f64::MAX).collect(); // we use f64::MAX to represent infinity
 
     balanced_k_means_iter(
         Inputs { points, weights },
@@ -480,8 +477,8 @@ fn best_values<const D: usize>(
     f64,               // new ub
     Option<ClusterId>, // new cluster assignment for the current point (None if the same assignment is kept)
 ) {
-    let mut best_value = std::f64::MAX;
-    let mut snd_best_value = std::f64::MAX;
+    let mut best_value = f64::MAX;
+    let mut snd_best_value = f64::MAX;
     let mut assignment = None;
 
     for (((center, id), distance_to_mbr), influence) in centers
@@ -621,7 +618,6 @@ where
             max_iter: self.max_iter,
             max_balance_iter: self.max_balance_iter,
             erode: self.erode,
-            hilbert: self.hilbert,
             mbr_early_break: self.mbr_early_break,
         };
         balanced_k_means_with_initial_partition(points, weights, settings, part_ids);

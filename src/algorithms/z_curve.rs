@@ -36,7 +36,7 @@ use std::sync::atomic::{self, AtomicPtr};
 // in 2D, an order greater than 64 will overflow u128.
 // maybe it would be more appropriate to use a BigInt
 type HashType = u128;
-const HASH_TYPE_MAX: HashType = std::u128::MAX;
+const HASH_TYPE_MAX: HashType = u128::MAX;
 
 fn z_curve_partition<const D: usize>(
     partition: &mut [usize],

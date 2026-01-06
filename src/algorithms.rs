@@ -105,7 +105,7 @@ where
 
     fn partition(&mut self, part_ids: &mut [usize], _: ()) -> Result<Self::Metadata, Self::Error> {
         for part_id in part_ids {
-            *part_id = self.rng.gen_range(0..self.part_count);
+            *part_id = self.rng.random_range(0..self.part_count);
         }
         Ok(())
     }
