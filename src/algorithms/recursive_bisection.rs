@@ -1,14 +1,14 @@
 use super::Error;
+use crate::BoundingBox;
 use crate::geometry::OrientedBoundingBox;
 use crate::geometry::PointND;
-use crate::BoundingBox;
-use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
 use nalgebra::ToTypenum;
+use nalgebra::allocator::Allocator;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::cmp;
@@ -193,13 +193,13 @@ fn reorder_split_avx512<const D: usize, W>(
     use std::arch::x86_64::__m256;
     use std::arch::x86_64::__m512i;
     use std::arch::x86_64::__mmask8;
+    use std::arch::x86_64::_CMP_LT_OQ;
     use std::arch::x86_64::_mm256_cmp_ps_mask;
     use std::arch::x86_64::_mm256_loadu_ps;
     use std::arch::x86_64::_mm256_mask_compressstoreu_ps;
     use std::arch::x86_64::_mm256_set1_ps;
     use std::arch::x86_64::_mm512_loadu_epi64;
     use std::arch::x86_64::_mm512_mask_compressstoreu_epi64;
-    use std::arch::x86_64::_CMP_LT_OQ;
 
     let pivot = items.points[coord][pivot];
 
@@ -835,8 +835,8 @@ fn rib<const D: usize, W>(
 ) -> Result<(), Error>
 where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,
@@ -911,8 +911,8 @@ pub struct Rib {
 impl<'a, const D: usize, W> crate::Partition<(&'a [PointND<D>], W)> for Rib
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
     W: rayon::iter::IntoParallelIterator,
     W::Item: RcbWeight,
     W::Iter: rayon::iter::IndexedParallelIterator,

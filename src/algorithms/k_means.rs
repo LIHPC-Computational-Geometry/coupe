@@ -2,22 +2,22 @@
 //! "Balanced k-means for Parallel Geometric Partitioning" by Moritz von Looz,
 //! Charilaos Tzovas and Henning Meyerhenke (2018, University of Cologne)
 
+use crate::PointND;
 use crate::geometry;
 use crate::geometry::OrientedBoundingBox;
-use crate::PointND;
-use nalgebra::allocator::Allocator;
 use nalgebra::ArrayStorage;
 use nalgebra::Const;
 use nalgebra::DefaultAllocator;
 use nalgebra::DimDiff;
 use nalgebra::DimSub;
+use nalgebra::allocator::Allocator;
 use rayon::prelude::*;
 
 use std::cmp::Ordering;
 use std::sync::atomic::{self, AtomicPtr};
 
-use itertools::iproduct;
 use itertools::Itertools;
+use itertools::iproduct;
 
 /// A wrapper type for ProcessUniqueId
 /// to enforce that it represents temporary ids
@@ -84,8 +84,8 @@ fn balanced_k_means_with_initial_partition<const D: usize>(
     initial_partition: &mut [usize],
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let settings = settings.into().unwrap_or_default();
 
@@ -182,8 +182,8 @@ fn balanced_k_means_iter<const D: usize>(
     current_iter: usize,
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let Inputs { points, weights } = inputs;
     let Clusters {
@@ -305,8 +305,8 @@ fn assign_and_balance<const D: usize>(
     settings: &BalancedKmeansSettings,
 ) where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let AlgorithmState {
         assignments,
@@ -599,8 +599,8 @@ impl Default for KMeans {
 impl<'a, const D: usize> crate::Partition<(&'a [PointND<D>], &'a [f64])> for KMeans
 where
     Const<D>: DimSub<Const<1>>,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     type Metadata = ();
     type Error = std::convert::Infallible;

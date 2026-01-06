@@ -10,11 +10,11 @@
 //!
 //! The complexity of encoding a point is O(order)
 
-use crate::geometry::OrientedBoundingBox;
 use crate::Average;
 use crate::Point2D;
 use crate::Point3D;
 use crate::PointND;
+use crate::geometry::OrientedBoundingBox;
 use num_traits::AsPrimitive;
 use num_traits::NumAssign;
 use rayon::prelude::*;

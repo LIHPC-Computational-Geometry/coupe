@@ -88,7 +88,7 @@ pub trait Partition<M> {
     /// parts is one plus the maximum of `part_ids`.  If a lower ID does not
     /// appear in the array, the part is assumed to be empty.
     fn partition(&mut self, part_ids: &mut [usize], data: M)
-        -> Result<Self::Metadata, Self::Error>;
+    -> Result<Self::Metadata, Self::Error>;
 }
 
 fn partial_cmp<W>(a: &W, b: &W) -> Ordering

@@ -1,5 +1,5 @@
-use crate::imbalance::compute_parts_load;
 use crate::Error;
+use crate::imbalance::compute_parts_load;
 use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;

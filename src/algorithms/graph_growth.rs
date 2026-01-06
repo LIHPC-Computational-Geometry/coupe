@@ -1,4 +1,4 @@
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use sprs::CsMatView;
 
 fn graph_growth(
@@ -15,7 +15,7 @@ fn graph_growth(
     // let weight_per_part = total_weight / num_parts as f64;
     let max_expansion_per_pass = 20;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // select two random nodes to grow from
     let indices = (0..weights.len()).collect::<Vec<_>>();

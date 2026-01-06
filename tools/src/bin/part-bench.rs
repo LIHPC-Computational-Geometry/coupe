@@ -151,8 +151,8 @@ fn main_d<const D: usize>(
 ) -> Result<Vec<usize>>
 where
     Const<D>: DimSub<Const<1>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>, Buffer = ArrayStorage<f64, D, D>>
-        + Allocator<f64, DimDiff<Const<D>, Const<1>>>,
+    DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
+        + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
     let algorithm_specs = matches.opt_strs("a");
     let mut algorithms: Vec<_> = algorithm_specs
