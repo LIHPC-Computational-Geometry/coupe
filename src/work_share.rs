@@ -12,10 +12,10 @@ pub fn work_share(total_work: usize, max_threads: usize) -> (usize, usize) {
     let max_threads = usize::min(total_work, max_threads);
 
     // ceil(total_work / max_threads)
-    let work_per_thread = (total_work + max_threads - 1) / max_threads;
+    let work_per_thread = total_work.div_ceil(max_threads);
 
     // ceil(total_work / work_per_thread)
-    let thread_count = (total_work + work_per_thread - 1) / work_per_thread;
+    let thread_count = total_work.div_ceil(work_per_thread);
 
     (work_per_thread, thread_count)
 }

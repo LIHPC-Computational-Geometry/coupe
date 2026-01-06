@@ -51,7 +51,7 @@ impl Constant {
         T: 'a + Copy + Send + Sync,
     {
         let value = *(self.value as *const T);
-        coupe::rayon::iter::repeatn(value, self.len)
+        coupe::rayon::iter::repeat_n(value, self.len)
     }
 }
 

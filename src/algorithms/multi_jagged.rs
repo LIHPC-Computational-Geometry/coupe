@@ -25,7 +25,7 @@ fn is_prime(n: u32) -> bool {
     let p: u32 = (f64::from(n)).sqrt() as u32;
 
     for i in 2..=p {
-        if n % i == 0 {
+        if n.is_multiple_of(i) {
             return false;
         }
     }
@@ -43,7 +43,7 @@ fn prime_factors(mut n: u32) -> Vec<u32> {
     let mut primes = (2..).filter(|n| is_prime(*n));
     let mut current = primes.next().unwrap();
     while n > 1 {
-        while n % current == 0 {
+        while n.is_multiple_of(current) {
             ret.push(current);
             n /= current;
         }
@@ -239,7 +239,7 @@ pub(crate) fn compute_split_positions(
     let mut scan = permutation
         .par_iter()
         .enumerate()
-        .fold_with((std::usize::MAX, 0.), |(low, acc), (idx, val)| {
+        .fold_with((usize::MAX, 0.), |(low, acc), (idx, val)| {
             (usize::min(idx, low), acc + weights[*val])
         })
         .collect::<Vec<_>>()
