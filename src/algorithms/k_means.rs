@@ -58,7 +58,6 @@ pub struct BalancedKmeansSettings {
     pub max_iter: usize,
     pub max_balance_iter: usize,
     pub erode: bool,
-    pub hilbert: bool,
     pub mbr_early_break: bool,
 }
 
@@ -71,7 +70,6 @@ impl Default for BalancedKmeansSettings {
             max_iter: 50,
             max_balance_iter: 1, // for now, `max_balance_iter > 1` yields poor convergence time
             erode: false,        // for now, `erode` yields` enabled yields wrong results
-            hilbert: true,
             mbr_early_break: false, // for now, `mbr_early_break` enabled yields wrong results
         }
     }
@@ -621,7 +619,6 @@ where
             max_iter: self.max_iter,
             max_balance_iter: self.max_balance_iter,
             erode: self.erode,
-            hilbert: self.hilbert,
             mbr_early_break: self.mbr_early_break,
         };
         balanced_k_means_with_initial_partition(points, weights, settings, part_ids);
