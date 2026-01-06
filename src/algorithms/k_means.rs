@@ -48,7 +48,6 @@ fn imbalance(weights: &[f64]) -> f64 {
 ///   - `max_balance_iter`: the maximum number of iterations of the load balancing loop. It will limit how much each cluster
 ///     influence can grow between each cluster movement.
 ///   - `erode`: sets whether or not cluster influence is modified according to errosion's rules between each cluster movement
-///   - `hilbert`: sets wheter or not an Hilbert curve is used to create the initial partition. If false, a Z curve is used instead.
 ///   - `mbr_early_break`: sets whether or not bounding box optimization is enabled.
 #[derive(Debug, Clone, Copy)]
 pub struct BalancedKmeansSettings {
