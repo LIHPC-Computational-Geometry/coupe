@@ -9,18 +9,24 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'dependabot') == false # do not run if the PR is a dependency update from the bot
     steps:
-      - uses: actions/checkout@v3
-      - name: Install Rust
-        run: rustup toolchain install nightly --component llvm-tools-preview
-        # nightly for doc tests
+      # checkout
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      # install requirements
+      - uses: dtolnay/rust-toolchain@stable
+        run: rustup component add llvm-tools-preview
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
         run: ./coverage.sh
-        # no default because we lack scotch and metis
+        # upload results
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
           fail_ci_if_error: true
+          slug: LIHPC-Computational-Geometry/coupe
