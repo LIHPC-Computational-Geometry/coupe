@@ -9,7 +9,9 @@ fn main() {
     eprintln!("grid size: ({x},{y}); rcb iters: {iter}");
     let grid = coupe::Grid::new_2d(x, y);
     let n = usize::from(x) * usize::from(y);
-    let weights: Vec<f64> = (0..n).map(|i| i as f64).collect();
+    let weights: Vec<f64> = (0..n)
+        .map(|i| if i % x < 50 && i / y < 50 { 2 } else { 3 } as f64)
+        .collect();
     let mut partition = vec![0; n];
 
     let domain = ittapi::Domain::new("MyIncredibleDomain");
