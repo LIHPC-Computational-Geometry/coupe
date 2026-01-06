@@ -72,7 +72,7 @@ fn kernighan_lin_2_impl<T>(
 
         let mut saves = Vec::new(); // flip save
         let mut cut_saves = Vec::new(); // cut size save
-                                        // let mut ids_before_flip = Vec::new(); // the target id for reverting a flip
+        // let mut ids_before_flip = Vec::new(); // the target id for reverting a flip
 
         let mut gains: Vec<f64> = vec![0.; initial_partition.len()];
         let mut locks = vec![false; initial_partition.len()];

@@ -1,9 +1,9 @@
 use super::Error;
+use crate::Partition;
 use crate::defer::defer;
 use crate::partial_cmp;
 use crate::topology::Topology;
 use crate::work_share::work_share;
-use crate::Partition;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use num_traits::Zero;

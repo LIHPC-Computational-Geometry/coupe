@@ -14,8 +14,10 @@ impl<'a, E> Topology<E> for sprs::CsMatView<'a, E>
 where
     E: Copy + Sync,
 {
-    type Neighbors<'n> = Zip<Cloned<std::slice::Iter<'n, usize>>, Cloned<std::slice::Iter<'n, E>>>
-        where Self: 'n;
+    type Neighbors<'n>
+        = Zip<Cloned<std::slice::Iter<'n, usize>>, Cloned<std::slice::Iter<'n, E>>>
+    where
+        Self: 'n;
 
     fn len(&self) -> usize {
         debug_assert_eq!(self.rows(), self.cols());
