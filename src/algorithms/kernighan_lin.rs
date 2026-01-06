@@ -59,9 +59,7 @@ fn kernighan_lin_2_impl<T>(
     let mut new_cut_size = cut_size;
 
     for iter in 0.. {
-        if let Some(max_passes) = max_passes
-            && iter >= max_passes
-        {
+        if max_passes.is_some_and(|max| iter >= max) {
             break;
         }
 
