@@ -29,7 +29,7 @@ jobs:
       - name: Aggregate files
         run: sh ./docs/build.sh
       - name: Deploy Docs
-        uses: peaceiris/actions-gh-pages@4
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
