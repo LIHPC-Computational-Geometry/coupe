@@ -2,19 +2,19 @@
 
 use crate::data::Data;
 use crate::data::Type;
-use coupe::nalgebra::allocator::Allocator;
+use coupe::Partition as _;
+use coupe::Point2D;
+use coupe::PointND;
+use coupe::Real;
 use coupe::nalgebra::ArrayStorage;
 use coupe::nalgebra::Const;
 use coupe::nalgebra::DefaultAllocator;
 use coupe::nalgebra::DimDiff;
 use coupe::nalgebra::DimSub;
 use coupe::nalgebra::ToTypenum;
-use coupe::sprs::CsMatView;
+use coupe::nalgebra::allocator::Allocator;
 use coupe::sprs::CSR;
-use coupe::Partition as _;
-use coupe::Point2D;
-use coupe::PointND;
-use coupe::Real;
+use coupe::sprs::CsMatView;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
@@ -66,7 +66,7 @@ where
     std::panic::catch_unwind(f).unwrap_or(Error::Crash)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
     match err {
         Error::Ok => {
@@ -109,7 +109,7 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
     if !data.is_null() {
         let data = Box::from_raw(data);
@@ -117,7 +117,7 @@ pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn coupe_data_array(len: usize, type_: Type, array: *const c_void) -> *mut Data {
     let data = Data::Array(data::Array { len, type_, array });
     match box_try_new(data) {
@@ -126,7 +126,7 @@ pub extern "C" fn coupe_data_array(len: usize, type_: Type, array: *const c_void
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn coupe_data_constant(len: usize, type_: Type, value: *const c_void) -> *mut Data {
     let data = Data::Constant(data::Constant { len, type_, value });
     match box_try_new(data) {
@@ -135,7 +135,7 @@ pub extern "C" fn coupe_data_constant(len: usize, type_: Type, value: *const c_v
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn coupe_data_fn(
     context: *const c_void,
     len: usize,
@@ -160,7 +160,7 @@ pub enum Adjncy<'a> {
     Double(CsMatView<'a, f64>),
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_adjncy_free(adjncy: *mut Adjncy) {
     if !adjncy.is_null() {
         let adjncy = Box::from_raw(adjncy);
@@ -203,7 +203,7 @@ fn adjncy_ptr(adjacency: Adjncy<'_>) -> *mut Adjncy<'_> {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_adjncy_csr(
     size: usize,
     xadj: *const usize,
@@ -232,7 +232,7 @@ pub unsafe extern "C" fn coupe_adjncy_csr(
     adjncy_ptr(adjacency)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_adjncy_csr_unchecked(
     size: usize,
     xadj: *const usize,
@@ -259,7 +259,7 @@ unsafe fn coupe_rcb_d<const D: usize>(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_rcb(
     partition: *mut usize,
     dimension: usize,
@@ -315,7 +315,7 @@ where
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_rib(
     partition: *mut usize,
     dimension: usize,
@@ -347,7 +347,7 @@ pub unsafe extern "C" fn coupe_rib(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_hilbert(
     partition: *mut usize,
     points: *const Data,
@@ -388,7 +388,7 @@ pub unsafe extern "C" fn coupe_hilbert(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_greedy(
     partition: *mut usize,
     weights: *const Data,
@@ -406,7 +406,7 @@ pub unsafe extern "C" fn coupe_greedy(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_karmarkar_karp(
     partition: *mut usize,
     weights: *const Data,
@@ -439,7 +439,7 @@ pub unsafe extern "C" fn coupe_karmarkar_karp(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_karmarkar_karp_complete(
     partition: *mut usize,
     weights: *const Data,
@@ -457,7 +457,7 @@ pub unsafe extern "C" fn coupe_karmarkar_karp_complete(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_fiduccia_mattheyses(
     partition: *mut usize,
     adjncy: *const Adjncy<'_>,

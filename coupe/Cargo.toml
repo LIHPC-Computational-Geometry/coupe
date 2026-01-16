@@ -24,7 +24,7 @@ avx512 = []
 
 [dependencies]
 approx = { workspace = true }
-itertools = { workspace = true }
+itertools = { workspace = true, features = ["use_std"] }
 ittapi = { workspace = true }
 nalgebra = { workspace = true, default-features = false, features = [
     "rand",

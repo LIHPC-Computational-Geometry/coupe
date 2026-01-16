@@ -20,7 +20,7 @@ fn err_partition_code(err: mesh_io::partition::Error) -> c_int {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_partition_read(
     size: *mut u64,
     partition: *mut *mut u64,
@@ -39,7 +39,7 @@ pub unsafe extern "C" fn mio_partition_read(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_partition_write(fd: c_int, size: u64, partition: *const u64) -> c_int {
     let f = fs::File::from_raw_fd(fd);
     let mut w = io::BufWriter::new(f);
@@ -58,13 +58,13 @@ pub unsafe extern "C" fn mio_partition_write(fd: c_int, size: u64, partition: *c
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_partition_free(size: u64, partition: *mut u64) {
     let size = size as usize;
     drop(Vec::from_raw_parts(partition, size, size));
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_weights_read(fd: c_int) -> *mut mesh_io::weight::Array {
     let f = fs::File::from_raw_fd(fd);
     let mut r = io::BufReader::new(f);
@@ -75,7 +75,7 @@ pub unsafe extern "C" fn mio_weights_read(fd: c_int) -> *mut mesh_io::weight::Ar
     Box::into_raw(Box::new(w))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_weights_count(weights: *const mesh_io::weight::Array) -> u64 {
     assert!(!weights.is_null());
 
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn mio_weights_count(weights: *const mesh_io::weight::Arra
     len.try_into().unwrap()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_weights_first_criterion(
     criterion: *mut f64,
     weights: *const mesh_io::weight::Array,
@@ -115,14 +115,14 @@ pub unsafe extern "C" fn mio_weights_first_criterion(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_weights_free(weights: *mut mesh_io::weight::Array) {
     if !weights.is_null() {
         drop(Box::from_raw(weights));
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_read(fd: c_int) -> *mut Mesh {
     let f = fs::File::from_raw_fd(fd);
     let mut r = io::BufReader::new(f);
@@ -133,35 +133,35 @@ pub unsafe extern "C" fn mio_mesh_read(fd: c_int) -> *mut Mesh {
     Box::into_raw(Box::new(m))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_free(medit: *mut Mesh) {
     if !medit.is_null() {
         drop(Box::from_raw(medit));
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_dimension(medit: *const Mesh) -> c_int {
     assert!(!medit.is_null());
     let dimension = (*medit).dimension();
     dimension.try_into().unwrap()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_node_count(medit: *const Mesh) -> u64 {
     assert!(!medit.is_null());
     let count = (*medit).node_count();
     count.try_into().unwrap()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_coordinates(medit: *const Mesh, node_idx: usize) -> *const f64 {
     assert!(!medit.is_null());
     let node = (*medit).node(node_idx).as_ptr();
     node
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_element_count(medit: *const Mesh) -> u64 {
     assert!(!medit.is_null());
     let count = (*medit).element_count();
@@ -175,7 +175,7 @@ pub struct MeditElement {
     nodes: *const usize,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn mio_mesh_element(
     element: *mut MeditElement,
     medit: *const Mesh,

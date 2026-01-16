@@ -1,5 +1,5 @@
 [workspace]
-members = ["coupe", "coupe-ffi", "mesh-io", "mesh-io-ffi", "tools"]
+members  = ["coupe", "coupe-ffi", "mesh-io", "mesh-io-ffi", "tools"]
 resolver = "3"
 
 [workspace.package]
