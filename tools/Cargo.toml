@@ -104,7 +104,9 @@ criterion.workspace = true
 # TODO: look into that feature/issue
 # https://github.com/rusqlite/rusqlite/pull/1732 , https://github.com/rusqlite/rusqlite/issues/1722
 # is adding a type conversion before querying enough? or do we have to update the DB to match the new type queried?
-rusqlite = { workspace = true, default-features = false, features = ["fallible_uint"] }
+rusqlite = { workspace = true, default-features = false, features = [
+    "fallible_uint",
+] }
 
 # Other utilities
 core_affinity.workspace = true
