@@ -1,0 +1,56 @@
+[package]
+authors.workspace    = true
+categories.workspace = true
+edition.workspace    = true
+keywords.workspace   = true
+license.workspace    = true
+readme.workspace     = true
+repository.workspace = true
+version.workspace    = true
+
+autobenches = false
+description = """
+Coupe is a mesh partitioning library. It implements composable
+geometric and topologic algorithms.  
+"""
+name = "coupe"
+
+[features]
+default = ["sprs"]
+
+# Enable the nightly `stdsimd` feature and AVX512-accelerated algorithms.
+# Requires rust nightly.
+avx512 = []
+
+[dependencies]
+approx = { workspace = true }
+itertools = { workspace = true }
+ittapi = { workspace = true }
+nalgebra = { workspace = true, default-features = false, features = [
+    "rand",
+    "std",
+] }
+num-traits = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+sprs = { workspace = true, optional = true, default-features = false, features = [
+    "multi_thread",
+] }
+tracing = { workspace = true, default-features = false, features = ["std"] }
+
+[dev-dependencies]
+core_affinity = { workspace = true }
+criterion = { workspace = true }
+num_cpus = { workspace = true }
+proptest = { workspace = true, default-features = false, features = [
+    "std",
+    "timeout",
+] }
+tracing-chrome = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-tree = { workspace = true }
+
+
+[[bench]]
+harness = false
+name    = "rcb_cartesian"
