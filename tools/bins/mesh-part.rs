@@ -1,20 +1,20 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use coupe::nalgebra::allocator::Allocator;
 use coupe::nalgebra::ArrayStorage;
 use coupe::nalgebra::Const;
 use coupe::nalgebra::DefaultAllocator;
 use coupe::nalgebra::DimDiff;
 use coupe::nalgebra::DimSub;
 use coupe::nalgebra::ToTypenum;
-use mesh_io::weight;
+use coupe::nalgebra::allocator::Allocator;
 use mesh_io::Mesh;
+use mesh_io::weight;
 use std::fs;
 use std::io;
+use tracing_subscriber::Registry;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
-use tracing_subscriber::Registry;
 use tracing_tree::HierarchicalLayer;
 
 const USAGE: &str = "Usage: mesh-part [options] [out-part] >out.part";
@@ -152,8 +152,8 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use coupe::sprs::CsMat;
     use coupe::sprs::CSR;
+    use coupe::sprs::CsMat;
 
     #[test]
     fn test_adjacency_convert() {

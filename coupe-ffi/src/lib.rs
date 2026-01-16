@@ -111,9 +111,11 @@ pub extern "C" fn coupe_strerror(err: Error) -> *const c_char {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_data_free(data: *mut Data) {
-    if !data.is_null() {
-        let data = Box::from_raw(data);
-        drop(data);
+    unsafe {
+        if !data.is_null() {
+            let data = Box::from_raw(data);
+            drop(data);
+        }
     }
 }
 
@@ -163,7 +165,7 @@ pub enum Adjncy<'a> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn coupe_adjncy_free(adjncy: *mut Adjncy) {
     if !adjncy.is_null() {
-        let adjncy = Box::from_raw(adjncy);
+        let adjncy = unsafe { Box::from_raw(adjncy) };
         drop(adjncy);
     }
 }
@@ -175,23 +177,25 @@ unsafe fn adjncy_csr_unchecked(
     data_type: Type,
     data: *const c_void,
 ) -> Adjncy<'static> {
-    let xadj = slice::from_raw_parts(xadj, size + 1);
-    let adjncy = slice::from_raw_parts(adjncy, xadj[xadj.len() - 1]);
-    match data_type {
-        Type::Int => {
-            let data = slice::from_raw_parts(data as *const c_int, adjncy.len());
-            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
-            Adjncy::Int(matrix)
-        }
-        Type::Int64 => {
-            let data = slice::from_raw_parts(data as *const i64, adjncy.len());
-            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
-            Adjncy::Int64(matrix)
-        }
-        Type::Double => {
-            let data = slice::from_raw_parts(data as *const f64, adjncy.len());
-            let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
-            Adjncy::Double(matrix)
+    unsafe {
+        let xadj = slice::from_raw_parts(xadj, size + 1);
+        let adjncy = slice::from_raw_parts(adjncy, xadj[xadj.len() - 1]);
+        match data_type {
+            Type::Int => {
+                let data = slice::from_raw_parts(data as *const c_int, adjncy.len());
+                let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
+                Adjncy::Int(matrix)
+            }
+            Type::Int64 => {
+                let data = slice::from_raw_parts(data as *const i64, adjncy.len());
+                let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
+                Adjncy::Int64(matrix)
+            }
+            Type::Double => {
+                let data = slice::from_raw_parts(data as *const f64, adjncy.len());
+                let matrix = CsMatView::new_unchecked(CSR, (size, size), xadj, adjncy, data);
+                Adjncy::Double(matrix)
+            }
         }
     }
 }
@@ -211,25 +215,27 @@ pub unsafe extern "C" fn coupe_adjncy_csr(
     data_type: Type,
     data: *const c_void,
 ) -> *mut Adjncy<'static> {
-    let adjacency = adjncy_csr_unchecked(size, xadj, adjncy, data_type, data);
-    match adjacency {
-        Adjncy::Int(matrix) => {
-            if matrix.check_compressed_structure().is_err() {
-                return ptr::null_mut();
+    unsafe {
+        let adjacency = adjncy_csr_unchecked(size, xadj, adjncy, data_type, data);
+        match adjacency {
+            Adjncy::Int(matrix) => {
+                if matrix.check_compressed_structure().is_err() {
+                    return ptr::null_mut();
+                }
+            }
+            Adjncy::Int64(matrix) => {
+                if matrix.check_compressed_structure().is_err() {
+                    return ptr::null_mut();
+                }
+            }
+            Adjncy::Double(matrix) => {
+                if matrix.check_compressed_structure().is_err() {
+                    return ptr::null_mut();
+                }
             }
         }
-        Adjncy::Int64(matrix) => {
-            if matrix.check_compressed_structure().is_err() {
-                return ptr::null_mut();
-            }
-        }
-        Adjncy::Double(matrix) => {
-            if matrix.check_compressed_structure().is_err() {
-                return ptr::null_mut();
-            }
-        }
+        adjncy_ptr(adjacency)
     }
-    adjncy_ptr(adjacency)
 }
 
 #[unsafe(no_mangle)]
@@ -240,8 +246,10 @@ pub unsafe extern "C" fn coupe_adjncy_csr_unchecked(
     data_type: Type,
     data: *const c_void,
 ) -> *mut Adjncy<'static> {
-    let adjacency = adjncy_csr_unchecked(size, xadj, adjncy, data_type, data);
-    adjncy_ptr(adjacency)
+    unsafe {
+        let adjacency = adjncy_csr_unchecked(size, xadj, adjncy, data_type, data);
+        adjncy_ptr(adjacency)
+    }
 }
 
 unsafe fn coupe_rcb_d<const D: usize>(
@@ -250,9 +258,11 @@ unsafe fn coupe_rcb_d<const D: usize>(
     weights: &Data,
     mut algo: coupe::Rcb,
 ) -> Error {
-    let res = with_par_iter!(points, PointND<D>, {
-        with_par_iter!(weights, { algo.partition(partition, (points, weights)) })
-    });
+    let res = unsafe {
+        with_par_iter!(points, PointND<D>, {
+            with_par_iter!(weights, { algo.partition(partition, (points, weights)) })
+        })
+    };
     match res {
         Ok(_) => Error::Ok,
         Err(err) => Error::from(err),
@@ -268,27 +278,29 @@ pub unsafe extern "C" fn coupe_rcb(
     iter_count: usize,
     tolerance: f64,
 ) -> Error {
-    let points = &*points;
-    let weights = &*weights;
+    unsafe {
+        let points = &*points;
+        let weights = &*weights;
 
-    let element_count = points.len();
-    if element_count != weights.len() {
-        return Error::LenMismatch;
-    }
-
-    let algo = coupe::Rcb {
-        iter_count,
-        tolerance,
-    };
-
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        match dimension {
-            2 => coupe_rcb_d::<2>(partition, points, weights, algo),
-            3 => coupe_rcb_d::<3>(partition, points, weights, algo),
-            _ => Error::BadDimension,
+        let element_count = points.len();
+        if element_count != weights.len() {
+            return Error::LenMismatch;
         }
-    })
+
+        let algo = coupe::Rcb {
+            iter_count,
+            tolerance,
+        };
+
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
+            match dimension {
+                2 => coupe_rcb_d::<2>(partition, points, weights, algo),
+                3 => coupe_rcb_d::<3>(partition, points, weights, algo),
+                _ => Error::BadDimension,
+            }
+        })
+    }
 }
 
 unsafe fn coupe_rib_d<const D: usize>(
@@ -302,16 +314,18 @@ where
     DefaultAllocator: Allocator<Const<D>, Const<D>, Buffer<f64> = ArrayStorage<f64, D, D>>
         + Allocator<DimDiff<Const<D>, Const<1>>>,
 {
-    let points = match points.to_slice::<PointND<D>>() {
-        Ok(v) => v,
-        Err(_) => return Error::Alloc,
-    };
-    let res = with_par_iter!(weights, {
-        algo.partition(partition, (points.as_ref(), weights))
-    });
-    match res {
-        Ok(_) => Error::Ok,
-        Err(err) => Error::from(err),
+    unsafe {
+        let points = match points.to_slice::<PointND<D>>() {
+            Ok(v) => v,
+            Err(_) => return Error::Alloc,
+        };
+        let res = with_par_iter!(weights, {
+            algo.partition(partition, (points.as_ref(), weights))
+        });
+        match res {
+            Ok(_) => Error::Ok,
+            Err(err) => Error::from(err),
+        }
     }
 }
 
@@ -324,27 +338,29 @@ pub unsafe extern "C" fn coupe_rib(
     iter_count: usize,
     tolerance: f64,
 ) -> Error {
-    let points = &*points;
-    let weights = &*weights;
+    unsafe {
+        let points = &*points;
+        let weights = &*weights;
 
-    let element_count = points.len();
-    if element_count != weights.len() {
-        return Error::LenMismatch;
-    }
-
-    let algo = coupe::Rib {
-        iter_count,
-        tolerance,
-    };
-
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        match dimension {
-            2 => coupe_rib_d::<2>(partition, points, weights, algo),
-            3 => coupe_rib_d::<3>(partition, points, weights, algo),
-            _ => Error::BadDimension,
+        let element_count = points.len();
+        if element_count != weights.len() {
+            return Error::LenMismatch;
         }
-    })
+
+        let algo = coupe::Rib {
+            iter_count,
+            tolerance,
+        };
+
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
+            match dimension {
+                2 => coupe_rib_d::<2>(partition, points, weights, algo),
+                3 => coupe_rib_d::<3>(partition, points, weights, algo),
+                _ => Error::BadDimension,
+            }
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -355,37 +371,39 @@ pub unsafe extern "C" fn coupe_hilbert(
     part_count: usize,
     order: u32,
 ) -> Error {
-    let points = &*points;
-    let weights = &*weights;
+    unsafe {
+        let points = &*points;
+        let weights = &*weights;
 
-    let element_count = points.len();
-    if element_count != weights.len() {
-        return Error::LenMismatch;
-    }
-    if weights.type_() != Type::Double {
-        return Error::BadType;
-    }
-
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-
-        let points = match points.to_slice::<Point2D>() {
-            Ok(v) => v,
-            Err(_) => return Error::Alloc,
-        };
-        let weights = match weights.to_slice::<f64>() {
-            Ok(v) => v,
-            Err(_) => return Error::Alloc,
-        };
-
-        let res =
-            coupe::HilbertCurve { part_count, order }.partition(partition, (&*points, weights));
-
-        match res {
-            Ok(()) => Error::Ok,
-            Err(_) => Error::NotFound, // TODO use a proper error code
+        let element_count = points.len();
+        if element_count != weights.len() {
+            return Error::LenMismatch;
         }
-    })
+        if weights.type_() != Type::Double {
+            return Error::BadType;
+        }
+
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
+
+            let points = match points.to_slice::<Point2D>() {
+                Ok(v) => v,
+                Err(_) => return Error::Alloc,
+            };
+            let weights = match weights.to_slice::<f64>() {
+                Ok(v) => v,
+                Err(_) => return Error::Alloc,
+            };
+
+            let res =
+                coupe::HilbertCurve { part_count, order }.partition(partition, (&*points, weights));
+
+            match res {
+                Ok(()) => Error::Ok,
+                Err(_) => Error::NotFound, // TODO use a proper error code
+            }
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -394,16 +412,18 @@ pub unsafe extern "C" fn coupe_greedy(
     weights: *const Data,
     part_count: usize,
 ) -> Error {
-    let weights = &*weights;
-    let element_count = weights.len();
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        let mut algo = coupe::Greedy { part_count };
-        match with_iter!(weights, { algo.partition(partition, weights) }) {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
-        }
-    })
+    unsafe {
+        let weights = &*weights;
+        let element_count = weights.len();
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
+            let mut algo = coupe::Greedy { part_count };
+            match with_iter!(weights, { algo.partition(partition, weights) }) {
+                Ok(()) => Error::Ok,
+                Err(err) => Error::from(err),
+            }
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -412,31 +432,33 @@ pub unsafe extern "C" fn coupe_karmarkar_karp(
     weights: *const Data,
     part_count: usize,
 ) -> Error {
-    let weights = &*weights;
-    let element_count = weights.len();
+    unsafe {
+        let weights = &*weights;
+        let element_count = weights.len();
 
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
 
-        let mut algo = coupe::KarmarkarKarp { part_count };
+            let mut algo = coupe::KarmarkarKarp { part_count };
 
-        let res = match weights.type_() {
-            Type::Int => {
-                with_iter!(weights, c_int, { algo.partition(partition, weights) })
+            let res = match weights.type_() {
+                Type::Int => {
+                    with_iter!(weights, c_int, { algo.partition(partition, weights) })
+                }
+                Type::Int64 => {
+                    with_iter!(weights, i64, { algo.partition(partition, weights) })
+                }
+                Type::Double => {
+                    with_iter!(weights, Real, { algo.partition(partition, weights) })
+                }
+            };
+
+            match res {
+                Ok(()) => Error::Ok,
+                Err(err) => Error::from(err),
             }
-            Type::Int64 => {
-                with_iter!(weights, i64, { algo.partition(partition, weights) })
-            }
-            Type::Double => {
-                with_iter!(weights, Real, { algo.partition(partition, weights) })
-            }
-        };
-
-        match res {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
-        }
-    })
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -445,16 +467,18 @@ pub unsafe extern "C" fn coupe_karmarkar_karp_complete(
     weights: *const Data,
     tolerance: f64,
 ) -> Error {
-    let weights = &*weights;
-    let element_count = weights.len();
-    catch_unwind(|| {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
-        let mut algo = coupe::CompleteKarmarkarKarp { tolerance };
-        match with_iter!(weights, { algo.partition(partition, weights) }) {
-            Ok(()) => Error::Ok,
-            Err(err) => Error::from(err),
-        }
-    })
+    unsafe {
+        let weights = &*weights;
+        let element_count = weights.len();
+        catch_unwind(|| {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
+            let mut algo = coupe::CompleteKarmarkarKarp { tolerance };
+            match with_iter!(weights, { algo.partition(partition, weights) }) {
+                Ok(()) => Error::Ok,
+                Err(err) => Error::from(err),
+            }
+        })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -467,43 +491,45 @@ pub unsafe extern "C" fn coupe_fiduccia_mattheyses(
     max_imbalance: f64,
     max_bad_moves_in_a_row: usize,
 ) -> Error {
-    let weights = &*weights;
-    let element_count = weights.len();
+    unsafe {
+        let weights = &*weights;
+        let element_count = weights.len();
 
-    let mut algo = coupe::FiducciaMattheyses {
-        max_passes: if max_passes == 0 {
-            None
-        } else {
-            Some(max_passes)
-        },
-        max_moves_per_pass: if max_moves_per_pass == 0 {
-            None
-        } else {
-            Some(max_moves_per_pass)
-        },
-        max_imbalance: if max_imbalance <= 0.0 {
-            None
-        } else {
-            Some(max_imbalance)
-        },
-        max_bad_move_in_a_row: max_bad_moves_in_a_row,
-    };
+        let mut algo = coupe::FiducciaMattheyses {
+            max_passes: if max_passes == 0 {
+                None
+            } else {
+                Some(max_passes)
+            },
+            max_moves_per_pass: if max_moves_per_pass == 0 {
+                None
+            } else {
+                Some(max_moves_per_pass)
+            },
+            max_imbalance: if max_imbalance <= 0.0 {
+                None
+            } else {
+                Some(max_imbalance)
+            },
+            max_bad_move_in_a_row: max_bad_moves_in_a_row,
+        };
 
-    let adjacency = match &*adjncy {
-        Adjncy::Int64(matrix) => *matrix,
-        _ => return Error::BadType,
-    };
+        let adjacency = match &*adjncy {
+            Adjncy::Int64(matrix) => *matrix,
+            _ => return Error::BadType,
+        };
 
-    catch_unwind(move || {
-        let partition = slice::from_raw_parts_mut(partition, element_count);
+        catch_unwind(move || {
+            let partition = slice::from_raw_parts_mut(partition, element_count);
 
-        let res = with_slice!(weights, {
-            algo.partition(partition, (adjacency, weights.as_ref()))
-        });
+            let res = with_slice!(weights, {
+                algo.partition(partition, (adjacency, weights.as_ref()))
+            });
 
-        match res {
-            Ok(_) => Error::Ok, // TODO use metadata
-            Err(err) => Error::from(err),
-        }
-    })
+            match res {
+                Ok(_) => Error::Ok, // TODO use metadata
+                Err(err) => Error::from(err),
+            }
+        })
+    }
 }

@@ -4,6 +4,9 @@ use crate::Ref;
 use std::fmt;
 use std::io;
 use std::iter;
+use vtkio::Error;
+use vtkio::IOBuffer;
+use vtkio::Vtk;
 use vtkio::model::Attribute;
 use vtkio::model::Attributes;
 use vtkio::model::ByteOrder;
@@ -16,9 +19,6 @@ use vtkio::model::UnstructuredGridPiece;
 use vtkio::model::Version;
 use vtkio::model::VertexNumbers;
 use vtkio::writer::WriteVtk;
-use vtkio::Error;
-use vtkio::IOBuffer;
-use vtkio::Vtk;
 
 const DIMENSION: usize = 3;
 
@@ -98,7 +98,7 @@ fn add_piece(mesh: &mut Mesh, piece: UnstructuredGridPiece) {
     mesh.coordinates.extend(piece.points.iter().unwrap());
     // TODO extract attributes
     mesh.node_refs
-        .extend(iter::repeat(1).take(piece.num_points()));
+        .extend(std::iter::repeat_n(1, piece.num_points()));
     match piece.cells.cell_verts {
         VertexNumbers::Legacy {
             num_cells,
@@ -248,7 +248,7 @@ impl Mesh {
         fn writer_err_to_io(err: vtkio::writer::Error) -> io::Error {
             match err {
                 vtkio::writer::Error::IOError(err) => io::Error::from(err),
-                _ => io::Error::new(io::ErrorKind::Other, err),
+                _ => io::Error::other(err),
             }
         }
 

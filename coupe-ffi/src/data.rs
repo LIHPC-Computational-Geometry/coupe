@@ -33,16 +33,16 @@ impl Constant {
     {
         let mut v = Vec::new();
         v.try_reserve_exact(self.len)?;
-        let value = *(self.value as *const T);
+        let value = unsafe { *(self.value as *const T) };
         v.resize(self.len, value);
         Ok(v)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {
-        let value = *(self.value as *const T);
+        let value = unsafe { *(self.value as *const T) };
         (0..self.len).map(move |_| value)
     }
 
@@ -50,7 +50,7 @@ impl Constant {
     where
         T: 'a + Copy + Send + Sync,
     {
-        let value = *(self.value as *const T);
+        let value = unsafe { *(self.value as *const T) };
         coupe::rayon::iter::repeat_n(value, self.len)
     }
 }
@@ -70,14 +70,14 @@ impl Array {
     where
         T: 'a,
     {
-        slice::from_raw_parts(self.array as *const T, self.len)
+        unsafe { slice::from_raw_parts(self.array as *const T, self.len) }
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {
-        slice::from_raw_parts(self.array as *const T, self.len)
+        unsafe { slice::from_raw_parts(self.array as *const T, self.len) }
             .iter()
             .cloned()
     }
@@ -86,7 +86,7 @@ impl Array {
     where
         T: 'a + Copy + Send + Sync,
     {
-        slice::from_raw_parts(self.array as *const T, self.len)
+        unsafe { slice::from_raw_parts(self.array as *const T, self.len) }
             .par_iter()
             .cloned()
     }
@@ -113,15 +113,15 @@ impl Fn {
     {
         let mut v = Vec::new();
         v.try_reserve_exact(self.len)?;
-        v.par_extend(self.par_iter::<T>());
+        v.par_extend(unsafe { self.par_iter::<T>() });
         Ok(v)
     }
 
-    pub unsafe fn iter<'a, T>(&'a self) -> impl Iterator<Item = T> + ExactSizeIterator + 'a
+    pub unsafe fn iter<'a, T>(&'a self) -> impl ExactSizeIterator<Item = T> + 'a
     where
         T: 'a + Copy,
     {
-        (0..self.len).map(|i| {
+        (0..self.len).map(|i| unsafe {
             let ptr = (self.i_th)(self.context, i) as *const T;
             *ptr
         })
@@ -131,7 +131,7 @@ impl Fn {
     where
         T: 'a + Copy + Send,
     {
-        (0..self.len).into_par_iter().map(|i| {
+        (0..self.len).into_par_iter().map(|i| unsafe {
             let ptr = (self.i_th)(self.context, i) as *const T;
             *ptr
         })
@@ -158,9 +158,9 @@ impl Data {
         T: Copy + Send,
     {
         Ok(match self {
-            Self::Array(iter) => Cow::from(iter.to_slice()),
-            Self::Constant(iter) => Cow::from(iter.to_slice()?),
-            Self::Fn(iter) => Cow::from(iter.to_slice()?),
+            Self::Array(iter) => Cow::from(unsafe { iter.to_slice() }),
+            Self::Constant(iter) => Cow::from(unsafe { iter.to_slice()? }),
+            Self::Fn(iter) => Cow::from(unsafe { iter.to_slice()? }),
         })
     }
 
