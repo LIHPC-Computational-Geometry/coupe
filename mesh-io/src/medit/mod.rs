@@ -2,11 +2,11 @@
 //! described by Frey in
 //! [MEDIT : An interactive Mesh visualization Software](https://hal.inria.fr/inria-00069921).
 
+pub use parser::Error as ParseError;
 pub use parser::parse_ascii;
 pub use parser::parse_binary;
 pub use parser::test_format_ascii;
 pub use parser::test_format_binary;
-pub use parser::Error as ParseError;
 pub use serializer::DisplayAscii;
 
 mod parser;

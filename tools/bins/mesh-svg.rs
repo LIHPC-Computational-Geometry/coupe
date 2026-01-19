@@ -1,6 +1,6 @@
 use anyhow::Result;
-use coupe::sprs::CsMatView;
 use coupe::Point2D;
+use coupe::sprs::CsMatView;
 use mesh_io::ElementType;
 use mesh_io::Mesh;
 use rayon::iter::IntoParallelRefIterator as _;
@@ -142,15 +142,13 @@ fn path_to_coords(mesh: &Mesh, path: &[usize]) -> Vec<Point2D> {
     for node in path {
         let coords = mesh.node(*node);
         let coords = Point2D::new(coords[0], coords[1]);
-        if let Some(last_idx) = path_coords.len().checked_sub(2) {
-            if let (Some(last_coords), Some(laster_coords)) =
-                (path_coords.get(last_idx), path_coords.last())
-            {
-                if are_aligned(*laster_coords, *last_coords, coords) {
-                    path_coords[last_idx + 1] = coords;
-                    continue;
-                }
-            }
+        if let Some(last_idx) = path_coords.len().checked_sub(2)
+            && let Some(last_coords) = path_coords.get(last_idx)
+            && let Some(laster_coords) = path_coords.last()
+            && are_aligned(*laster_coords, *last_coords, coords)
+        {
+            path_coords[last_idx + 1] = coords;
+            continue;
         }
         path_coords.push(coords);
     }

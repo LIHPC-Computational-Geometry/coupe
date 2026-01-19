@@ -1,15 +1,15 @@
 use anyhow::Context as _;
 use anyhow::Result;
-use coupe::nalgebra::allocator::Allocator;
 use coupe::nalgebra::ArrayStorage;
 use coupe::nalgebra::Const;
 use coupe::nalgebra::DefaultAllocator;
 use coupe::nalgebra::DimDiff;
 use coupe::nalgebra::DimSub;
 use coupe::nalgebra::ToTypenum;
+use coupe::nalgebra::allocator::Allocator;
 use criterion::Criterion;
-use mesh_io::weight;
 use mesh_io::Mesh;
+use mesh_io::weight;
 use std::fs;
 use std::io;
 use std::iter;
@@ -222,7 +222,9 @@ where
 
 fn main() -> Result<()> {
     #[cfg(debug_assertions)]
-    eprintln!("Warning: This is a debug build of part-bench, benchmarks will not reflect real-world performance.");
+    eprintln!(
+        "Warning: This is a debug build of part-bench, benchmarks will not reflect real-world performance."
+    );
 
     let mut options = getopts::Options::new();
     options.optmulti(
