@@ -35,7 +35,7 @@ impl<const D: usize> ToRunner<D> for Recursive {
 
         let mut metis_partition = vec![0; problem.adjacency().rows()];
         Box::new(move |partition| {
-            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy);
+            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)?;
             if let Some(weights) = &mut weights {
                 graph = graph.set_vwgt(weights);
             }
@@ -85,7 +85,7 @@ impl<const D: usize> ToRunner<D> for KWay {
 
         let mut metis_partition = vec![0; problem.adjacency().rows()];
         Box::new(move |partition| {
-            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy);
+            let mut graph = metis::Graph::new(ncon, self.part_count, &mut xadj, &mut adjncy)?;
             if let Some(weights) = &mut weights {
                 graph = graph.set_vwgt(weights);
             }
