@@ -3,6 +3,8 @@ name: Documentation
 on:
   push:
     branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -29,6 +31,7 @@ jobs:
       - name: Aggregate files
         run: sh ./docs/build.sh
       - name: Deploy Docs
+        if: github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
