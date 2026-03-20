@@ -16,7 +16,7 @@ geometric and topologic algorithms.
 name = "coupe"
 
 [features]
-default = ["sprs", "avx512"]
+default = ["sprs"]
 
 # Enable the nightly `stdsimd` feature and AVX512-accelerated algorithms.
 # Requires rust nightly.
