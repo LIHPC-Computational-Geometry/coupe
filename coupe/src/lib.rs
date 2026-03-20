@@ -29,7 +29,6 @@
 //! - [Fiduccia-Mattheyses][FiducciaMattheyses]
 //! - [Kernighan-Lin][KernighanLin]
 
-#![cfg_attr(feature = "avx512", feature(stdsimd))]
 #![warn(
     missing_copy_implementations,
     missing_debug_implementations,
