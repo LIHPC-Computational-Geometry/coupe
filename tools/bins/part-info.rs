@@ -166,7 +166,7 @@ fn empty_part_count(part_ids: &[usize], part_count: usize) -> usize {
             .len()
 }
 
-/// Wrapper around coupe's [coupe::topology::lambda_cut] that applies the edge
+/// Wrapper around coupe's internal `lambda_cut` that applies the edge
 /// weight distribution and sums the criterions.
 fn lambda_cut<T>(
     adjacency: CsMatView<f64>,

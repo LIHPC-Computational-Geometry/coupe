@@ -17,7 +17,7 @@
 //! - [Recursive Inertial Bisection][Rib]
 //! - [Multi jagged][MultiJagged]
 //! - Number partitioning:
-//!   + [Greedy][Greedy]
+//!   + [Greedy]
 //!   + [Karmarkar-Karp][KarmarkarKarp] and its [complete][CompleteKarmarkarKarp] version
 //!
 //! ## Partition improving algorithms
