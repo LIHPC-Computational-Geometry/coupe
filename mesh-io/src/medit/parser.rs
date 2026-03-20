@@ -496,7 +496,7 @@ pub fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
                     expected: "4".to_string(),
                 },
                 lineno: 0,
-            })
+            });
         }
     }
 
@@ -549,7 +549,7 @@ pub fn parse_binary<R: io::BufRead>(mut input: R) -> Result<Mesh, Error> {
                                 expected: "54".to_string(),
                             },
                             lineno: 0,
-                        })
+                        });
                     }
                 };
                 let _ = read_pos(&mut input)?;

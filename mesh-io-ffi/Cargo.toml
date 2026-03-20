@@ -1,0 +1,21 @@
+[package]
+edition.workspace    = true
+license.workspace    = true
+readme.workspace     = true
+repository.workspace = true
+version.workspace    = true
+
+
+authors     = ["Hubert Hirtz <hubert@hirtz.pm>"]
+categories  = ["mathematics", "parsing"]
+description = "C bindings to mesh-io"
+keywords    = ["mesh", "parser"]
+name        = "mesh-io-ffi"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+name       = "meshio"
+
+
+[dependencies]
+mesh-io.workspace = true

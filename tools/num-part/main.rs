@@ -73,9 +73,11 @@ impl Distribution {
         R: rand::Rng + 'a,
     {
         match self {
-            Self::Uniform { low, high } => {
-                Box::new(rand_distr::Uniform::new(low, high).sample_iter(rng))
-            }
+            Self::Uniform { low, high } => Box::new(
+                rand_distr::Uniform::new(low, high)
+                    .expect("Could not initialize distribution")
+                    .sample_iter(rng),
+            ),
             Self::Normal { mean, std_dev } => Box::new(
                 rand_distr::Normal::new(mean, std_dev)
                     .unwrap()

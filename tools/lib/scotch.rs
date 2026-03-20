@@ -1,12 +1,12 @@
-use super::runner_error;
 use super::Problem;
 use super::ToRunner;
+use super::runner_error;
 use crate::zoom_in::zoom_in;
 use anyhow::Context as _;
 use mesh_io::weight;
-use scotch::graph::Data;
 use scotch::Graph;
 use scotch::Num;
+use scotch::graph::Data;
 
 pub struct Standard {
     pub part_count: Num,

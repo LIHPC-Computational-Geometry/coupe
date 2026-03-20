@@ -1,0 +1,27 @@
+[package]
+edition.workspace    = true
+license.workspace    = true
+readme.workspace     = true
+repository.workspace = true
+version.workspace    = true
+
+authors     = ["Hubert Hirtz <hubert@hirtz.pm>"]
+categories  = ["mathematics", "parsing"]
+description = "(de)serializing library for various mesh formats"
+keywords    = ["mesh", "parser"]
+name        = "mesh-io"
+
+
+[features]
+default = ["vtk-legacy"]
+
+# File format: VTK (legacy)
+vtk-legacy = ["vtkio"]
+
+# Read from and write to compressed mesh files
+compression = ["vtkio?/compression"]
+
+
+[dependencies]
+itertools.workspace = true
+vtkio               = { workspace = true, optional = true }

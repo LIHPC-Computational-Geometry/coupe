@@ -1,0 +1,21 @@
+[package]
+categories.workspace = true
+edition.workspace    = true
+keywords.workspace   = true
+license.workspace    = true
+readme.workspace     = true
+repository.workspace = true
+version.workspace    = true
+
+description = "C bindings to coupe"
+name        = "coupe-ffi"
+
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+doc        = false                   # name conflicts with the rust lib
+name       = "coupe"
+
+
+[dependencies]
+coupe.workspace = true

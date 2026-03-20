@@ -2,21 +2,21 @@
 
 use anyhow::Context as _;
 use anyhow::Result;
-use coupe::nalgebra::allocator::Allocator;
+use coupe::Partition as _;
+use coupe::PointND;
 use coupe::nalgebra::ArrayStorage;
 use coupe::nalgebra::Const;
 use coupe::nalgebra::DefaultAllocator;
 use coupe::nalgebra::DimDiff;
 use coupe::nalgebra::DimSub;
 use coupe::nalgebra::ToTypenum;
+use coupe::nalgebra::allocator::Allocator;
+use coupe::sprs::CSR;
 use coupe::sprs::CsMat;
 use coupe::sprs::CsMatView;
-use coupe::sprs::CSR;
-use coupe::Partition as _;
-use coupe::PointND;
-use mesh_io::weight;
 use mesh_io::ElementType;
 use mesh_io::Mesh;
+use mesh_io::weight;
 use once_cell::sync::OnceCell;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
@@ -35,7 +35,7 @@ mod scotch;
 #[cfg(any(feature = "metis", feature = "scotch"))]
 mod zoom_in;
 
-#[cfg_attr(not(feature = "ittapi"), path = "ittapi_stub.rs")]
+#[cfg_attr(not(feature = "intel-perf"), path = "ittapi_stub.rs")]
 pub mod ittapi;
 
 pub struct Problem<const D: usize> {
@@ -71,7 +71,7 @@ impl<const D: usize> Problem<D> {
         self.points.get_or_init(|| barycentres(&self.mesh))
     }
 
-    pub fn adjacency(&self) -> CsMatView<f64> {
+    pub fn adjacency(&self) -> CsMatView<'_, f64> {
         self.adjacency
             .get_or_init(|| {
                 let mut adjacency = dual(&self.mesh);
@@ -92,7 +92,7 @@ pub type Metadata = Option<Box<dyn std::fmt::Debug>>;
 
 pub type Runner<'a> = Box<dyn FnMut(&mut [usize]) -> Result<Metadata> + Send + Sync + 'a>;
 
-fn runner_error(message: &'static str) -> Runner {
+fn runner_error(message: &'static str) -> Runner<'static> {
     Box::new(move |_partition| Err(anyhow::anyhow!("{}", message)))
 }
 

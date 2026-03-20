@@ -1,13 +1,13 @@
 use anyhow::Context as _;
 use anyhow::Result;
+use coupe::Topology;
 use coupe::num_traits::AsPrimitive;
 use coupe::num_traits::FromPrimitive;
 use coupe::num_traits::ToPrimitive;
 use coupe::num_traits::Zero;
 use coupe::sprs::CsMatView;
-use coupe::Topology;
-use coupe_tools::set_edge_weights;
 use coupe_tools::EdgeWeightDistribution;
+use coupe_tools::set_edge_weights;
 use mesh_io::Mesh;
 use rayon::iter::IndexedParallelIterator as _;
 use rayon::iter::IntoParallelIterator as _;
