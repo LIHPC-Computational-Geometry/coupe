@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<title>coupe</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:;base64,=">
+<style>
+html {
+	max-width: 70ch;
+	margin: auto;
+	padding: 1em;
+	text-align: justify;
+}
+nav {
+	text-align: center;
+}
+nav a {
+	padding: 1em;
+}
+</style>
+
+<h1>coupe</h1>
+
+<nav>
+<a href="https://github.com/LIHPC-Computational-Geometry/coupe">Sources</a>
+<a href="coupe">Rust docs</a>
+<a href="man/mesh-part.1.html">Man pages</a>
+</nav>
+
+<p>
+Coupe is a mesh partitioning platform. It provides solutions to solve different
+variants of the mesh partitioning problem, mainly in the context of
+load-balancing parallel mesh-based applications. From partitioning weights
+ensuring balance to topological partitioning that minimizes communication
+metrics through geometric methods, Coupe offers a large panel of algorithms to
+fit user-specific problems. Coupe exploits shared memory parallelism, is written
+in Rust, and consists of a library and command line tools. Experimenting with
+different algorithms and parameters is easy.

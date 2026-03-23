@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["USAGE"],"fn":["empty_part_count","lambda_cut","main","weight_stats"],"struct":["CriterionStats"]};

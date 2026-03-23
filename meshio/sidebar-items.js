@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["mio_mesh_coordinates","mio_mesh_dimension","mio_mesh_element","mio_mesh_element_count","mio_mesh_free","mio_mesh_node_count","mio_mesh_read","mio_partition_free","mio_partition_read","mio_partition_write","mio_weights_count","mio_weights_first_criterion","mio_weights_free","mio_weights_read"],"struct":["MeditElement"]};

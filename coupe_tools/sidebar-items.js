@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EdgeWeightDistribution","MeshFormat"],"fn":["barycentres","dual","parse_algorithm","parse_args","read_mesh","set_edge_weights","used_element_count","write_mesh","writer"],"mod":["ittapi"],"struct":["EdgeWeightDistError","MeshFormatError","Problem"],"trait":["ToRunner"],"type":["Metadata","Runner"]};

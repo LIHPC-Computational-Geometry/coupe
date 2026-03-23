@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["USAGE"],"fn":["build_pool","configure_criterion","criterion_options","main","main_d","measure_efficiency","parse_ranges"],"struct":["RangeWithStep"]};

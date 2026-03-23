@@ -1,0 +1,32 @@
+body {
+	max-width: 80ch;
+	font-family: monospace;
+	font-size: 14px;
+}
+
+.manual-text {
+	padding: 0 9ex 1ex 4ex;
+}
+
+.head, .foot {
+	width: 100%;
+	color: #999;
+}
+.head-vol {
+	text-align: center;
+}
+.head-rtitle {
+	text-align: right;
+}
+
+h1 {
+	font-size: 16px;
+}
+
+.Bd-indent {
+	padding-left: 4ex;
+}
+
+pre {
+	color: #434241;
+}

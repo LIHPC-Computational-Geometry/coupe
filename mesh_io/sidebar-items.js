@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ElementType","Error"],"mod":["medit","partition","vtk","weight"],"struct":["Mesh"],"type":["Result"]};
