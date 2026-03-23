@@ -251,18 +251,18 @@ fn reorder_split_avx512<const D: usize, W>(
 
             for coord in 0..D {
                 _mm256_mask_compressstoreu_ps(
-                    items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                    items.points[coord].as_mut_ptr().add(lw),
                     mask,
                     val[coord],
                 );
             }
             _mm512_mask_compressstoreu_epi64(
-                items.weights.as_mut_ptr().add(lw) as *mut u8,
+                items.weights.as_mut_ptr().add(lw) as *mut i64, // TODO: test
                 mask,
                 val_weights,
             );
             _mm512_mask_compressstoreu_epi64(
-                items.parts.as_mut_ptr().add(lw) as *mut u8,
+                items.parts.as_mut_ptr().add(lw) as *mut i64, // TODO: test
                 mask,
                 val_parts,
             );
@@ -271,18 +271,18 @@ fn reorder_split_avx512<const D: usize, W>(
             rw -= nb_high;
             for coord in 0..D {
                 _mm256_mask_compressstoreu_ps(
-                    items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                    items.points[coord].as_mut_ptr().add(rw),
                     !mask,
                     val[coord],
                 );
             }
             _mm512_mask_compressstoreu_epi64(
-                items.weights.as_mut_ptr().add(rw) as *mut u8,
+                items.weights.as_mut_ptr().add(rw) as *mut i64, // TODO: test
                 !mask,
                 val_weights,
             );
             _mm512_mask_compressstoreu_epi64(
-                items.parts.as_mut_ptr().add(rw) as *mut u8,
+                items.parts.as_mut_ptr().add(rw) as *mut i64, // TODO: test
                 !mask,
                 val_parts,
             );
@@ -300,18 +300,18 @@ fn reorder_split_avx512<const D: usize, W>(
         let nb_high = mask_high.count_ones() as usize;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(lw),
                 mask_low,
                 val[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            items.weights.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask_low,
             val_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            items.parts.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask_low,
             val_parts,
         );
@@ -319,18 +319,18 @@ fn reorder_split_avx512<const D: usize, W>(
         rw -= nb_high;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(rw),
                 mask_high,
                 val[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            items.weights.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             mask_high,
             val_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            items.parts.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             mask_high,
             val_parts,
         );
@@ -340,18 +340,18 @@ fn reorder_split_avx512<const D: usize, W>(
         let nb_high = AVX2_REGISTER_BYTES - nb_low;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(lw),
                 mask,
                 lv[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            items.weights.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask,
             lv_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            items.parts.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask,
             lv_parts,
         );
@@ -359,18 +359,18 @@ fn reorder_split_avx512<const D: usize, W>(
         rw -= nb_high;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(rw),
                 !mask,
                 lv[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            items.weights.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             !mask,
             lv_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            items.parts.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             !mask,
             lv_parts,
         );
@@ -380,18 +380,18 @@ fn reorder_split_avx512<const D: usize, W>(
         let nb_high = AVX2_REGISTER_BYTES - nb_low;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(lw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(lw),
                 mask,
                 rv[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(lw) as *mut u8,
+            items.weights.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask,
             rv_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(lw) as *mut u8,
+            items.parts.as_mut_ptr().add(lw) as *mut i64, // TODO: test
             mask,
             rv_parts,
         );
@@ -399,18 +399,18 @@ fn reorder_split_avx512<const D: usize, W>(
         rw -= nb_high;
         for coord in 0..D {
             _mm256_mask_compressstoreu_ps(
-                items.points[coord].as_mut_ptr().add(rw) as *mut u8,
+                items.points[coord].as_mut_ptr().add(rw),
                 !mask,
                 rv[coord],
             );
         }
         _mm512_mask_compressstoreu_epi64(
-            items.weights.as_mut_ptr().add(rw) as *mut u8,
+            items.weights.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             !mask,
             rv_weights,
         );
         _mm512_mask_compressstoreu_epi64(
-            items.parts.as_mut_ptr().add(rw) as *mut u8,
+            items.parts.as_mut_ptr().add(rw) as *mut i64, // TODO: test
             !mask,
             rv_parts,
         );

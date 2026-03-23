@@ -24,7 +24,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - name: Run tests
+      - name: Run tests (default features)
         run: cargo test --all
 
   fmt:
@@ -78,5 +78,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: sudo apt-get -y install libclang-dev libmetis-dev libscotch-dev
-      - name: Build crates
+      - name: Build crates (default features)
         run: cargo build --all-targets
+      - name: Build crates (all features)
+        run: cargo build --all-targets --all-features
